@@ -1,26 +1,26 @@
 // Scan a purchase receipt, earn points, reissue the membership credential.
 //
-// The canonical example: it uses every phase, both verifiability types, and the
-// one thing that makes VAL different from a scripting language — the compiler
-// knowing, before it runs, that this app can issue exactly one credential type
-// and read exactly one other.
+// The canonical example: every phase, both verifiability types, and the thing
+// that makes VAL different from a scripting language — the compiler knowing,
+// before it runs, that this app can issue exactly one credential type and read
+// exactly one other.
 
-app th.co.codefin.loyalty
+app "th.co.codefin.loyalty"
 version 1
 
 capabilities {
-  // Parameterised, per spec §7.2. `credential.read` unqualified would let a
-  // loyalty card read a passport.
-  credential.read(type: "PurchaseReceipt")
-  credential.issue(type: "LoyaltyMember")
+  // Type references, not strings. The types are declared below; a string here
+  // would be an unchecked second copy of a name.
+  credential.read(PurchaseReceipt)
+  credential.issue(LoyaltyMember)
 }
 
 enum Tier { bronze, silver, gold }
 
 credential PurchaseReceipt {
   merchant:     string
-  amount:       int        // satang. There are no floats in the language,
-  purchased_at: datetime   // and money did not want them anyway.
+  amount:       int        // satang. There is no float in the language, and
+  purchased_at: datetime   // money did not want one.
 }
 
 credential LoyaltyMember {
@@ -34,14 +34,26 @@ state {
   lifetime_points: int = 0
 }
 
-trust ReceiptFromMerchant {
-  credential: PurchaseReceipt
-
-  // An anchor, not a pinned issuer DID: the chain answers who is under it.
-  // Pinning would put this app's own allowlist somewhere the person cannot see.
+// The subject is bound by name. `receipt.signature.valid`, never a bare
+// `signature.valid` — an implicit receiver is unambiguous exactly until a
+// second credential is in scope.
+trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
+  // An anchor, not a pinned issuer: the chain answers who is under it. Pinning
+  // would put this app's private allowlist somewhere the person cannot see.
   anchor { "th.co.codefin.merchants" }
 
-  require { signature.valid; status.active; holder.bound }
+  require {
+    receipt.signature.valid
+    receipt.status.active
+    receipt.holder.bound
+    receipt.claims.amount > 0
+  }
+}
+
+fn tier_for(points: int) -> Tier {
+  if points >= 10000 { Tier.gold }
+  else if points >= 2000 { Tier.silver }
+  else { Tier.bronze }
 }
 
 action ScanToEarn {
@@ -50,45 +62,49 @@ action ScanToEarn {
   }
 
   require {
-    // Narrowing lives here. Without this line the `state.member.points` below
-    // is a type error, not a null dereference at runtime.
+    // Narrowing. Without this line, reading through `state.member` below is a
+    // type error rather than a null dereference at runtime.
+    //
+    // This block is for defects: if it fails, this app asked for something it
+    // had no business asking for, the action aborts, and nobody is shown a
+    // message about it. Business rules go in `verify`, where failing is normal.
     state.member != null
   }
 
   verify {
-    // The only way to obtain `Verified<PurchaseReceipt>`. After this block
-    // `receipt` has the narrower type; there is no cast that would have done it.
-    receipt with ReceiptFromMerchant
+    // The only way to obtain `Verified<ReceiptFromMerchant>`. The type names the
+    // *policy*, not the credential: data checked against a strict policy and
+    // data checked against a lax one must not share a type.
+    let checked = receipt with ReceiptFromMerchant
 
-    // Multiple expressions are implicitly ANDed, and read as policy rather than
-    // as procedure. PROPOSED: `duration(days:)`. The spec has no standard
-    // library, and this is the first thing that needs one.
-    receipt.claims.purchased_at > context.time.now - duration(days: 30)
+    // Failing here is an ordinary outcome — a forged or expired receipt — and
+    // the person is told plainly.
+    checked.claims.purchased_at > context.time.now - duration(days: 30)
   }
 
   compute {
-    // Pure. `credential.issue(…)` here is a compile error, not a convention.
-    const earned = receipt.claims.amount / 100      // one point per baht
-    const total  = state.lifetime_points + earned
-
-    const tier = if total >= 10000 { Tier.gold }
-                 else if total >= 2000 { Tier.silver }
-                 else { Tier.bronze }
+    // Pure, and so is every `fn`. An effect here is a compile error, and there
+    // is no effectful function it could hide behind.
+    let earned = checked.claims.amount / 100      // one point per baht
+    let total  = state.lifetime_points + earned   // traps on overflow
+    let tier   = tier_for(total)
   }
 
   update {
-    // A transition, not mutation: this describes the next state, and the host
-    // commits it only if the effects below succeed (spec §7.3).
-    lifetime_points = total
-    member.points   = state.member.points + earned
-    member.tier     = tier
+    // Evaluates to the next state. No assignment anywhere in the language: a
+    // record is derived with `with`, never mutated in place.
+    state with {
+      lifetime_points: total,
+      member: state.member with { points: state.member.points + earned,
+                                  tier:   tier },
+    }
   }
 
   execute {
-    // The only phase where an effect may appear. This does not issue anything:
-    // it emits an EffectRequest and stops. The host asks whether the capability
+    // The only phase where an effect appears. This does not issue anything: it
+    // emits an EffectRequest and stops. The host asks whether the capability
     // was declared, whether the person consented, whether policy allows it —
-    // and the answer may be no.
+    // and the answer may be no, in which case the state above is not committed.
     credential.issue(LoyaltyMember {
       member_id: state.member.member_id,
       tier:      tier,

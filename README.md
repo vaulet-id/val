@@ -41,6 +41,11 @@ An action is a function of `(previous state, input, runtime context, code)` to
 of the runtime context and are recorded with everything else. That is what
 makes replay possible, and replay is what makes the record worth anything.
 
+The language is **total** — no recursion, no unbounded loops, lists consumed by
+bounded combinators. Every program halts and the compiler knows it, which is
+cheaper than a fuel meter finding out and makes a pure function worth something:
+one that might not return is only half a guarantee.
+
 Verification is type narrowing, not an assertion. `verify` is the only way to
 obtain a `Verified<T>`, so a function that demands verified data cannot be
 handed anything else — the check cannot be forgotten, because forgetting it does
@@ -65,22 +70,30 @@ for one — the interface comes first and Vaulet's implementation plugs into it.
 action ScanToEarn {
   input   { receipt: Credential<PurchaseReceipt> }
   require { state.member != null }
-  verify  { receipt with ReceiptFromMerchant }
+
+  verify  { let checked = receipt with ReceiptFromMerchant }
 
   compute {
-    const earned = receipt.claims.amount / 100
-    const tier   = if earned > 10000 { Tier.gold } else { Tier.silver }
+    let earned = checked.claims.amount / 100
+    let tier   = tier_for(state.lifetime_points + earned)
   }
 
-  update  { member.points = state.member.points + earned }
+  update  { state with { member: state.member with { tier: tier } } }
   execute { credential.issue(LoyaltyMember { tier: tier, … }) }
 }
 ```
 
-`verify` is the only way to obtain a `Verified<PurchaseReceipt>`, `require` is
-where an optional is narrowed, `compute` cannot reach an effect, and `execute`
-does not issue anything — it emits a request the host may refuse. Longer
-examples, including one file of programs that must not compile, are in
+`verify` is the only way to obtain a `Verified<ReceiptFromMerchant>` — and the
+type names the *policy*, not the credential, so data checked strictly and data
+checked loosely cannot be confused for each other. `require` is where an
+optional is narrowed and where a defect stops the action; a rule that may fail
+in ordinary use belongs in `verify`, where the person is told rather than the
+app crashing. `compute` cannot reach an effect and neither can any function,
+because there are no effectful functions. `execute` does not issue anything: it
+emits a request the host may refuse. Disclosing a claim is an effect and lives
+there too.
+
+Longer examples, including one file of programs that must not compile, are in
 [`examples/`](examples/).
 
 ## Layout

@@ -1,15 +1,17 @@
 // Programs that must not compile, and the error each one is owed.
 //
 // Not a valid file: every action below is here to be refused. It is a checklist
-// for the type checker, and the error messages are part of the language — a
-// rule that only produces "type error" has not really been taught to anyone.
+// for the type checker, and the messages are part of the language — a rule that
+// produces only "type error" has not been taught to anybody.
 
-app id.vaulet.example.rejected
+app "id.vaulet.example.rejected"
 version 1
 
 capabilities {
-  credential.read(type: "PurchaseReceipt")
+  credential.read(PurchaseReceipt)
 }
+
+enum Tier { bronze, silver, gold }
 
 state {
   member: LoyaltyMember?
@@ -21,60 +23,125 @@ action EffectInCompute {
   compute {
     // error: `credential.issue` is an effect and `compute` is pure.
     //        Effects may only appear in `execute`.
-    const c = credential.issue(LoyaltyMember { … })
+    let c = credential.issue(LoyaltyMember { … })
   }
 }
 
-// 2. An effect the app never declared.
+// 2. An effect hidden behind a function.
+fn issue_it(m: LoyaltyMember) {
+  // error: functions are pure. There is no effectful function in this language,
+  //        which is why "what can this action do" is answerable by reading one
+  //        block instead of a call graph. Write the effect in `execute`, even
+  //        if that means writing it more than once.
+  credential.issue(m)
+}
+
+// 3. An effect the app never declared.
 action UndeclaredCapability {
   execute {
-    // error: this app declares `credential.read` and does not declare
-    //        `payment.request`. A capability is declared in the manifest the
-    //        person consented to, so adding one is a new version, not an edit.
+    // error: this app declares `credential.read` and not `payment.request`.
+    //        Capabilities are in the manifest the person consented to, so
+    //        adding one is a new version, not an edit.
     payment.request(amount: 100)
   }
 }
 
-// 3. Using data that was never verified.
-action UnverifiedData {
-  input {
-    receipt: Credential<PurchaseReceipt>
-  }
-  compute {
-    // error: expected `Verified<PurchaseReceipt>`, found
-    //        `Credential<PurchaseReceipt>`. Pass it through a `verify` block;
-    //        there is no cast, because a cast is how the check gets forgotten.
-    const earned = trusted_amount(receipt)
+// 4. Disclosure without the capability for it.
+action SilentDisclosure {
+  execute {
+    // error: `present` requires the `disclosure.present` capability, which this
+    //        app does not declare. Handing a claim to somebody else is an
+    //        effect like any other, and a person consented to a list that did
+    //        not include it.
+    present { disclose receipt.claims.country }
   }
 }
 
-// 4. An optional that was never narrowed.
+// 5. Using data that was never verified.
+action UnverifiedData {
+  input { receipt: Credential<PurchaseReceipt> }
+  compute {
+    // error: expected `Verified<ReceiptFromMerchant>`, found
+    //        `Credential<PurchaseReceipt>`. Pass it through a `verify` block;
+    //        there is no cast, because a cast is how the check gets forgotten.
+    let earned = trusted_amount(receipt)
+  }
+}
+
+// 6. Verified, but against the wrong policy.
+action WrongPolicy {
+  input { receipt: Credential<PurchaseReceipt> }
+  verify {
+    let checked = receipt with SignatureOnly
+  }
+  compute {
+    // error: expected `Verified<ReceiptFromMerchant>`, found
+    //        `Verified<SignatureOnly>`. Policies are nominal: a signature that
+    //        is valid says nothing about whether the credential was revoked,
+    //        or about who issued it. If one policy really does subsume the
+    //        other, declare it — do not rely on both being called "verified".
+    let earned = trusted_amount(checked)
+  }
+}
+
+// 7. An optional that was never narrowed.
 action MissingNarrow {
   update {
     // error: `state.member` is `LoyaltyMember?`. Require it non-null in
-    //        `require` before touching it — narrowing is a phase, not a check
-    //        you scatter through the code.
-    member.points = state.member.points + 1
+    //        `require` before reading through it — narrowing is a phase, not a
+    //        check scattered through the code.
+    state with { member: state.member with { points: state.member.points + 1 } }
   }
 }
 
-// 5. Nondeterminism.
+// 8. Assignment.
+action Mutation {
+  update {
+    // error: there is no assignment in this language. Derive a new record with
+    //        `with`. A dotted path reads as mutation, and the moment a list
+    //        appears in it, it needs an optics story nobody wants to write.
+    state.member.points = 10
+  }
+}
+
+// 9. A match that will not break when the enum grows.
+action WildcardOverEnum {
+  compute {
+    // error: `match` over an enum may not use `_`. Adding `Tier.platinum` must
+    //        break every program that decides something per tier — that is the
+    //        whole reason this is an enum and not a string.
+    let discount = match state.member.tier {
+      Tier.gold -> 10
+      _         -> 0
+    }
+  }
+}
+
+// 10. Nondeterminism.
 action Nondeterministic {
   compute {
     // error: no such function. Time and randomness come from the runtime
     //        context, which is recorded — `context.time.now`,
-    //        `context.random.uuid`. An action that cannot be replayed cannot
-    //        be proved, and proving it is the entire point.
-    const now = Date.now()
+    //        `context.random.uuid`. An action that cannot be replayed cannot be
+    //        proved, and proving it is the entire point.
+    let now = Date.now()
   }
 }
 
-// 6. A float.
+// 11. Recursion.
+fn total(items: List<int>, i: int) -> int {
+  // error: the call graph must be acyclic. This language is total: every
+  //        program halts, and the compiler knows it rather than a fuel meter
+  //        finding out. Use `fold`.
+  if i >= items.count { 0 } else { items[i] + total(items, i + 1) }
+}
+
+// 12. A float.
 action Floats {
   compute {
     // error: no floating-point type in this language. NaN bit patterns are the
     //        main source of nondeterminism under Wasm, and money wants integers
     //        or fixed point regardless. Use satang, not baht.
-    const price = 12.50
+    let price = 12.50
   }
 }

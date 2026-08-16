@@ -1,28 +1,37 @@
 // Prove an age at a door. Disclose nothing else — not a name, not a birthdate,
 // not a document number.
 //
-// The small end of the language: no state, no effects, no issuance. It is here
-// because it is the shape most verifications actually are, and because it is
-// the one place `prove` must not be allowed to quietly become `disclose`.
+// The small end of the language: no state, no issuance. It is here because it
+// is the shape most verifications actually are, and because it is where two
+// rules earn their keep — disclosure is an effect, and `prove` never degrades.
 
-app id.vaulet.example.door
+app "id.vaulet.example.door"
 version 1
 
 capabilities {
-  credential.read(type: "NationalId")
+  credential.read(NationalId)
+
+  // Disclosure is a capability, because handing a person's data to somebody
+  // else is the most consequential thing an app in this system can do. An app
+  // that only reads a credential to decide something for itself does not
+  // declare this one.
+  disclosure.present
 }
 
 credential NationalId {
-  given_name: string
+  given_name:  string
   family_name: string
-  birthdate:  date
-  country:    string
+  birthdate:   date
+  country:     string
 }
 
-trust GovernmentIssued {
-  credential: NationalId
+trust GovernmentIssued(id: NationalId) {
   anchor { "th.go.dopa" }
-  require { signature.valid; status.active; holder.bound }
+  require {
+    id.signature.valid
+    id.status.active
+    id.holder.bound
+  }
 }
 
 action EnterVenue {
@@ -31,19 +40,21 @@ action EnterVenue {
   }
 
   verify {
-    id with GovernmentIssued
+    let checked = id with GovernmentIssued
   }
 
-  present {
-    // `disclose` hands over a value. `prove` hands over an answer.
-    disclose id.claims.country
+  execute {
+    // `present` lives here rather than in a phase of its own. Every other
+    // effect is declared, consented to and recorded; there is no argument for
+    // the one that reveals data being the exception.
+    present {
+      disclose checked.claims.country
 
-    // PROPOSED: `duration(years:)` — see loyalty.val.
-    //
-    // This line is a Proof<bool> and nothing less. Where the host cannot
-    // produce a real zero-knowledge proof, the compiler must refuse to build
-    // this app rather than fall back to disclosing the birthdate and comparing
-    // it — the author wrote `prove` and would never learn it had not happened.
-    prove id.claims.birthdate <= context.time.now - duration(years: 20)
+      // A Proof<bool> and nothing weaker. Where the host cannot produce a real
+      // zero-knowledge proof, this program must fail to build — not quietly
+      // disclose the birthdate and compare it, which is the same answer with
+      // the privacy removed and no way for the author to find out.
+      prove checked.claims.birthdate <= context.time.now - duration(years: 20)
+    }
   }
 }
