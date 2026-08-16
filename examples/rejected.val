@@ -1,0 +1,80 @@
+// Programs that must not compile, and the error each one is owed.
+//
+// Not a valid file: every action below is here to be refused. It is a checklist
+// for the type checker, and the error messages are part of the language — a
+// rule that only produces "type error" has not really been taught to anyone.
+
+app id.vaulet.example.rejected
+version 1
+
+capabilities {
+  credential.read(type: "PurchaseReceipt")
+}
+
+state {
+  member: LoyaltyMember?
+  points: int = 0
+}
+
+// 1. An effect in a pure phase.
+action EffectInCompute {
+  compute {
+    // error: `credential.issue` is an effect and `compute` is pure.
+    //        Effects may only appear in `execute`.
+    const c = credential.issue(LoyaltyMember { … })
+  }
+}
+
+// 2. An effect the app never declared.
+action UndeclaredCapability {
+  execute {
+    // error: this app declares `credential.read` and does not declare
+    //        `payment.request`. A capability is declared in the manifest the
+    //        person consented to, so adding one is a new version, not an edit.
+    payment.request(amount: 100)
+  }
+}
+
+// 3. Using data that was never verified.
+action UnverifiedData {
+  input {
+    receipt: Credential<PurchaseReceipt>
+  }
+  compute {
+    // error: expected `Verified<PurchaseReceipt>`, found
+    //        `Credential<PurchaseReceipt>`. Pass it through a `verify` block;
+    //        there is no cast, because a cast is how the check gets forgotten.
+    const earned = trusted_amount(receipt)
+  }
+}
+
+// 4. An optional that was never narrowed.
+action MissingNarrow {
+  update {
+    // error: `state.member` is `LoyaltyMember?`. Require it non-null in
+    //        `require` before touching it — narrowing is a phase, not a check
+    //        you scatter through the code.
+    member.points = state.member.points + 1
+  }
+}
+
+// 5. Nondeterminism.
+action Nondeterministic {
+  compute {
+    // error: no such function. Time and randomness come from the runtime
+    //        context, which is recorded — `context.time.now`,
+    //        `context.random.uuid`. An action that cannot be replayed cannot
+    //        be proved, and proving it is the entire point.
+    const now = Date.now()
+  }
+}
+
+// 6. A float.
+action Floats {
+  compute {
+    // error: no floating-point type in this language. NaN bit patterns are the
+    //        main source of nondeterminism under Wasm, and money wants integers
+    //        or fixed point regardless. Use satang, not baht.
+    const price = 12.50
+  }
+}

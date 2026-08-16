@@ -1,0 +1,49 @@
+// Prove an age at a door. Disclose nothing else — not a name, not a birthdate,
+// not a document number.
+//
+// The small end of the language: no state, no effects, no issuance. It is here
+// because it is the shape most verifications actually are, and because it is
+// the one place `prove` must not be allowed to quietly become `disclose`.
+
+app id.vaulet.example.door
+version 1
+
+capabilities {
+  credential.read(type: "NationalId")
+}
+
+credential NationalId {
+  given_name: string
+  family_name: string
+  birthdate:  date
+  country:    string
+}
+
+trust GovernmentIssued {
+  credential: NationalId
+  anchor { "th.go.dopa" }
+  require { signature.valid; status.active; holder.bound }
+}
+
+action EnterVenue {
+  input {
+    id: Credential<NationalId>
+  }
+
+  verify {
+    id with GovernmentIssued
+  }
+
+  present {
+    // `disclose` hands over a value. `prove` hands over an answer.
+    disclose id.claims.country
+
+    // PROPOSED: `duration(years:)` — see loyalty.val.
+    //
+    // This line is a Proof<bool> and nothing less. Where the host cannot
+    // produce a real zero-knowledge proof, the compiler must refuse to build
+    // this app rather than fall back to disclosing the birthdate and comparing
+    // it — the author wrote `prove` and would never learn it had not happened.
+    prove id.claims.birthdate <= context.time.now - duration(years: 20)
+  }
+}

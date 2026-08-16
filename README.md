@@ -59,6 +59,30 @@ interface, and a second host is a supported thing rather than a fork. Where the
 language needs something Vaulet already has — a canonical encoding for hashing,
 for one — the interface comes first and Vaulet's implementation plugs into it.
 
+## What it looks like
+
+```
+action ScanToEarn {
+  input   { receipt: Credential<PurchaseReceipt> }
+  require { state.member != null }
+  verify  { receipt with ReceiptFromMerchant }
+
+  compute {
+    const earned = receipt.claims.amount / 100
+    const tier   = if earned > 10000 { Tier.gold } else { Tier.silver }
+  }
+
+  update  { member.points = state.member.points + earned }
+  execute { credential.issue(LoyaltyMember { tier: tier, … }) }
+}
+```
+
+`verify` is the only way to obtain a `Verified<PurchaseReceipt>`, `require` is
+where an optional is narrowed, `compute` cannot reach an effect, and `execute`
+does not issue anything — it emits a request the host may refuse. Longer
+examples, including one file of programs that must not compile, are in
+[`examples/`](examples/).
+
 ## Layout
 
 | | |

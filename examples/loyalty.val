@@ -1,0 +1,98 @@
+// Scan a purchase receipt, earn points, reissue the membership credential.
+//
+// The canonical example: it uses every phase, both verifiability types, and the
+// one thing that makes VAL different from a scripting language — the compiler
+// knowing, before it runs, that this app can issue exactly one credential type
+// and read exactly one other.
+
+app th.co.codefin.loyalty
+version 1
+
+capabilities {
+  // Parameterised, per spec §7.2. `credential.read` unqualified would let a
+  // loyalty card read a passport.
+  credential.read(type: "PurchaseReceipt")
+  credential.issue(type: "LoyaltyMember")
+}
+
+enum Tier { bronze, silver, gold }
+
+credential PurchaseReceipt {
+  merchant:     string
+  amount:       int        // satang. There are no floats in the language,
+  purchased_at: datetime   // and money did not want them anyway.
+}
+
+credential LoyaltyMember {
+  member_id: string
+  tier:      Tier
+  points:    int
+}
+
+state {
+  member:          LoyaltyMember?
+  lifetime_points: int = 0
+}
+
+trust ReceiptFromMerchant {
+  credential: PurchaseReceipt
+
+  // An anchor, not a pinned issuer DID: the chain answers who is under it.
+  // Pinning would put this app's own allowlist somewhere the person cannot see.
+  anchor { "th.co.codefin.merchants" }
+
+  require { signature.valid; status.active; holder.bound }
+}
+
+action ScanToEarn {
+  input {
+    receipt: Credential<PurchaseReceipt>
+  }
+
+  require {
+    // Narrowing lives here. Without this line the `state.member.points` below
+    // is a type error, not a null dereference at runtime.
+    state.member != null
+  }
+
+  verify {
+    // The only way to obtain `Verified<PurchaseReceipt>`. After this block
+    // `receipt` has the narrower type; there is no cast that would have done it.
+    receipt with ReceiptFromMerchant
+
+    // Multiple expressions are implicitly ANDed, and read as policy rather than
+    // as procedure. PROPOSED: `duration(days:)`. The spec has no standard
+    // library, and this is the first thing that needs one.
+    receipt.claims.purchased_at > context.time.now - duration(days: 30)
+  }
+
+  compute {
+    // Pure. `credential.issue(…)` here is a compile error, not a convention.
+    const earned = receipt.claims.amount / 100      // one point per baht
+    const total  = state.lifetime_points + earned
+
+    const tier = if total >= 10000 { Tier.gold }
+                 else if total >= 2000 { Tier.silver }
+                 else { Tier.bronze }
+  }
+
+  update {
+    // A transition, not mutation: this describes the next state, and the host
+    // commits it only if the effects below succeed (spec §7.3).
+    lifetime_points = total
+    member.points   = state.member.points + earned
+    member.tier     = tier
+  }
+
+  execute {
+    // The only phase where an effect may appear. This does not issue anything:
+    // it emits an EffectRequest and stops. The host asks whether the capability
+    // was declared, whether the person consented, whether policy allows it —
+    // and the answer may be no.
+    credential.issue(LoyaltyMember {
+      member_id: state.member.member_id,
+      tier:      tier,
+      points:    state.member.points + earned,
+    })
+  }
+}
