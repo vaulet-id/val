@@ -63,8 +63,8 @@ for one — the interface comes first and Vaulet's implementation plugs into it.
 
 | | |
 | --- | --- |
-| `crates/val` | front end — parser, typed AST, type checking, capability and trust analysis |
-| `crates/val-runtime` | back end — the tree-walking evaluator, effect requests, execution records |
+| `crates/valang` | front end — parser, typed AST, type checking, capability and trust analysis |
+| `crates/valang-runtime` | back end — the tree-walking evaluator, effect requests, execution records |
 
 There is no bytecode VM and there will not be one. v1 walks the typed AST, which
 is a few hundred lines and the easiest thing to instrument for an execution
@@ -74,6 +74,6 @@ the back end only.
 
 ## Status
 
-A skeleton that compiles and does nothing. Nothing is stable, nothing is
-published, and the crate names here are not the names it will be published
-under: `val` is taken on crates.io.
+A skeleton that compiles and does nothing. Nothing is stable and nothing is
+published. The crates are `valang` and `valang-runtime` rather than `val`,
+because `val` on crates.io is somebody else's.

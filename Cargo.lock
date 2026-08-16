@@ -3,12 +3,12 @@
 version = 4
 
 [[package]]
-name = "val"
+name = "valang"
 version = "0.1.0"
 
 [[package]]
-name = "val-runtime"
+name = "valang-runtime"
 version = "0.1.0"
 dependencies = [
- "val",
+ "valang",
 ]

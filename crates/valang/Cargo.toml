@@ -1,0 +1,12 @@
+[package]
+# The language is VAL; the crate is `valang`, because `val` on crates.io belongs
+# to somebody else. Named at the start rather than at the first publish, so no
+# rename lands on people who already depend on it.
+name = "valang"
+description = "The VAL front end: parser, typed AST, type checking, capability and trust analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

@@ -1,9 +1,10 @@
 [package]
-name = "val-runtime"
+name = "valang-runtime"
 description = "The VAL back end: the tree-walking evaluator, effect requests and execution records"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 repository.workspace = true
 
 [dependencies]
-val.workspace = true
+valang.workspace = true
