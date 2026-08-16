@@ -15,7 +15,7 @@ enum Tier { bronze, silver, gold }
 
 state {
   member: LoyaltyMember?
-  points: int = 0
+  points: int default 0
 }
 
 // 1. An effect in a pure phase.
@@ -125,6 +125,66 @@ action DefaultOverEnum {
       Tier.gold => 10,
       default   => 0,
     }
+  }
+}
+
+// 9b. A switch arm that can never be reached.
+action DeadArm {
+  compute {
+    // error: `>= 10000` is unreachable — `>= 2000` above it matches everything
+    //        it would. Arms are tried in order, which is fine; order-dependence
+    //        nobody can see is not.
+    const tier = switch (state.points) {
+      >= 2000  => Tier.silver,
+      >= 10000 => Tier.gold,
+      default  => Tier.bronze,
+    }
+  }
+}
+
+// 9c. A record literal in a patch.
+action LiteralInPatch {
+  update {
+    // error: `update` takes paths, not record literals. `member.tier: tier`
+    //        says this already, and two ways to write one thing is the cost
+    //        this language spends its whole budget avoiding. If it really is a
+    //        whole new record, build it in `compute` and name it here.
+    member: { ...state.member, tier: Tier.gold }
+  }
+}
+
+// 9d. Two disclosures in one action.
+action DiscloseTwice {
+  execute {
+    // error: an action performs at most one disclosure. Effects here are one
+    //        batch that the host takes or refuses whole — and a disclosure
+    //        cannot be taken back, so the second one cannot be conditional on
+    //        a batch the first has already completed. Two disclosures want two
+    //        consents, which is two actions.
+    present { disclose id.claims.country }
+    present { prove id.claims.birthdate <= context.time.now }
+  }
+}
+
+// 9e. Unlabelled arguments.
+action PositionalArgs {
+  execute {
+    // error: arguments are named once there are two of them. Write
+    //        `payment.request(to: merchant, amount: 12000)`. This line is read
+    //        far more often than it was written, frequently by somebody
+    //        deciding whether to approve what it does.
+    payment.request(merchant, 12000)
+  }
+}
+
+// 9f. A claim path that is not a leaf.
+action HalfAnAddress {
+  compute {
+    // error: no claim is named `address`. The register spells the parts —
+    //        `address.postal_code`, `address.region` — and a credential holds
+    //        them apart, so this would be a record with no issuer behind it.
+    //        Name the leaf.
+    const where = checked.claims.address
   }
 }
 

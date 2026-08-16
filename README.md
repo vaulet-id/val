@@ -83,7 +83,7 @@ action ScanToEarn {
     member.tier:    tier
   }
 
-  execute { credential.issue(LoyaltyMember { tier: tier, … }) }
+  execute { credential.issue(LoyaltyMember { tier: next.member.tier, … }) }
 }
 ```
 

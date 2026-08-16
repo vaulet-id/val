@@ -31,7 +31,7 @@ credential LoyaltyMember {
 
 state {
   member:         LoyaltyMember?
-  lifetimePoints: int = 0
+  lifetimePoints: int default 0
 }
 
 // The subject is bound by name. `receipt.signature.valid`, never a bare
@@ -40,7 +40,7 @@ state {
 trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
   // An anchor, not a pinned issuer: the chain answers who is under it. Pinning
   // would put this app's private allowlist somewhere the person cannot see.
-  anchor { "th.co.codefin.merchants" }
+  anchor: "th.co.codefin.merchants"
 
   require {
     receipt.signature.valid
@@ -111,14 +111,18 @@ action ScanToEarn {
   }
 
   execute {
-    // The only phase where an effect appears. This does not issue anything: it
-    // emits an EffectRequest and stops. The host asks whether the capability
-    // was declared, whether the person consented, whether policy allows it —
-    // and the answer may be no, in which case the state above is not committed.
+    // The only phase where an effect appears, and the effects here are one
+    // batch: the host takes all of them or none, and the state above commits
+    // only if it took them. This does not issue anything — it emits an
+    // EffectRequest and stops.
+    // `next` is the state `update` produced. Reading `state.member.points +
+    // earned` here instead would be the same arithmetic written twice, in two
+    // phases, and the day one of them is edited the execution record proves the
+    // disagreement rather than catching it.
     credential.issue(LoyaltyMember {
-      member_id: state.member.member_id,
-      tier:      tier,
-      points:    state.member.points + earned,
+      member_id: next.member.member_id,
+      tier:      next.member.tier,
+      points:    next.member.points,
     })
   }
 }

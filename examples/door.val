@@ -26,7 +26,7 @@ credential NationalId {
 }
 
 trust GovernmentIssued(id: NationalId) {
-  anchor { "th.go.dopa" }
+  anchor: "th.go.dopa"
   require {
     id.signature.valid
     id.status.active
