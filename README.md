@@ -69,16 +69,20 @@ for one — the interface comes first and Vaulet's implementation plugs into it.
 ```
 action ScanToEarn {
   input   { receipt: Credential<PurchaseReceipt> }
-  require { state.member != null }
+  require { state.member exists }
 
   verify  { const checked = receipt with ReceiptFromMerchant }
 
   compute {
-    const earned = checked.claims.amount / 100
-    const tier   = tierFor(state.lifetime_points + earned)
+    const earned = checked.claims.amount / satangPerBaht
+    const tier   = tierFor(state.lifetimePoints + earned)
   }
 
-  update  { { ...state, member: { ...state.member, tier: tier } } }
+  update {
+    lifetimePoints: state.lifetimePoints + earned
+    member.tier:    tier
+  }
+
   execute { credential.issue(LoyaltyMember { tier: tier, … }) }
 }
 ```

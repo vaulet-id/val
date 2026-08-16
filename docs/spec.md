@@ -17,6 +17,30 @@ languages the reader already has, and where a construct would have to be
 invented, the answer is usually that the shell should have handled it. A DSL
 whose expressions are a fourth dialect costs its reader twice.
 
+### Two readers
+
+A VAL program has two audiences and they are not the same people.
+
+**The shell is read by people who do not write code.** A partner deciding
+whether to publish an app, a compliance officer asking what it touches, a
+security reviewer, the person whose credentials it wants. They read
+`capabilities`, `trust`, `require`, `verify` and `execute`, and they must be
+able to answer "what can this do to me" without being taught a language first.
+
+**The expression layer is written by people who do.** Arithmetic, string
+handling, a tier lookup. It should be boring and familiar, which is what
+borrowing from TypeScript and Dart buys.
+
+**Where the two conflict, move the work into the shell.** That is the rule, and
+it has already changed three things: `update` is a table of fields rather than
+nested spreads, `require` says `exists` rather than `!= null`, and a lookup that
+would be a chain of `?:` is a `switch` that reads as a table. Each moved a
+decision out of the half nobody outside can read.
+
+The cost is a larger shell — more keywords, more blocks, more grammar. That is
+the right place to spend, because the shell is the part that gets read a hundred
+times more often than it gets written.
+
 ---
 
 ## 1. What VAL is for
@@ -76,6 +100,12 @@ not have to tell them apart by context.
 
 Statements are newline-separated. There are no semicolons.
 
+**Names this program chooses are camelCase** — `lifetimePoints`, `tierFor`.
+**Claim names it does not choose are left alone**: `purchased_at`,
+`document_number` and the rest come from the issuer's vocabulary, and rewriting
+them to look like local code would hide the one fact that matters about them,
+which is that somebody else defined them.
+
 ---
 
 ## 3. Values and types
@@ -108,10 +138,13 @@ const bumped = { ...member, points: member.points + earned }
 
 Spread produces a new value with the named fields replaced. It is typed: the
 result is the same record type as the value spread, so spreading cannot invent a
-field or drop one. It is the only way to derive a record from another — there is
-no `a.b.c = v` anywhere in the language, in any phase, because a dotted
-assignment reads as mutation and needs an optics story the moment a list appears
-in the path.
+field or drop one.
+
+This is how a record is derived **in an expression**. State is not derived this
+way: `update` is a patch table (§5), because nested spreads are the shape of
+this language that a non-programmer stops being able to follow first.
+
+Either way there is no `a.b.c = v` anywhere in the language, in any phase.
 
 ### Enums are switched exhaustively
 
@@ -239,18 +272,34 @@ distinction that the host and the person both need:
 An application that puts a business rule in `require` gets a crash where it
 wanted a message, and the error should say so.
 
-Narrowing lives in `require`: an action touching `state.member: MemberCard?`
-must require it non-null before anything else may read through it.
+Narrowing lives in `require`, and it is spelled in words:
+
+```
+require {
+  state.member exists
+  input.amount > 0
+}
+```
+
+`exists` rather than `!= null`, because the people who most need to read this
+block are the ones for whom `null` is jargon. It is a shell keyword, and the
+shell is allowed to invent.
 
 ### `compute` is pure, and so is every function
 
 ```
 function tierFor(points: int): Tier {
-  return points >= 10000 ? Tier.gold
-       : points >= 2000  ? Tier.silver
-       : Tier.bronze
+  return switch (points) {
+    >= 10000 => Tier.gold,
+    >= 2000  => Tier.silver,
+    default  => Tier.bronze,
+  }
 }
 ```
+
+A `switch` arm may be a comparison, so a lookup reads as a table rather than as
+a chain of `?:`. The conditional operator stays for the two-way case, where a
+table would be heavier than what it replaces.
 
 **Functions are always pure. There is no effect polymorphism, because there are
 no effectful functions to be polymorphic over.** Effects are syntax, permitted
@@ -266,13 +315,22 @@ purpose is that question, the trade is not close.
 
 ```
 update {
-  {
-    ...state,
-    lifetime_points: total,
-    member: { ...state.member, points: state.member.points + earned },
-  }
+  lifetimePoints: total
+  member.points:  state.member.points + earned
+  member.tier:    tier
 }
 ```
+
+**`update` is a patch, not an expression.** Each line names a field of the state
+and the value it takes; everything not named is unchanged. It reads as a table
+of what this action changes, which is exactly the question somebody reviewing
+the app is asking.
+
+`:` and not `=`, because nothing is being assigned: the block describes the next
+state, and the previous one is still readable as `state.…` on the right of every
+line. A path may name nested fields, and may not contain a list index — that is
+where a patch would need an optics story, and the answer is to compute the new
+list in `compute` and name it here in one line.
 
 The block evaluates to the new state. The host commits it **only if the effects
 in `execute` succeed** — the alternative is a state that records something that

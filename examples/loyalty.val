@@ -30,8 +30,8 @@ credential LoyaltyMember {
 }
 
 state {
-  member:          LoyaltyMember?
-  lifetime_points: int = 0
+  member:         LoyaltyMember?
+  lifetimePoints: int = 0
 }
 
 // The subject is bound by name. `receipt.signature.valid`, never a bare
@@ -50,10 +50,15 @@ trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
   }
 }
 
+// A switch arm may be a comparison, so this reads as a table. A chain of `?:`
+// would say the same thing to a programmer and nothing at all to the partner
+// deciding whether to publish the app.
 function tierFor(points: int): Tier {
-  return points >= 10000 ? Tier.gold
-       : points >= 2000  ? Tier.silver
-       : Tier.bronze
+  return switch (points) {
+    >= 10000 => Tier.gold,
+    >= 2000  => Tier.silver,
+    default  => Tier.bronze,
+  }
 }
 
 action ScanToEarn {
@@ -62,13 +67,14 @@ action ScanToEarn {
   }
 
   require {
-    // Narrowing. Without this line, reading through `state.member` below is a
-    // type error rather than a null dereference at runtime.
+    // Narrowing, in words rather than in `!= null`: this block is read by
+    // people for whom `null` is jargon. Without this line, reading through
+    // `state.member` below is a type error rather than a crash at runtime.
     //
-    // This block is for defects: if it fails, this app asked for something it
-    // had no business asking for, the action aborts, and nobody is shown a
-    // message about it. Business rules go in `verify`, where failing is normal.
-    state.member != null
+    // This block is for defects. If it fails, the app asked for something it
+    // had no business asking for: the action aborts and nobody is shown a
+    // message. Business rules go in `verify`, where failing is normal.
+    state.member exists
   }
 
   verify {
@@ -85,22 +91,23 @@ action ScanToEarn {
   compute {
     // Pure, and so is every `function`. An effect here is a compile error, and
     // there is no effectful function it could hide behind.
-    const earned = checked.claims.amount / 100      // one point per baht
-    const total  = state.lifetime_points + earned   // traps on overflow
+    const satangPerBaht = 100
+    const earned = checked.claims.amount / satangPerBaht
+    const total  = state.lifetimePoints + earned     // traps on overflow
     const tier   = tierFor(total)
   }
 
   update {
-    // Evaluates to the next state. No assignment anywhere in the language: a
-    // record is derived by spreading, never mutated in place. Spread is typed —
-    // the result is the same record type, so it cannot invent or drop a field.
-    {
-      ...state,
-      lifetime_points: total,
-      member: { ...state.member,
-                points: state.member.points + earned,
-                tier:   tier },
-    }
+    // A patch, not an expression: each line names a field and the value it
+    // takes, and anything not named is unchanged. `:` and not `=`, because
+    // nothing is assigned — this describes the next state, and the previous one
+    // is still readable on the right of every line.
+    //
+    // It is also the table somebody reviewing this app wants: three lines, and
+    // they are the whole of what a scan changes.
+    lifetimePoints: total
+    member.points:  state.member.points + earned
+    member.tier:    tier
   }
 
   execute {

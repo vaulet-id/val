@@ -87,21 +87,31 @@ action WrongPolicy {
 // 7. An optional that was never narrowed.
 action MissingNarrow {
   update {
-    // error: `state.member` is `LoyaltyMember?`. Require it non-null in
+    // error: `state.member` may not exist. Say `state.member exists` in
     //        `require` before reading through it — narrowing is a phase, not a
     //        check scattered through the code.
-    { ...state, member: { ...state.member, points: state.member.points + 1 } }
+    member.points: state.member.points + 1
   }
 }
 
 // 8. Assignment.
 action Mutation {
   update {
-    // error: there is no assignment in this language. Derive a new record by
-    //        spreading — `{ ...state.member, points: 10 }`. A dotted path reads
-    //        as mutation, and the moment a list appears in it, it needs an
-    //        optics story nobody wants to write.
+    // error: `update` is a patch, not a sequence of assignments. Write
+    //        `member.points: 10` — a colon, because the line describes the next
+    //        state rather than changing this one, and `state.member.points` is
+    //        still readable on the right of it.
     state.member.points = 10
+  }
+}
+
+// 8b. A list index in a patch path.
+action IndexInPath {
+  update {
+    // error: a patch path may not contain a list index. That is where this
+    //        would need an optics story, and it does not have one: build the
+    //        new list in `compute` and name it here in one line.
+    stamps[3].used: true
   }
 }
 
