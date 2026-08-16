@@ -9,9 +9,9 @@ refuses; and what actually ran can be recorded, replayed and checked afterwards
 by somebody who was not there. That is the whole idea. Everything below is a
 consequence of it.
 
-**Nothing here works yet.** This repository is the beginning of an
-implementation; the specification it implements has not been moved here yet, and
-the open questions at the end of it are still open.
+**Nothing here works yet.** The specification is [`docs/spec.md`](docs/spec.md)
+and the open questions at the end of it are still open. What follows is why it
+is shaped the way it is.
 
 ## Why a language rather than a sandbox
 
@@ -74,6 +74,7 @@ the back end only.
 
 ## Status
 
-A skeleton that compiles and does nothing. Nothing is stable and nothing is
+A specification and a skeleton that compiles and does nothing. The order of work
+is [§8 of the spec](docs/spec.md#8-order-of-work). Nothing is stable and nothing is
 published. The crates are `valang` and `valang-runtime` rather than `val`,
 because `val` on crates.io is somebody else's.
