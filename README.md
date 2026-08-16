@@ -1,0 +1,79 @@
+# VAL
+
+**Verifiable Application Language** — a declarative language for applications
+whose execution can be proved.
+
+An app written in VAL declares what it may do before it does it. Its logic is
+pure; its side effects leave the language as *requests* that a host grants or
+refuses; and what actually ran can be recorded, replayed and checked afterwards
+by somebody who was not there. That is the whole idea. Everything below is a
+consequence of it.
+
+**Nothing here works yet.** This repository is the beginning of an
+implementation; the specification it implements has not been moved here yet, and
+the open questions at the end of it are still open.
+
+## Why a language rather than a sandbox
+
+A sandbox tells you an app *could not* have done something. It cannot tell you
+what the app *did*. Once an application handles credentials, payments or
+signatures on somebody's behalf, that is the question being asked — by the
+person, by their counterparty, and eventually by a regulator — and no amount of
+isolation answers it.
+
+VAL answers it by making effects part of the type system rather than part of
+the runtime. A pure phase computes; an effect phase may only request. The host
+sees every request before it happens, so consent is a real gate rather than a
+dialog, and the record afterwards is a fact rather than a log line an app chose
+to write.
+
+> Pure functions calculate. Effects require capabilities.
+
+## Shape
+
+```
+input → require → verify → compute → update → execute
+```
+
+An action is a function of `(previous state, input, runtime context, code)` to
+`(new state, output, effects)`. There is no `Date.now()`, no `random()`, no
+`fetch()` in the language: nondeterministic values arrive from the host as part
+of the runtime context and are recorded with everything else. That is what
+makes replay possible, and replay is what makes the record worth anything.
+
+Verification is type narrowing, not an assertion. `verify` is the only way to
+obtain a `Verified<T>`, so a function that demands verified data cannot be
+handed anything else — the check cannot be forgotten, because forgetting it does
+not compile.
+
+## Hosts
+
+VAL does not know what a credential store, a payment rail or a screen is. It
+emits `EffectRequest { capability, operation, payload }` and stops. A host
+decides whether the capability was declared, whether the person consented,
+whether policy allows it, and only then does anything real.
+
+[Vaulet](https://vaulet.id) is the first host and the reason this exists. It is
+not the only one it is allowed to have: anything host-shaped is behind an
+interface, and a second host is a supported thing rather than a fork. Where the
+language needs something Vaulet already has — a canonical encoding for hashing,
+for one — the interface comes first and Vaulet's implementation plugs into it.
+
+## Layout
+
+| | |
+| --- | --- |
+| `crates/val` | front end — parser, typed AST, type checking, capability and trust analysis |
+| `crates/val-runtime` | back end — the tree-walking evaluator, effect requests, execution records |
+
+There is no bytecode VM and there will not be one. v1 walks the typed AST, which
+is a few hundred lines and the easiest thing to instrument for an execution
+record. Wasm is the destination when there is a reason to go there — untrusted
+third-party code needing hard fuel limits and signed bytecode — and it replaces
+the back end only.
+
+## Status
+
+A skeleton that compiles and does nothing. Nothing is stable, nothing is
+published, and the crate names here are not the names it will be published
+under: `val` is taken on crates.io.

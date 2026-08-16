@@ -1,0 +1,11 @@
+[package]
+# `val` is taken on crates.io. Whatever this is published as — `vallang` and
+# `valc` were free on 2026-08-17 — the rename happens before the first publish,
+# not after somebody has depended on it.
+name = "val"
+description = "The VAL front end: parser, typed AST, type checking, capability and trust analysis"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]

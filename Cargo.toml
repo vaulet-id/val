@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/val", "crates/val-runtime"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/vaulet-id/val"
+# All rights reserved. vaulet-core is Apache-2.0 because it is consumed as a
+# dependency by things outside this organisation; the language is not, yet.
+
+[workspace.dependencies]
+val = { path = "crates/val" }

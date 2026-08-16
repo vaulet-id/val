@@ -1,0 +1,9 @@
+[package]
+name = "val-runtime"
+description = "The VAL back end: the tree-walking evaluator, effect requests and execution records"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+val.workspace = true
