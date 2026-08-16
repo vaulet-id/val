@@ -23,12 +23,12 @@ action EffectInCompute {
   compute {
     // error: `credential.issue` is an effect and `compute` is pure.
     //        Effects may only appear in `execute`.
-    let c = credential.issue(LoyaltyMember { … })
+    const c = credential.issue(LoyaltyMember { … })
   }
 }
 
 // 2. An effect hidden behind a function.
-fn issue_it(m: LoyaltyMember) {
+function issueIt(m: LoyaltyMember) {
   // error: functions are pure. There is no effectful function in this language,
   //        which is why "what can this action do" is answerable by reading one
   //        block instead of a call graph. Write the effect in `execute`, even
@@ -64,7 +64,7 @@ action UnverifiedData {
     // error: expected `Verified<ReceiptFromMerchant>`, found
     //        `Credential<PurchaseReceipt>`. Pass it through a `verify` block;
     //        there is no cast, because a cast is how the check gets forgotten.
-    let earned = trusted_amount(receipt)
+    const earned = trustedAmount(receipt)
   }
 }
 
@@ -72,7 +72,7 @@ action UnverifiedData {
 action WrongPolicy {
   input { receipt: Credential<PurchaseReceipt> }
   verify {
-    let checked = receipt with SignatureOnly
+    const checked = receipt with SignatureOnly
   }
   compute {
     // error: expected `Verified<ReceiptFromMerchant>`, found
@@ -80,7 +80,7 @@ action WrongPolicy {
     //        is valid says nothing about whether the credential was revoked,
     //        or about who issued it. If one policy really does subsume the
     //        other, declare it — do not rely on both being called "verified".
-    let earned = trusted_amount(checked)
+    const earned = trustedAmount(checked)
   }
 }
 
@@ -90,29 +90,30 @@ action MissingNarrow {
     // error: `state.member` is `LoyaltyMember?`. Require it non-null in
     //        `require` before reading through it — narrowing is a phase, not a
     //        check scattered through the code.
-    state with { member: state.member with { points: state.member.points + 1 } }
+    { ...state, member: { ...state.member, points: state.member.points + 1 } }
   }
 }
 
 // 8. Assignment.
 action Mutation {
   update {
-    // error: there is no assignment in this language. Derive a new record with
-    //        `with`. A dotted path reads as mutation, and the moment a list
-    //        appears in it, it needs an optics story nobody wants to write.
+    // error: there is no assignment in this language. Derive a new record by
+    //        spreading — `{ ...state.member, points: 10 }`. A dotted path reads
+    //        as mutation, and the moment a list appears in it, it needs an
+    //        optics story nobody wants to write.
     state.member.points = 10
   }
 }
 
-// 9. A match that will not break when the enum grows.
-action WildcardOverEnum {
+// 9. A switch that will not break when the enum grows.
+action DefaultOverEnum {
   compute {
-    // error: `match` over an enum may not use `_`. Adding `Tier.platinum` must
-    //        break every program that decides something per tier — that is the
-    //        whole reason this is an enum and not a string.
-    let discount = match state.member.tier {
-      Tier.gold -> 10
-      _         -> 0
+    // error: `switch` over an enum may not use `default`. Adding
+    //        `Tier.platinum` must break every program that decides something
+    //        per tier — that is the whole reason this is an enum, not a string.
+    const discount = switch (state.member.tier) {
+      Tier.gold => 10,
+      default   => 0,
     }
   }
 }
@@ -124,16 +125,16 @@ action Nondeterministic {
     //        context, which is recorded — `context.time.now`,
     //        `context.random.uuid`. An action that cannot be replayed cannot be
     //        proved, and proving it is the entire point.
-    let now = Date.now()
+    const now = Date.now()
   }
 }
 
 // 11. Recursion.
-fn total(items: List<int>, i: int) -> int {
+function total(items: List<int>, i: int): int {
   // error: the call graph must be acyclic. This language is total: every
   //        program halts, and the compiler knows it rather than a fuel meter
   //        finding out. Use `fold`.
-  if i >= items.count { 0 } else { items[i] + total(items, i + 1) }
+  return i >= items.count ? 0 : items[i] + total(items, i + 1)
 }
 
 // 12. A float.
@@ -142,6 +143,6 @@ action Floats {
     // error: no floating-point type in this language. NaN bit patterns are the
     //        main source of nondeterminism under Wasm, and money wants integers
     //        or fixed point regardless. Use satang, not baht.
-    let price = 12.50
+    const price = 12.50
   }
 }

@@ -71,14 +71,14 @@ action ScanToEarn {
   input   { receipt: Credential<PurchaseReceipt> }
   require { state.member != null }
 
-  verify  { let checked = receipt with ReceiptFromMerchant }
+  verify  { const checked = receipt with ReceiptFromMerchant }
 
   compute {
-    let earned = checked.claims.amount / 100
-    let tier   = tier_for(state.lifetime_points + earned)
+    const earned = checked.claims.amount / 100
+    const tier   = tierFor(state.lifetime_points + earned)
   }
 
-  update  { state with { member: state.member with { tier: tier } } }
+  update  { { ...state, member: { ...state.member, tier: tier } } }
   execute { credential.issue(LoyaltyMember { tier: tier, … }) }
 }
 ```

@@ -40,7 +40,7 @@ action EnterVenue {
   }
 
   verify {
-    let checked = id with GovernmentIssued
+    const checked = id with GovernmentIssued
   }
 
   execute {

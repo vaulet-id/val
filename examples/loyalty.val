@@ -50,10 +50,10 @@ trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
   }
 }
 
-fn tier_for(points: int) -> Tier {
-  if points >= 10000 { Tier.gold }
-  else if points >= 2000 { Tier.silver }
-  else { Tier.bronze }
+function tierFor(points: int): Tier {
+  return points >= 10000 ? Tier.gold
+       : points >= 2000  ? Tier.silver
+       : Tier.bronze
 }
 
 action ScanToEarn {
@@ -75,7 +75,7 @@ action ScanToEarn {
     // The only way to obtain `Verified<ReceiptFromMerchant>`. The type names the
     // *policy*, not the credential: data checked against a strict policy and
     // data checked against a lax one must not share a type.
-    let checked = receipt with ReceiptFromMerchant
+    const checked = receipt with ReceiptFromMerchant
 
     // Failing here is an ordinary outcome — a forged or expired receipt — and
     // the person is told plainly.
@@ -83,20 +83,23 @@ action ScanToEarn {
   }
 
   compute {
-    // Pure, and so is every `fn`. An effect here is a compile error, and there
-    // is no effectful function it could hide behind.
-    let earned = checked.claims.amount / 100      // one point per baht
-    let total  = state.lifetime_points + earned   // traps on overflow
-    let tier   = tier_for(total)
+    // Pure, and so is every `function`. An effect here is a compile error, and
+    // there is no effectful function it could hide behind.
+    const earned = checked.claims.amount / 100      // one point per baht
+    const total  = state.lifetime_points + earned   // traps on overflow
+    const tier   = tierFor(total)
   }
 
   update {
     // Evaluates to the next state. No assignment anywhere in the language: a
-    // record is derived with `with`, never mutated in place.
-    state with {
+    // record is derived by spreading, never mutated in place. Spread is typed —
+    // the result is the same record type, so it cannot invent or drop a field.
+    {
+      ...state,
       lifetime_points: total,
-      member: state.member with { points: state.member.points + earned,
-                                  tier:   tier },
+      member: { ...state.member,
+                points: state.member.points + earned,
+                tier:   tier },
     }
   }
 

@@ -10,6 +10,13 @@ principle is a declarative shell with a small expression layer — the outer
 structure is data, the inner expressions are familiar to anyone who has written
 TypeScript or Dart.
 
+That second half is a constraint, not a mood. The shell may invent whatever it
+needs, because nothing else looks like it. The expression layer may not: it
+borrows `const`, `function`, `switch`, `?:`, spread, `T?` and `List<T>` from
+languages the reader already has, and where a construct would have to be
+invented, the answer is usually that the shell should have handled it. A DSL
+whose expressions are a fourth dialect costs its reader twice.
+
 ---
 
 ## 1. What VAL is for
@@ -59,7 +66,7 @@ capabilities { … }        // everything this app may ever ask for
 enum · credential · type  // declarations
 state { … }               // what persists between actions
 trust … { … }             // named verification policies
-fn … { … }                // pure helpers
+function … { … }          // pure helpers
 action … { … }            // the only executable thing
 ```
 
@@ -85,38 +92,53 @@ trap aborts the action and commits nothing.
 patterns are the main source of nondeterminism under Wasm (§7), and money and
 points want integers or fixed point regardless. Amounts are minor units.
 
-Local bindings use `let`. There is no `var` and no assignment: every binding is
-final, and a record is updated by producing a new one (§5, `update`).
+Local bindings use `const`. There is no `var` and no assignment: every binding
+is final, and a record is derived rather than changed.
 
-`let` rather than `const` because `const` claims a distinction the language does
-not have. Where nothing is mutable, marking something immutable says nothing.
+`const` and not `let`, even though nothing here is mutable and the distinction
+`const` usually marks does not exist. The word is chosen for the reader: to
+anyone arriving from TypeScript, `let` announces a variable that will be
+reassigned, which is the opposite of what every binding in this language is.
 
-### Records are updated, never mutated
-
-```
-let bumped = member with { points: member.points + earned }
-```
-
-`X with { … }` produces a new value of `X`'s type with the named fields
-replaced. It is the only way to derive a record from another. There is no
-`a.b.c = v` anywhere in the language, in any phase: a dotted assignment reads as
-mutation, and the moment a list appears in the path it needs an optics story
-nobody wants to write.
-
-### Enums are matched exhaustively
+### Records are derived, never mutated
 
 ```
-let discount = match tier {
-  Tier.bronze -> 0
-  Tier.silver -> 5
-  Tier.gold   -> 10
+const bumped = { ...member, points: member.points + earned }
+```
+
+Spread produces a new value with the named fields replaced. It is typed: the
+result is the same record type as the value spread, so spreading cannot invent a
+field or drop one. It is the only way to derive a record from another — there is
+no `a.b.c = v` anywhere in the language, in any phase, because a dotted
+assignment reads as mutation and needs an optics story the moment a list appears
+in the path.
+
+### Enums are switched exhaustively
+
+```
+const discount = switch (tier) {
+  Tier.bronze => 0,
+  Tier.silver => 5,
+  Tier.gold   => 10,
 }
 ```
 
-**A `match` over an enum may not use a wildcard.** Adding `Tier.platinum` must
-break every program that decides something per tier — that is the entire value
-of having enums rather than strings. Matches over open domains (`int`, `string`)
-require a `_` arm instead, because they cannot be exhaustive.
+**A `switch` over an enum may not use a default arm.** Adding `Tier.platinum`
+must break every program that decides something per tier — that is the entire
+value of having enums rather than strings. Switches over open domains (`int`,
+`string`) require a `default` instead, because they cannot be exhaustive.
+
+### Conditionals
+
+`if` is a statement. The expression form is the conditional operator, as in
+TypeScript and Dart:
+
+```
+const fee = amount > 100_000 ? 0 : 20
+```
+
+A block-bodied `if` that evaluates to a value is Rust's shape, not this
+language's, and mixing the two gives two ways to write one thing.
 
 ---
 
@@ -223,10 +245,10 @@ must require it non-null before anything else may read through it.
 ### `compute` is pure, and so is every function
 
 ```
-fn tier_for(points: int) -> Tier {
-  if points >= 10000 { Tier.gold }
-  else if points >= 2000 { Tier.silver }
-  else { Tier.bronze }
+function tierFor(points: int): Tier {
+  return points >= 10000 ? Tier.gold
+       : points >= 2000  ? Tier.silver
+       : Tier.bronze
 }
 ```
 
@@ -244,9 +266,10 @@ purpose is that question, the trade is not close.
 
 ```
 update {
-  state with {
+  {
+    ...state,
     lifetime_points: total,
-    member: state.member with { points: state.member.points + earned },
+    member: { ...state.member, points: state.member.points + earned },
   }
 }
 ```
@@ -437,7 +460,7 @@ Constraints that hold regardless:
 ## 11. Order of work
 
 1. Parser and typed AST for the shell plus expressions.
-2. Type checker: `Verified<P>`, nullability, exhaustive matching, trapping
+2. Type checker: `Verified<P>`, nullability, exhaustive switching, trapping
    arithmetic, effect placement, acyclic call graph.
 3. Capability and trust analysis over the typed AST.
 4. Tree-walking evaluator, effect requests, execution records.
