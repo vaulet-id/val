@@ -1,1 +1,9 @@
 /target
+
+# Flutter build intermediates. `preview/build/web` is copied into
+# web/public/preview by preview/build.sh, and that copy is checked in — the
+# playground is a static site, and asking every reader to install Flutter would
+# make the preview the one part nobody sees.
+preview/build
+preview/.dart_tool
+web/public/preview

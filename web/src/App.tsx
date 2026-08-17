@@ -135,10 +135,10 @@ export default function App() {
                   Build &amp; Run
                 </Button>
               </div>
+              {/* No ScrollArea: the frame scrolls itself, and two scrollers
+                  over one surface is the thing every embedded view gets wrong. */}
               <TabsContent value="screen" className="min-h-0 flex-1">
-                <ScrollArea className="h-full">
-                  <PreviewScreen program={program} locale={locale} />
-                </ScrollArea>
+                <PreviewScreen program={program} locale={locale} dark={dark} />
               </TabsContent>
               <TabsContent value="report" className="min-h-0 flex-1">
                 <ScrollArea className="h-full">
