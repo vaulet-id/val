@@ -211,3 +211,38 @@ fn the_encoding_is_the_one_in_the_rfc() {
         assert_eq!(enc.encode(&value), bytes, "encoding {value}");
     }
 }
+
+/// The reason state is a tree. A verifier is handed one field and the root it
+/// already had, and can check the field belongs to that state without being
+/// shown any of the rest of it.
+#[test]
+fn one_field_can_be_proved_without_opening_the_others() {
+    use valang_runtime::merkle::{leaves, prove, root, verify_inclusion};
+
+    let (program, _) = valang::analyse(LOYALTY);
+    let run = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve: true });
+
+    let enc = DeterministicCbor;
+    let ls = leaves(&run.next_state, &enc);
+    let r = root(&ls);
+    assert_eq!(r, run.record.next_root, "the record's root is this tree's root");
+
+    for leaf in &ls {
+        let p = prove(&ls, &leaf.path).expect("every leaf is provable");
+        assert!(verify_inclusion(&p, &r, &enc), "{} should verify", leaf.path);
+        // And it is about that field only: the proof carries no other value.
+        assert_eq!(p.path, leaf.path);
+        assert_eq!(p.value, leaf.value);
+    }
+
+    // A field claimed with a value it does not have must not verify.
+    let mut lying = prove(&ls, "member.points").unwrap();
+    lying.value = Value::Int(999_999);
+    assert!(!verify_inclusion(&lying, &r, &enc));
+
+    // Nor an honest proof against a different state's root: a proof is about
+    // one state, which is what makes a remembered root worth remembering.
+    let other = root(&leaves(&start(), &enc));
+    let honest = prove(&ls, "member.points").unwrap();
+    assert!(!verify_inclusion(&honest, &other, &enc));
+}

@@ -57,6 +57,75 @@ fn walk(path: String, v: &Value, enc: &dyn Canonical, out: &mut Vec<Leaf>) {
     }
 }
 
+/// One step up the tree: the sibling, and which side it was on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step {
+    pub sibling: Hash,
+    /// True when the sibling is to the right of the node being proved.
+    pub sibling_on_right: bool,
+}
+
+/// An inclusion proof, which is the entire reason state is a tree and not a
+/// single hash: one field can be shown without opening the rest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inclusion {
+    pub path: String,
+    pub value: Value,
+    pub steps: Vec<Step>,
+}
+
+pub fn prove(leaves: &[Leaf], path: &str) -> Option<Inclusion> {
+    let mut index = leaves.iter().position(|l| l.path == path)?;
+    let leaf = &leaves[index];
+    let mut level: Vec<Hash> = leaves.iter().map(|l| l.hash).collect();
+    let mut steps = Vec::new();
+
+    while level.len() > 1 {
+        let sibling_index = if index % 2 == 0 { index + 1 } else { index - 1 };
+        // An odd node is paired with itself when the root is built, so its
+        // sibling is itself. Stated here rather than left as an off-by-one for
+        // somebody to find later with a proof that will not verify.
+        let sibling = *level.get(sibling_index).unwrap_or(&level[index]);
+        steps.push(Step { sibling, sibling_on_right: index % 2 == 0 });
+
+        let mut next = Vec::with_capacity(level.len().div_ceil(2));
+        for pair in level.chunks(2) {
+            let mut h = Sha256::new();
+            h.update(pair[0]);
+            h.update(pair.get(1).unwrap_or(&pair[0]));
+            next.push(h.finalize().into());
+        }
+        level = next;
+        index /= 2;
+    }
+
+    Some(Inclusion { path: leaf.path.clone(), value: leaf.value.clone(), steps })
+}
+
+/// Check a proof against a root, having been told nothing else. This is what a
+/// verifier runs: it never sees the state, only the field it was shown and the
+/// root it already had.
+pub fn verify_inclusion(inclusion: &Inclusion, root: &Hash, enc: &dyn Canonical) -> bool {
+    let mut h = Sha256::new();
+    h.update(inclusion.path.as_bytes());
+    h.update([0u8]);
+    h.update(enc.encode(&inclusion.value));
+    let mut current: Hash = h.finalize().into();
+
+    for step in &inclusion.steps {
+        let mut h = Sha256::new();
+        if step.sibling_on_right {
+            h.update(current);
+            h.update(step.sibling);
+        } else {
+            h.update(step.sibling);
+            h.update(current);
+        }
+        current = h.finalize().into();
+    }
+    current == *root
+}
+
 pub fn root(leaves: &[Leaf]) -> Hash {
     if leaves.is_empty() {
         return Sha256::digest(b"").into();

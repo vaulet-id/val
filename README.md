@@ -144,7 +144,7 @@ Against the pipeline in [§7](docs/spec.md), today:
 | lexer, parser, AST | **done** |
 | semantic analysis | **done** — scopes, names, narrowing |
 | type checking | **done** — `Verified<P>`, provenance, nullability, arity, claim types |
-| capability analysis | **done** — declared against used, both directions |
+| capability analysis | **done** — name *and* argument, both directions |
 | trust analysis | **done** — subject types, refinement as syntactic containment |
 | determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
 | policy validation | **partial** — one disclosure per action, patch paths, no assignment |
@@ -152,10 +152,10 @@ Against the pipeline in [§7](docs/spec.md), today:
 | IR | not started, and not needed: both back ends read the typed AST |
 | evaluator | **done** — phases, effects as requests, traps |
 | canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
-| state Merkle root | **done** — `(path, value)` leaves, one per list element |
+| state Merkle root | **done** — `(path, value)` leaves, one per list element, with inclusion proofs |
 | execution record | **done** — code, input, roots, effects, context, outcome |
 | manifest, text bundle | **done** — a locale missing a key refuses the package |
-| integrity, signature, `.va` | **done** — Ed25519 over a deterministic encoding, reproducible |
+| integrity, signature, `.va` | **done** — written and read back; a strict decoder refuses any non-canonical encoding |
 | Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel; actions stay with the host, since `execute` describes effects rather than performing them |
 
 ```
