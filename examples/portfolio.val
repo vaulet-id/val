@@ -89,7 +89,7 @@ screen Portfolio {
   compute {
     const totalValue = holdings.fold(0) { sum, h -> sum + h.claims.market_value }
     const totalCost  = holdings.fold(0) { sum, h -> sum + h.claims.cost_basis }
-    const returnBps  = returnBasisPoints(totalValue, totalCost)
+    const returnBps  = returnBasisPoints(marketValue: totalValue, costBasis: totalCost)
   }
 
   column {
@@ -106,7 +106,8 @@ screen Portfolio {
             symbol:   h.claims.symbol,
             quantity: h.claims.quantity,
             value:    h.claims.market_value,
-            change:   returnBasisPoints(h.claims.market_value, h.claims.cost_basis),
+            change:   returnBasisPoints(marketValue: h.claims.market_value,
+                                       costBasis:   h.claims.cost_basis),
           )
         }
       }

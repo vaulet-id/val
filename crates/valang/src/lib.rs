@@ -11,6 +11,8 @@ pub mod diag;
 pub mod lex;
 pub mod parse;
 pub mod report;
+pub mod typeck;
+pub mod types;
 
 pub use diag::{Diagnostic, Severity};
 
@@ -19,9 +21,12 @@ pub use diag::{Diagnostic, Severity};
 pub fn analyse(src: &str) -> (ast::Program, Vec<Diagnostic>) {
     let (program, mut diagnostics) = parse::parse(src);
     diagnostics.extend(check::check(&program));
+    diagnostics.extend(typeck::check_types(&program));
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
-    // that mattered gets skipped.
-    diagnostics.dedup_by(|a, b| a.span.line == b.span.line && a.message == b.message);
+    // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:
+    // two reports of one field can sit either side of a third message.
+    let mut seen = std::collections::HashSet::new();
+    diagnostics.retain(|d| seen.insert((d.span.line, d.message.clone())));
     (program, diagnostics)
 }

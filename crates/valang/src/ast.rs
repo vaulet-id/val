@@ -198,6 +198,7 @@ pub enum Expr {
     /// Kept so the checker can say "use satang" rather than the parser guessing.
     Float { text: String, span: Span },
     Str { value: String, span: Span },
+    Bool { value: bool, span: Span },
     Ident { name: String, span: Span },
     Member { obj: Box<Expr>, name: String, span: Span },
     Call { callee: Box<Expr>, args: Vec<Arg>, span: Span },
@@ -236,7 +237,7 @@ impl Expr {
     pub fn span(&self) -> Span {
         use Expr::*;
         match self {
-            Num { span, .. } | Float { span, .. } | Str { span, .. } | Ident { span, .. }
+            Num { span, .. } | Float { span, .. } | Str { span, .. } | Bool { span, .. } | Ident { span, .. }
             | Member { span, .. } | Call { span, .. } | Unary { span, .. } | Binary { span, .. }
             | Ternary { span, .. } | With { span, .. } | Exists { span, .. } | Record { span, .. }
             | Switch { span, .. } | Lambda { span, .. } | From { span, .. } | Error { span } => *span,

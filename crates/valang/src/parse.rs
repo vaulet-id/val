@@ -768,7 +768,7 @@ impl Parser {
             lhs = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), span };
         }
 
-        if self.at("?") {
+        if min_bp == 0 && self.at("?") {
             let span = self.bump().span;
             let then = self.expr(0);
             self.expect(":");
@@ -874,8 +874,24 @@ impl Parser {
             }
             _ if t.is("switch") => self.switch_expr(),
             _ if t.is("{") => self.record(),
+            Kind::Ident if t.text == "true" || t.text == "false" => {
+                self.bump();
+                Expr::Bool { value: t.text == "true", span: t.span }
+            }
             Kind::Ident => {
                 self.bump();
+                // `LoyaltyMember { … }` — a named record. Unambiguous only
+                // because `if` and `switch` parenthesise their conditions.
+                if self.at("{") && t.text.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+                    let rec = self.record();
+                    if let Expr::Record { spread, fields, span } = rec {
+                        return Expr::Call {
+                            callee: Box::new(Expr::Ident { name: t.text, span: t.span }),
+                            args: vec![Arg { name: None, span, value: Expr::Record { spread, fields, span } }],
+                            span: t.span,
+                        };
+                    }
+                }
                 Expr::Ident { name: t.text, span: t.span }
             }
             _ => {

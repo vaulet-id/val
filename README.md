@@ -142,10 +142,10 @@ Against the pipeline in [§7](docs/spec.md), today:
 | stage | |
 | --- | --- |
 | lexer, parser, AST | **done** |
-| semantic analysis | **partial** — names and shapes, not types |
-| type checking | **not started** — `Verified<P>`, provenance, nullability |
+| semantic analysis | **done** — scopes, names, narrowing |
+| type checking | **done** — `Verified<P>`, provenance, nullability, arity, claim types |
 | capability analysis | **done** — declared against used, both directions |
-| trust analysis | **partial** — policies parse and are named; refinement is not checked |
+| trust analysis | **done** — subject types, refinement as syntactic containment |
 | determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
 | policy validation | **partial** — one disclosure per action, patch paths, no assignment |
 | capability report | **done** — derived from the code |
@@ -162,9 +162,8 @@ cargo run --bin valc -- examples/loyalty.val
 prints the diagnostics and then the capability report — the whole of what a host
 runs over a package it received.
 
-Two of `rejected.val`'s twelve programs are not yet refused, both of them the
-type checker's: data used without `verify`, and data verified against the wrong
-policy. The order of work is [§12 of the spec](docs/spec.md).
+All twelve of `rejected.val`'s programs are refused, each with the message its
+own comment says it is owed. The order of work is [§12 of the spec](docs/spec.md).
 
 The tests are the examples, and the examples were written from the specification
 before this crate existed: `rejected.val` carries the error each program is owed

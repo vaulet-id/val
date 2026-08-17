@@ -57,6 +57,32 @@ action SilentDisclosure {
   }
 }
 
+// The two declarations cases 5 and 6 are about. Without a signature there is
+// nothing demanding `Verified<…>`, and without a second policy there is nothing
+// to be verified against the wrong one — the programs below are unchanged.
+credential PurchaseReceipt {
+  merchant: string
+  amount:   int
+}
+
+trust ReceiptFromMerchant(r: PurchaseReceipt) {
+  anchor: "th.co.codefin.merchants"
+  require {
+    r.signature.valid
+    r.status.active
+    r.holder.bound
+  }
+}
+
+trust SignatureOnly(r: PurchaseReceipt) {
+  anchor: "th.co.codefin.merchants"
+  require { r.signature.valid }
+}
+
+function trustedAmount(receipt: Verified<ReceiptFromMerchant>): int {
+  return receipt.claims.amount
+}
+
 // 5. Using data that was never verified.
 action UnverifiedData {
   input { receipt: Credential<PurchaseReceipt> }

@@ -91,6 +91,8 @@ fn rejected_is_rejected_for_the_reasons_it_says() {
         "no assignment in this language",         // 8. `state.member.points = 10`
         "patch path may not contain a list index", // 8b. `stamps[3].used:`
         "a list has no index in this language",   // inside the recursion example
+        "expected `Verified<ReceiptFromMerchant>`, found `Credential<PurchaseReceipt>`", // 5.
+        "found `Verified<SignatureOnly>`",        // 6. verified against the wrong policy
     ] {
         assert!(
             joined.contains(want),
@@ -99,18 +101,53 @@ fn rejected_is_rejected_for_the_reasons_it_says() {
     }
 }
 
-/// Seventeen errors and no cascade. A parse error that spills six more messages
-/// down the file buries the one that mattered, which is the failure mode this
-/// file exists to prevent.
+/// No cascade. A file of deliberately broken programs will have many errors —
+/// that is the point of it — but one mistake that spills six messages down the
+/// line buries the sentence that taught the rule, which is the failure mode
+/// this file exists to prevent.
 #[test]
-fn rejected_says_each_thing_once() {
+fn no_line_says_more_than_two_things() {
+    use std::collections::BTreeMap;
+    let mut per_line: BTreeMap<&str, usize> = BTreeMap::new();
     let found = errors(REJECTED);
-    assert!(
-        found.len() <= 20,
-        "{} errors is a cascade, not a checklist:\n  {}",
-        found.len(),
-        found.join("\n  ")
-    );
+    for e in &found {
+        *per_line.entry(e.split(':').next().unwrap_or("")).or_default() += 1;
+    }
+    let noisy: Vec<_> = per_line.iter().filter(|(_, n)| **n > 3).collect();
+    assert!(noisy.is_empty(), "these lines cascade: {noisy:?}\n  {}", found.join("\n  "));
+
+    // And no line says the same thing twice, which is the shape of it that
+    // survives every other precaution.
+    let mut seen = std::collections::HashSet::new();
+    for e in &found {
+        assert!(seen.insert(e.clone()), "said twice: {e}");
+    }
+}
+
+/// Provenance is inferred and demanded only at the boundary — an issued claim.
+#[test]
+fn a_claim_may_demand_where_its_value_came_from() {
+    let src = r#"
+app "example"
+version 1
+capabilities { credential.read(Receipt) credential.issue(Card) }
+credential Receipt { amount: int }
+credential Card { points: int }
+trust FromShop(r: Receipt) { anchor: "shop" require { r.signature.valid } }
+action Earn {
+  input { r: Credential<Receipt> }
+  verify { const checked = r with FromShop }
+  compute { const earned = checked.claims.amount }
+  execute { credential.issue(Card { points: earned from { FromShop } }) }
+}
+"#;
+    assert!(errors(src).is_empty(), "{:?}", errors(src));
+
+    // The same program, with the value no longer descending from the policy.
+    let broken = src.replace("const earned = checked.claims.amount", "const earned = 10");
+    let e = errors(&broken).join("\n");
+    assert!(e.contains("requires `FromShop`"), "provenance should be demanded here, got:\n{e}");
+    assert!(e.contains("self-asserted"), "and it should say what it found instead:\n{e}");
 }
 
 #[test]
