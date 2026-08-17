@@ -844,6 +844,29 @@ What that requires:
   broker.co.th, showing it your brokerage account credential" — not once per
   screen refresh.
 
+### The host holds the session, and everything that follows from that
+
+The token is the host's, and so is everything around it. Stated, because each of
+these is somewhere an application would otherwise be trusted to behave:
+
+- **Scoped to one application and one audience.** Two applications talking to the
+  same broker hold nothing in common, and one application's access to two
+  audiences is two grants.
+- **Refreshed without asking again.** The person is asked once for what is
+  disclosed; a refresh discloses nothing new. They are asked again only when what
+  must be presented changes, which is a change to the manifest and therefore a
+  new version anyway.
+- **Stored where the host stores secrets** — never in application state, never in
+  the package, and **never in the execution record.** A record is made to be
+  shown to somebody; a token in it is a credential handed to whoever reads it.
+  What the record carries is that a presentation to that audience happened.
+- **Revocable by the person, per application and audience**, from outside the
+  application, in host chrome the application cannot draw or reach.
+- **A failure is the host's to report.** The application sees that the query did
+  not answer, not why — an expired grant and a rejected one look the same to it,
+  because an application that could tell them apart would learn something about
+  the person's relationship with somebody else.
+
 ### Three grades of data, and the host draws the difference
 
 | grade | where it came from | provenance |
