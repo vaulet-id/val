@@ -275,6 +275,10 @@ the day UI arrives. Text for people lives in the manifest as a template with
 named slots, and code supplies the values (§9). Composite keys are structured
 arguments, not concatenation: `storage.write(scope: "member", id: memberId, …)`.
 
+**Division by zero traps**, as overflow does and for the same reason: a wrong
+number the execution record would then faithfully prove is worse than a failure.
+An application that has a meaningful answer for a zero denominator writes it.
+
 **There is no floating point.** Two reasons and either would be enough: NaN bit
 patterns are the main source of nondeterminism under Wasm (§8), and money and
 points want integers or fixed point regardless. Amounts are minor units.
@@ -298,6 +302,19 @@ is final, and a record is derived rather than changed.
 `const` usually marks does not exist. The word is chosen for the reader: to
 anyone arriving from TypeScript, `let` announces a variable that will be
 reassigned, which is the opposite of what every binding in this language is.
+
+### The library is closed
+
+There is a fixed set of builtins — durations, the list combinators of §6, string
+comparison — implemented by the host, and **an application cannot add to it.**
+
+Totality is the reason it has to be closed rather than merely small: a builtin
+is the one place a non-terminating operation could enter a language that has
+otherwise proved it cannot have one. The other reason is that a DSL with an
+extensible prelude is a general-purpose language that has not admitted it yet.
+
+If a helper is common enough that three applications write it, that is an
+argument for adding it to the set, not for opening the set.
 
 ### Records are derived, never mutated
 
@@ -724,9 +741,11 @@ machinery: a value derived from state has no trust policy in its provenance set,
 and a verifier reading a proof over an empty provenance set is being told, in
 the type, that this is self-asserted.
 
-Open: **how a list is laid out in the tree.** One leaf per element allows
-proving one entry without revealing the others, and reveals the length; one leaf
-for the list hides the length and proves nothing selectively.
+**A list is one leaf per element**, so a single entry can be proved without
+revealing its neighbours. That reveals the length, which is usually harmless and
+occasionally is not — a count of prescriptions, a number of accounts. Where the
+length is itself sensitive, the field declares a bound and the tree is padded to
+it, so the leaf count says only "at most this many".
 
 ### Package
 
@@ -822,6 +841,19 @@ requires new infrastructure:
   the chain, which the issuer can see. The issuer becomes a witness to time
   without being told what the state contained.
 
+**And a credential is spent once.** Rolling back and rescanning the same receipt
+is a double-spend, and it has exactly one party entitled to care — the scheme
+that issued the points. So the answer is not a ledger but a **nullifier** the
+issuer records and refuses a second time.
+
+It must not be the credential's identifier. A list of used identifiers links
+every presentation to the one before it and undoes the unlinkability a proof
+system was bought for. The nullifier is instead **computed inside the proof**
+from the holder's secret and the scheme's identifier: deterministic, so the same
+credential in the same scheme always yields the same value; and unlinkable, so
+the same credential in a different scheme yields an unrelated one. It costs one
+hash gadget in the provable subset, not an architecture.
+
 A transparency log for the wallet's whole chain would catch the rest. It is a
 component to run and a way to leak metadata, and it waits for somebody who needs
 it.
@@ -911,6 +943,22 @@ screen Wallet {
 }
 ```
 
+### A screen may derive, and may not act
+
+Between `data` and the layout, a screen has a **`compute`** block with an
+action's rules: pure, no effects, no reaching a capability.
+
+It is needed because a total is a function of what is already on the screen, and
+without it every screen with a sum would have to keep that sum in `state` —
+hashed, signed, replayed and recomputable from data the screen already holds.
+Persisting a derived value is how two copies of one number start disagreeing.
+
+```
+compute {
+  const totalValue = holdings.fold(0) { sum, h -> sum + h.claims.market_value }
+}
+```
+
 ### A press calls an action, and nothing else
 
 `onTap` names a declared action. Every press therefore goes through
@@ -992,6 +1040,15 @@ these is somewhere an application would otherwise be trusted to behave:
   because an application that could tell them apart would learn something about
   the person's relationship with somebody else.
 
+### The host caches, and says how old it is
+
+A query answer may be held for offline use. **The host caches it and the host
+displays its age**; the application chooses neither.
+
+The reasoning is the one already applied to a stale valuation in a trust policy:
+a price from three hours ago and a live price must not look the same, and the
+application is the party with an interest in not mentioning the difference.
+
 ### Three grades of data, and the host draws the difference
 
 | grade | where it came from | provenance |
@@ -1035,6 +1092,18 @@ semantics, and the host is using the thing it ships.
 
 Composing freely is allowed because otherwise every application looks identical
 and the catalogue's authors become the bottleneck on everybody else's product.
+
+### The catalogue is versioned, and the package names its version
+
+An application signed against catalogue v1 will run on a host shipping v3.
+**The package records the catalogue version it was built against, and the host
+renders those semantics or refuses to run it.**
+
+This is affordable only because the interface is data: keeping the meaning of an
+old component is a rendering decision, where keeping old code would be a
+maintenance burden without end. It is not free — every version is one more
+rendering path — and the catalogue's authors should feel that cost, since they
+are the ones who decide how often it changes.
 
 ### Freedom in composition, not in geometry
 
@@ -1110,6 +1179,8 @@ Inside it:
 - `switch` and `?:`, with the cost of **every** branch, not the taken one — this
   has to be stated or nobody will understand why a proof is slow
 - list combinators where the length is known at compile time
+- **a nullifier**, computed from the holder's secret and the scheme's identifier
+  — see §7
 - **Merkle inclusion against the state root**, so a proof may be about state as
   well as about claims — with the provenance distinction of §7 reaching the
   verifier rather than being flattened into "verified"
@@ -1127,47 +1198,22 @@ verdict do.
 
 ## 11. Open questions
 
-1. **What exactly must a host provide?** The interface is named throughout this
-   document and specified nowhere. Writing it down is the honest test of whether
-   the first host has leaked into the language, and it blocks a second host. It
-   now covers three things, not one: capabilities, the text bundle, and the
-   component catalogue.
-2. **How is the component catalogue versioned?** An application signed against
-   catalogue v1 will run on a host shipping v3. *Recommended:* the package
-   records the catalogue version it was built against and the host renders those
-   semantics or refuses — the interface is data, so keeping old semantics is
-   possible in a way that keeping old code is not.
-3. **How does navigation work?** `navigate` is named and unspecified. It decides
-   whether an application has a screen stack, and whether it can send somebody
-   anywhere they did not ask to go.
-4. **May one policy be declared to refine another?** `trust A refines B { … }`
-   would let a function accept `Verified<A>` where `Verified<B>` is demanded.
-   *Recommended:* yes, eventually, and syntactic containment only — never
-   semantic implication.
-5. **Is there a standard library, and how small?** *Recommended:* a fixed, closed
-   set of host-implemented builtins — durations, list combinators, string
-   comparison — with no way for an application to add to it. A DSL with an
-   extensible prelude is a general-purpose language that has not admitted it.
-   Totality is the reason it must be closed: a builtin is the one place a
-   non-terminating operation could enter.
-6. **`fold` and totality.** A fold whose accumulator grows is bounded in steps
-   but not in memory. *Recommended:* bound value sizes at the host interface,
-   and say so there rather than pretending totality covers it.
-7. **What stops a person spending the same credential twice?** Rolling back state
-   and rescanning the same receipt is a double-spend with one party entitled to
-   care, so the answer is a nullifier the issuer records rather than a ledger.
-   *Recommended:* a nullifier computed inside the proof from the holder's secret
-   and the scheme's identifier — a naive "receipt id already used" list links
-   every presentation to the one before it and undoes the unlinkability the
-   proof system was bought for. It needs one hash gadget in the provable subset,
-   not an architecture.
-8. **How is a list laid out in the state tree?** One leaf per element proves a
-   single entry and reveals the length; one leaf for the whole list hides the
-   length and proves nothing selectively. *Recommended:* per element, with
-   padding to a declared bound where the length is itself sensitive.
-9. **`type` is declared in §2 and specified nowhere.** Plain records exist, and
-   whether they may hold verified and unverified data side by side is a
-   provenance question (§4), not a syntax one.
+1. **What exactly must a host provide?** Named throughout this document and
+   specified nowhere, and it now covers five things rather than one:
+   capabilities, the text bundle, the component catalogue, session and token
+   handling, and the bounds on value sizes that totality does not cover.
+   Writing it down is the honest test of whether the first host has leaked into
+   the language, and nothing about a second host is real until it exists.
+2. **`type` is declared in §2 and specified nowhere.** Plain records exist. What
+   is unsettled is whether one may hold verified and unverified fields side by
+   side, which is a provenance question (§4) rather than a syntax one.
+3. **Errors.** `Result<T, E>` was in an early draft and is in none of the
+   examples, because nothing has needed it yet: `require` aborts, `verify` fails
+   as an outcome, arithmetic traps, and the host reports its own failures. That
+   may be the whole answer, or it may be a gap that the first real application
+   finds.
+
+Everything else that was numbered here has been settled and moved into the body.
 
 ---
 

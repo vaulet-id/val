@@ -56,11 +56,9 @@ trust FromLicensedBroker(h: Holding) {
 // Basis points, not percent, because percent wants a decimal point and this
 // language does not have one. 1_00 is one percent.
 //
-// PROPOSED — and a real gap: `int` traps on overflow, and the spec says nothing
-// about division. A holding gifted at zero cost makes cost_basis zero, and this
-// line decides whether that is a trap or a silent absurdity. It should trap, for
-// the same reason overflow does: a wrong number the execution record would then
-// faithfully prove is worse than a failure.
+// Division by zero traps, like overflow. A holding gifted at no cost makes the
+// denominator zero, so the meaningful answer is written out rather than left to
+// a trap the person would see as a broken screen.
 function returnBasisPoints(marketValue: int, costBasis: int): int {
   return costBasis == 0 ? 0 : (marketValue - costBasis) * 10_000 / costBasis
 }
@@ -84,12 +82,10 @@ screen Portfolio {
     quotes: query broker.quotes(symbols: holdings.symbols) as List<Quote>
   }
 
-  // PROPOSED. The spec gives a screen `data` and no way to derive anything from
-  // it, so every screen with a total would have to put the total in `state` —
-  // which is hashed, signed and replayable, and has no business holding a number
-  // that is a function of what is already on screen.
-  //
-  // A pure block, no effects, same rules as an action's `compute`.
+  // A screen derives but never acts: pure, no effects, an action's rules. The
+  // alternative was keeping this total in `state` — hashed, signed, replayed,
+  // and recomputable from data the screen already holds, which is how two copies
+  // of one number start disagreeing.
   compute {
     const totalValue = holdings.fold(0) { sum, h -> sum + h.claims.market_value }
     const totalCost  = holdings.fold(0) { sum, h -> sum + h.claims.cost_basis }

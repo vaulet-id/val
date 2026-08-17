@@ -7,7 +7,8 @@ arguable instead of theoretical: the first thing a parser does is force a
 hundred decisions the prose never had to take.
 
 Where an example invents something the spec does not settle, it says so in a
-comment. Those comments are the to-do list.
+comment. Those comments are the to-do list, and they are empty at the moment:
+everything the examples reached for has been decided one way or the other.
 
 They are meant to become test cases. An example that stops parsing is a change
 somebody made; that is the point of keeping them here rather than in a document.
