@@ -5,6 +5,7 @@
 //! only reason an execution record can be trusted.
 
 pub mod canonical;
+pub mod decode;
 pub mod eval;
 pub mod host;
 pub mod merkle;

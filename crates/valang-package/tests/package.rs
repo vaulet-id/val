@@ -95,6 +95,23 @@ fn a_program_that_does_not_compile_is_never_packaged() {
 }
 
 #[test]
+fn a_package_written_out_is_the_package_read_back() {
+    let key = keygen();
+    let built = build(manifest(), sources(), text(), Some(&key)).unwrap();
+    let bytes = encode(&built);
+    let back = read(&bytes).expect("reads");
+    assert_eq!(back, built, "what was written is what comes back");
+    verify(&back).expect("and it is still admitted");
+}
+
+#[test]
+fn a_truncated_package_is_refused_rather_than_guessed_at() {
+    let key = keygen();
+    let bytes = encode(&build(manifest(), sources(), text(), Some(&key)).unwrap());
+    assert!(read(&bytes[..bytes.len() / 2]).is_err());
+}
+
+#[test]
 fn the_same_package_is_the_same_bytes() {
     let key = keygen();
     let a = build(manifest(), sources(), text(), Some(&key)).unwrap();

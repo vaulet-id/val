@@ -24,6 +24,10 @@ impl Canonical for DeterministicCbor {
     }
 }
 
+/// A private-use CBOR tag. Nothing else in this encoding is tagged, so a tag is
+/// unambiguous where a shape is not.
+pub const TAG_ENUM: u64 = 40_001;
+
 fn head(major: u8, arg: u64, out: &mut Vec<u8>) {
     // Shortest form. A length of 10 encoded in eight bytes would be legal CBOR
     // and a different byte string for the same value, which is the whole thing
@@ -89,9 +93,12 @@ fn write(v: &Value, out: &mut Vec<u8>) {
                 write(v, out);
             }
         }
-        // An enum member is its two names, so that `Tier.gold` and a string
-        // `"gold"` never hash alike.
+        // Tagged, not a bare pair. Encoded as an array of two strings, an enum
+        // member and a list of two strings — `["th", "en"]`, say — are the same
+        // bytes, which is the one thing a canonical encoding may never allow:
+        // two different values that hash alike.
         Value::Enum(e, m) => {
+            head(6, TAG_ENUM, out);
             head(4, 2, out);
             write(&Value::Str(e.clone()), out);
             write(&Value::Str(m.clone()), out);

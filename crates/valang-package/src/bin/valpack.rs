@@ -3,11 +3,22 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use valang_package::{artifact_hash, build, encode, keygen, verify, Manifest, Package, Refusal};
+use valang_package::{artifact_hash, build, encode, keygen, read, verify, Manifest, Package, Refusal};
 
 fn usage() -> ExitCode {
-    eprintln!("usage:\n  valpack build <dir> [-o out.va]\n  valpack verify <dir>");
+    eprintln!("usage:\n  valpack build  <dir> [-o out.va]\n  valpack verify <file.va>");
     ExitCode::from(2)
+}
+
+fn show(pkg: &Package) {
+    println!("{} v{} — admitted", pkg.manifest.app, pkg.manifest.version);
+    println!("  every source hashes to what integrity says");
+    println!("  the signature is over these bytes");
+    println!("  it compiles, checked here and not taken on trust");
+    println!("  the report it ships is the report its code produces");
+    for (line, values) in &pkg.report {
+        println!("    {line:<14} {}", if values.is_empty() { "—".to_string() } else { values.join(", ") });
+    }
 }
 
 fn read_sources(dir: &str) -> BTreeMap<String, String> {
@@ -40,6 +51,26 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(cmd) = args.first().map(String::as_str) else { return usage() };
     let Some(dir) = args.get(1) else { return usage() };
+
+    // Verifying reads the artifact. Rebuilding from a directory and checking
+    // that would be checking our own work, which is the one thing verification
+    // must not be.
+    if cmd == "verify" {
+        let Ok(bytes) = std::fs::read(dir) else {
+            eprintln!("{dir}: cannot read");
+            return ExitCode::FAILURE;
+        };
+        return match read(&bytes).and_then(|p| verify(&p).map(|()| p)) {
+            Ok(pkg) => {
+                show(&pkg);
+                ExitCode::SUCCESS
+            }
+            Err(r) => {
+                println!("refused — {}", describe(&r));
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     let sources = read_sources(dir);
     if sources.is_empty() {
@@ -91,23 +122,6 @@ fn main() -> ExitCode {
             println!("  written        {out} ({} bytes)", bytes.len());
             ExitCode::SUCCESS
         }
-        "verify" => match verify(&pkg) {
-            Ok(()) => {
-                println!("{} v{} — admitted", pkg.manifest.app, pkg.manifest.version);
-                println!("  every source hashes to what integrity says");
-                println!("  the signature is over these bytes");
-                println!("  it compiles, checked here and not taken on trust");
-                println!("  the report it ships is the report its code produces");
-                for (line, values) in &pkg.report {
-                    println!("    {line:<14} {}", if values.is_empty() { "—".to_string() } else { values.join(", ") });
-                }
-                ExitCode::SUCCESS
-            }
-            Err(r) => {
-                println!("refused — {}", describe(&r));
-                ExitCode::FAILURE
-            }
-        },
         _ => usage(),
     }
 }

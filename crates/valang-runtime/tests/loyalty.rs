@@ -142,6 +142,43 @@ fn a_proof_carries_the_statement_and_not_its_value() {
     );
 }
 
+/// The property the whole scheme rests on: one value, one encoding, and two
+/// different values never the same bytes. An enum member used to encode as a
+/// bare pair of strings, which made `Tier.gold` and the list `["Tier", "gold"]`
+/// indistinguishable — and a hash over bytes stops being a hash over a value
+/// the moment that is true.
+#[test]
+fn two_different_values_are_never_the_same_bytes() {
+    use valang_runtime::decode::decode;
+    let enc = DeterministicCbor;
+
+    let member = Value::Enum("Tier".into(), "gold".into());
+    let pair = Value::List(vec![Value::Str("Tier".into()), Value::Str("gold".into())]);
+    assert_ne!(enc.encode(&member), enc.encode(&pair));
+
+    for v in [member, pair, Value::Int(-1_000_000), Value::Str("แต้ม".into()), Value::Bool(true), Value::Null] {
+        assert_eq!(decode(&enc.encode(&v)).unwrap(), v, "round trip: {v}");
+    }
+}
+
+/// A strict decoder is what makes re-encoding sound. Without it a package could
+/// arrive encoded some other legal way, and a verifier that re-encodes would be
+/// checking a signature against its own idea of the file.
+#[test]
+fn a_non_canonical_encoding_is_refused() {
+    use valang_runtime::decode::{decode, Malformed};
+
+    // 10, written in two bytes instead of one. Legal CBOR, not this encoding.
+    assert!(matches!(decode(&[0x18, 0x0a]), Err(Malformed::NotShortest { .. })));
+    // A map whose keys are out of order.
+    let mut unsorted = vec![0xa2];
+    unsorted.extend_from_slice(&[0x61, b'b', 0x01]);
+    unsorted.extend_from_slice(&[0x61, b'a', 0x02]);
+    assert!(matches!(decode(&unsorted), Err(Malformed::KeysNotSorted { .. })));
+    // Trailing bytes after a complete value.
+    assert!(matches!(decode(&[0x01, 0x01]), Err(Malformed::Trailing { .. })));
+}
+
 /// Test vectors from RFC 8949 appendix A, which is the point: an encoder
 /// checked against its own idea of the format checks nothing.
 #[test]

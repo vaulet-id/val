@@ -12,6 +12,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
 use valang::report::Report;
 use valang_runtime::canonical::{Canonical, DeterministicCbor};
+use valang_runtime::decode::decode;
 use valang_runtime::value::Value;
 
 pub const FORMAT: i64 = 1;
@@ -262,6 +263,87 @@ pub fn sign(pkg: &mut Package, key: &SigningKey) {
     let sig: Signature = key.sign(&signable(pkg));
     pkg.signature = Some(sig.to_bytes().to_vec());
     pkg.public_key = Some(key.verifying_key().to_bytes().to_vec());
+}
+
+/// Read a `.va` back.
+///
+/// `verify` re-encodes what this parsed and checks the signature over that,
+/// which is only sound because the decoder is strict: a package encoded any way
+/// other than the deterministic one is refused before it gets here. Without
+/// that, re-encoding would mean checking a signature against the verifier's own
+/// idea of the package — a check that passes whatever the file said.
+pub fn read(bytes: &[u8]) -> Result<Package, Refusal> {
+    let outer = decode(bytes).map_err(|e| Refusal::Malformed(format!("{e:?}")))?;
+    let Value::Map(m) = outer else { return Err(Refusal::Malformed("a package is a map".into())) };
+
+    let Some(Value::Bytes(signed)) = m.get("signed") else {
+        return Err(Refusal::Malformed("no signed section".into()));
+    };
+    let signature = match m.get("signature") {
+        Some(Value::Bytes(b)) => Some(b.clone()),
+        _ => None,
+    };
+    let public_key = match m.get("publisher_key") {
+        Some(Value::Bytes(b)) => Some(b.clone()),
+        _ => None,
+    };
+
+    let body = decode(signed).map_err(|e| Refusal::Malformed(format!("{e:?}")))?;
+    let Value::Map(b) = body else { return Err(Refusal::Malformed("the signed section is a map".into())) };
+
+    let str_at = |v: Option<&Value>| match v {
+        Some(Value::Str(s)) => s.clone(),
+        _ => String::new(),
+    };
+    let Some(Value::Map(man)) = b.get("manifest") else {
+        return Err(Refusal::Malformed("no manifest".into()));
+    };
+
+    let manifest = Manifest {
+        app: str_at(man.get("app")),
+        version: str_at(man.get("version")),
+        kind: str_at(man.get("kind")),
+        publisher: str_at(man.get("publisher")),
+        catalogue: str_at(man.get("catalogue")),
+        locales: match man.get("locales") {
+            Some(Value::List(l)) => l.iter().map(|v| str_at(Some(v))).collect(),
+            _ => Vec::new(),
+        },
+    };
+
+    let map_of_str = |v: Option<&Value>| -> BTreeMap<String, String> {
+        match v {
+            Some(Value::Map(m)) => m.iter().map(|(k, v)| (k.clone(), str_at(Some(v)))).collect(),
+            _ => BTreeMap::new(),
+        }
+    };
+
+    Ok(Package {
+        manifest,
+        sources: map_of_str(b.get("sources")),
+        text_bundle: match b.get("text") {
+            Some(Value::Map(m)) => m.iter().map(|(k, v)| (k.clone(), map_of_str(Some(v)))).collect(),
+            _ => BTreeMap::new(),
+        },
+        report: match b.get("report") {
+            Some(Value::Map(m)) => m
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        match v {
+                            Value::List(l) => l.iter().map(|x| str_at(Some(x))).collect(),
+                            _ => Vec::new(),
+                        },
+                    )
+                })
+                .collect(),
+            _ => BTreeMap::new(),
+        },
+        integrity: map_of_str(b.get("integrity")),
+        signature,
+        public_key,
+    })
 }
 
 pub fn keygen() -> SigningKey {
