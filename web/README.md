@@ -9,11 +9,13 @@ does instead is the part that is already true:
 - **the editor** highlights the shell and the expression layer differently,
   because they are read by different people — and marks what would not compile,
   a float where a smaller unit belongs, a capability declared and never used
-- **the preview** draws the screen the program declared. The frame is the
-  host's, the components are the host's, the interaction state is the host's;
-  what the application supplied is the structure and the keys. Slot values are
-  shown as the expressions that produced them, because formatting a number for
-  a locale is the host's job and never the application's
+- **the preview** is Flutter — the same toolkit the wallet uses, compiled to web
+  and embedded. `button` in a VAL screen means Flutter's button, so a facsimile
+  in HTML would have agreed with itself and been wrong about wrapping, about
+  Thai line breaking, and about every metric that matters. Slot values appear as
+  the expressions that produced them, because formatting a number for a locale
+  is the host's job and never the application's. Build it with
+  `./preview/build.sh`; it is not checked in, being forty megabytes of CanvasKit
 - **the report** is derived from the code, which is the whole point of it. A
   publisher cannot understate what they never wrote down
 
