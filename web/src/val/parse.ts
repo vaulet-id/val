@@ -25,7 +25,7 @@ export type Decl =
   | { t: 'state'; fields: Field[]; line: number }
   | { t: 'trust'; name: string; subject: string; subjectType: string; refines?: string; anchor?: string; requires: string[]; line: number }
   | { t: 'function'; name: string; line: number }
-  | { t: 'action'; name: string; phases: Record<string, Node[]>; raw: Record<string, string>; line: number }
+  | { t: 'action'; name: string; phases: Record<string, Node[]>; raw: Record<string, string>; toks: Record<string, Tok[]>; line: number }
   | { t: 'screen'; name: string; data: DataDecl[]; compute: string[]; tree: Node[]; line: number }
 
 export type Field = { name: string; type: string; optional: boolean; def?: string; line: number }
@@ -43,7 +43,7 @@ export type Program = { decls: Decl[]; diagnostics: Diagnostic[] }
 
 // ---------------------------------------------------------------- tokenizer
 
-type Tok = { v: string; k: 'id' | 'str' | 'num' | 'punct'; line: number; col: number }
+export type Tok = { v: string; k: 'id' | 'str' | 'num' | 'punct'; line: number; col: number }
 
 const PUNCT = new Set([
   '{', '}', '(', ')', '[', ']', ',', ':', '.', ';', '?',
@@ -313,17 +313,19 @@ export function parse(src: string): Program {
       const name = eat()?.v ?? ''
       const phases: Record<string, Node[]> = {}
       const raw: Record<string, string> = {}
+      const phaseToks: Record<string, Tok[]> = {}
       expect('{')
       while (p < toks.length && !at('}')) {
         if (peek().k !== 'id') { eat(); continue }
         const phase = eat().v
         const body = skipBlock()
         raw[phase] = renderToks(body)
+        phaseToks[phase] = body
         // Effects are found by head word, so the body is walked as nodes too.
         phases[phase] = nodesFromToks(body)
       }
       expect('}')
-      decls.push({ t: 'action', name, phases, raw, line })
+      decls.push({ t: 'action', name, phases, raw, toks: phaseToks, line })
       continue
     }
 

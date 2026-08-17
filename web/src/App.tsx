@@ -4,6 +4,9 @@ import { Navbar, type Mode } from '@/components/Navbar'
 import { FileTree } from '@/components/FileTree'
 import { PreviewScreen } from '@/components/PreviewScreen'
 import { ReportPanel } from '@/components/ReportPanel'
+import { RunPanel } from '@/components/RunPanel'
+import { Button } from '@/components/ui/button'
+import { Play, Loader2 } from 'lucide-react'
 import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -11,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { files } from '@/examples'
 import { parse } from '@/val/parse'
 import { report } from '@/val/report'
+import { build, run, type BuildResult, type RunResult } from '@/val/run'
 import { registerVal } from '@/val/monaco-lang'
 
 export default function App() {
@@ -35,6 +39,23 @@ export default function App() {
   const isVal = active.endsWith('.val')
   const program = React.useMemo(() => (isVal ? parse(source) : { decls: [], diagnostics: [] }), [source, isVal])
   const rep = React.useMemo(() => report(program), [program])
+
+  const [tab, setTab] = React.useState('screen')
+  const [running, setRunning] = React.useState(false)
+  const [built, setBuilt] = React.useState<BuildResult | null>(null)
+  const [ran, setRan] = React.useState<RunResult | null>(null)
+
+  // Build first, and run only what built — the host runs the same checks and
+  // would refuse the package, so running past a failed build would be a lie
+  // told by the tooling.
+  const buildAndRun = React.useCallback(async () => {
+    setRunning(true)
+    setTab('run')
+    const b = build(program)
+    setBuilt(b)
+    setRan(b.ok ? await run(program) : null)
+    setRunning(false)
+  }, [program])
 
   // Diagnostics from the lexer land as markers, so a float is underlined where
   // it was written rather than described in a panel somewhere else.
@@ -102,12 +123,17 @@ export default function App() {
           <ResizableHandle withHandle />
 
           <ResizablePanel defaultSize={32} minSize={18}>
-            <Tabs defaultValue="screen" className="flex h-full min-h-0 flex-col">
-              <div className="flex h-9 shrink-0 items-center border-b border-[var(--color-border)] px-2">
+            <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col">
+              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-2">
                 <TabsList>
                   <TabsTrigger value="screen">Preview</TabsTrigger>
                   <TabsTrigger value="report">Report</TabsTrigger>
+                  <TabsTrigger value="run">Run</TabsTrigger>
                 </TabsList>
+                <Button size="sm" className="ml-auto" onClick={buildAndRun} disabled={running || !isVal}>
+                  {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                  Build &amp; Run
+                </Button>
               </div>
               <TabsContent value="screen" className="min-h-0 flex-1">
                 <ScrollArea className="h-full">
@@ -117,6 +143,19 @@ export default function App() {
               <TabsContent value="report" className="min-h-0 flex-1">
                 <ScrollArea className="h-full">
                   <ReportPanel report={rep} />
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="run" className="min-h-0 flex-1">
+                <ScrollArea className="h-full">
+                  {built ? (
+                    <RunPanel build={built} result={ran} />
+                  ) : (
+                    <p className="p-4 text-[11px] leading-relaxed text-[var(--color-muted-foreground)]">
+                      Build &amp; Run compiles what a host would check, then walks one
+                      action: phases in order, effects requested and never performed,
+                      and the Merkle root of the state it would commit.
+                    </p>
+                  )}
                 </ScrollArea>
               </TabsContent>
             </Tabs>
