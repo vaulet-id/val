@@ -127,6 +127,13 @@ pub fn run_action(
 
     let mut next = state.clone();
     for block in &action.phases {
+        // `update` produced the next state and `execute` reads it as `next`.
+        // Without this binding every `next.…` in an issued claim is null, and
+        // the credential goes out empty — which a test that only checks which
+        // capability was requested will not notice.
+        if block.phase == Phase::Execute {
+            ev.bind("next", Value::Map(next.clone()));
+        }
         for s in &block.stmts {
             if let Err(trap) = ev.stmt(s, block.phase, &mut next) {
                 record.outcome = match trap {

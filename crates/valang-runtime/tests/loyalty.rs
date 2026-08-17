@@ -79,6 +79,17 @@ fn a_scan_earns_one_point_per_baht_and_commits() {
     assert_eq!(run.effects.len(), 1);
     assert_eq!(run.effects[0].capability, "credential.issue");
     assert_ne!(run.record.previous_root, run.record.next_root);
+
+    // What is in the credential, not only that one was asked for. The example
+    // fills these from `next`, and checking the capability alone let a version
+    // that issued three nulls pass.
+    let Value::Credential { ty, claims, .. } = &run.effects[0].payload else {
+        panic!("a credential was expected, found {}", run.effects[0].payload)
+    };
+    assert_eq!(ty, "LoyaltyMember");
+    assert_eq!(claims["points"], Value::Int(1_365));
+    assert_eq!(claims["member_id"], Value::Str("M-2891".into()));
+    assert_eq!(claims["tier"], Value::Enum("Tier".into(), "bronze".into()));
 }
 
 #[test]

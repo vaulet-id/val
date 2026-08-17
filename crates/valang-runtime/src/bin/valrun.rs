@@ -91,7 +91,7 @@ fn main() -> ExitCode {
     println!("  next root      {}", &hex(&r.next_root)[..24]);
     println!("  effects        {} requested, {} executed", r.effects_requested.len(), r.effects_executed);
     for e in &r.effects_requested {
-        println!("    {} {}{}", e.capability, e.payload, if e.reversible { "" } else { "   (irreversible)" });
+        println!("    {} {}{}", e.capability, match &e.payload { Value::Credential { ty, claims, .. } => format!("{ty} {}", Value::Map(claims.clone())), other => other.to_string() }, if e.reversible { "" } else { "   (irreversible)" });
     }
     println!("  state leaves");
     for l in &run.leaves {
