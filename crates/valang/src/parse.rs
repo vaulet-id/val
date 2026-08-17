@@ -733,11 +733,12 @@ impl Parser {
         let kind = self.bump().text;
         let args = if self.at("(") { self.args() } else { Vec::new() };
         let mut children = Vec::new();
+        let mut lambda = None;
         if self.at("{") {
             self.bump();
             // `list(xs) { r -> … }`
             if self.peek().kind == Kind::Ident && self.peek_at(1).is("->") {
-                self.bump();
+                lambda = Some(self.bump().text);
                 self.bump();
             }
             loop {
@@ -754,7 +755,7 @@ impl Parser {
                 }
             }
         }
-        Some(UiNode { kind, args, children, span })
+        Some(UiNode { kind, args, lambda, children, span })
     }
 
     // ------------------------------------------------------------ expressions

@@ -110,7 +110,20 @@ fn convert(j: &Json) -> Value {
         Json::Number(n) => Value::Int(n.as_i64().unwrap_or(0)),
         Json::String(s) => match parse_time_opt(s) {
             Some(ms) => Value::Int(ms),
-            None => Value::Str(s.clone()),
+            // `Tier.bronze` is an enum member, not the string "Tier.bronze".
+            // JSON has no way to say so, and the run showed it: a state that
+            // came in as a string and went out as a member reported every field
+            // as changed, every time.
+            None => match s.split_once('.') {
+                Some((ty, member))
+                    if ty.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                        && !member.contains('.')
+                        && !member.is_empty() =>
+                {
+                    Value::Enum(ty.to_string(), member.to_string())
+                }
+                _ => Value::Str(s.clone()),
+            },
         },
         Json::Array(items) => Value::List(items.iter().map(convert).collect()),
         Json::Object(map) => Value::Map(

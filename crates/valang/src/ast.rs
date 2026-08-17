@@ -159,6 +159,10 @@ pub enum DataSource {
 pub struct UiNode {
     pub kind: String,
     pub args: Vec<Arg>,
+    /// `list(receipts) { r -> … }` — what a row is bound to. The host needs it
+    /// to resolve a slot inside the row, and it is the only place a name is
+    /// introduced by the interface rather than by the program.
+    pub lambda: Option<String>,
     pub children: Vec<UiNode>,
     pub span: Span,
 }

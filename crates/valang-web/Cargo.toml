@@ -1,0 +1,15 @@
+[package]
+name = "valang-web"
+description = "The compiler and runtime, compiled to Wasm, so a browser runs the real one"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+valang.workspace = true
+valang-runtime = { path = "../valang-runtime" }
+serde_json = "1"

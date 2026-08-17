@@ -1,9 +1,44 @@
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { AlertTriangle, XCircle } from 'lucide-react'
-import type { Report } from '@/val/report'
+import type { Analysis } from '@/val/wasm'
 
-export function ReportPanel({ report }: { report: Report }) {
+export function ReportPanel({ analysis }: { analysis: Analysis }) {
+  const r = analysis.report
+  const report = {
+    app: r.app,
+    version: r.version,
+    lines: [
+      { label: 'reads', values: r.reads },
+      { label: 'discloses', values: r.discloses },
+      { label: 'proves', values: r.proves },
+      { label: 'issues', values: r.issues },
+      { label: 'talks to', values: r.audiences },
+      { label: 'moves money', values: r.payments, tone: 'warn' as const },
+      { label: 'writes state', values: r.writes },
+      {
+        label: 'irreversible',
+        values: [r.irreversible ? 'yes' : 'none'],
+        tone: r.irreversible ? ('warn' as const) : ('plain' as const),
+      },
+    ],
+    findings: analysis.diagnostics.map((d) => ({
+      line: d.line,
+      message: d.message,
+      severity: d.severity,
+    })),
+  }
+  return <Body report={report} />
+}
+
+type Rendered = {
+  app: string
+  version: string
+  lines: { label: string; values: string[]; tone?: 'plain' | 'warn' }[]
+  findings: { line: number; message: string; severity: 'error' | 'warning' }[]
+}
+
+function Body({ report }: { report: Rendered }) {
   return (
     <div className="flex flex-col gap-4 p-4 font-mono text-[11px]">
       <div>

@@ -1,0 +1,306 @@
+//! The compiler and the runtime, in a browser.
+//!
+//! The playground used to carry a parser and an evaluator written in
+//! TypeScript. They were honest about being approximations and they were still
+//! a second implementation of a language whose whole claim is that what ran can
+//! be checked — two answers to "does this compile", and the one a reader saw was
+//! not the one a host would run.
+//!
+//! **No `wasm-bindgen`.** Two exported functions and a length-prefixed string
+//! is the whole interface; a binding generator here would be a build step and a
+//! version to keep matched for something that fits on one page.
+
+use std::collections::BTreeMap;
+
+use serde_json::{json, Map, Value as Json};
+use valang::ast::{DataSource, Program};
+use valang_runtime::fixture::Fixture;
+use valang_runtime::merkle::hex;
+use valang_runtime::value::Value;
+use valang_runtime::{encode_record, run_action, Outcome};
+
+// ------------------------------------------------------------------- memory
+
+/// JavaScript asks for a buffer, writes into it, and hands back the pointer.
+/// Anything it gets back is a length-prefixed UTF-8 string it must free.
+#[no_mangle]
+pub extern "C" fn val_alloc(len: usize) -> *mut u8 {
+    let mut buf = Vec::with_capacity(len);
+    let ptr = buf.as_mut_ptr();
+    std::mem::forget(buf);
+    ptr
+}
+
+#[no_mangle]
+pub extern "C" fn val_free(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() {
+        unsafe { drop(Vec::from_raw_parts(ptr, len, len)) }
+    }
+}
+
+fn read(ptr: *const u8, len: usize) -> String {
+    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// Four bytes of little-endian length, then the bytes. The caller reads the
+/// prefix, then the string, then frees the whole thing.
+fn write(s: String) -> *mut u8 {
+    let bytes = s.into_bytes();
+    let mut out = Vec::with_capacity(4 + bytes.len());
+    out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&bytes);
+    let ptr = out.as_mut_ptr();
+    std::mem::forget(out);
+    ptr
+}
+
+// ------------------------------------------------------------------ exports
+
+/// Everything a reader can be shown about a source without running it:
+/// diagnostics, the derived capability report, and the screens it declares.
+#[no_mangle]
+pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let source = input["source"].as_str().unwrap_or("");
+    let bundle = text_bundle(&input["text"]);
+    let locales: Vec<String> = input["locales"]
+        .as_array()
+        .map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+
+    let (program, diagnostics) = if bundle.is_empty() {
+        valang::analyse(source)
+    } else {
+        valang::analyse_with(source, Some((&bundle, &locales)))
+    };
+
+    write(
+        json!({
+            "diagnostics": diagnostics.iter().map(|d| json!({
+                "line": d.span.line,
+                "column": d.span.col,
+                "severity": match d.severity { valang::Severity::Error => "error", _ => "warning" },
+                "message": d.message,
+            })).collect::<Vec<_>>(),
+            "report": report_json(&program),
+            "screens": screens_json(&program),
+            "actions": program.actions.iter().map(|a| a.name.clone()).collect::<Vec<_>>(),
+        })
+        .to_string(),
+    )
+}
+
+/// One action, run against the wallet the caller supplies. What comes back is
+/// the execution record and the trace behind it — which is what makes a press
+/// in the preview something you can read afterwards rather than something that
+/// happened.
+#[no_mangle]
+pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let source = input["source"].as_str().unwrap_or("");
+    let action = input["action"].as_str().unwrap_or("");
+    let wallet = input["wallet"].to_string();
+
+    let (program, diagnostics) = valang::analyse(source);
+    let errors: Vec<String> = diagnostics
+        .iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| format!("{}: {}", d.span.line, d.message))
+        .collect();
+    if !errors.is_empty() {
+        return write(json!({ "wouldNotBuild": errors }).to_string());
+    }
+
+    let Ok(host) = Fixture::parse(&wallet) else {
+        return write(json!({ "error": "the wallet is not valid JSON" }).to_string());
+    };
+    let before = host.state();
+    let run = run_action(&program, source, action, &before, &BTreeMap::new(), &host);
+    let r = &run.record;
+
+    write(
+        json!({
+            "action": r.action,
+            "outcome": match &run.outcome {
+                Outcome::Committed => json!({ "kind": "committed" }),
+                Outcome::Refused(w) => json!({ "kind": "refused", "why": w }),
+                Outcome::Failed(w) => json!({ "kind": "failed", "why": w }),
+                Outcome::Defect(w) => json!({ "kind": "defect", "why": w }),
+                Outcome::Declined(k) => json!({ "kind": "declined", "why": k }),
+            },
+            // The diff, which is the part somebody reads first — and the reason
+            // an action is worth thinking of as a reducer.
+            "changed": diff(&before, &run.next_state),
+            "before": value_json(&Value::Map(before)),
+            "after": value_json(&Value::Map(run.next_state.clone())),
+            "effects": run.effects.iter().map(|e| json!({
+                "capability": e.capability,
+                "payload": value_json(&e.payload),
+                "reversible": e.reversible,
+            })).collect::<Vec<_>>(),
+            "record": {
+                "codeHash": hex(&r.code_hash),
+                "inputHash": hex(&r.input_hash),
+                "previousRoot": hex(&r.previous_root),
+                "nextRoot": hex(&r.next_root),
+                "executed": r.effects_executed,
+                "time": r.context.time_now,
+                "uuid": r.context.random_uuid,
+                "bytes": encode_record(r).len(),
+                "signature": hex_bytes(&r.signature),
+            },
+            "leaves": run.leaves.iter().map(|l| json!({
+                "path": l.path,
+                "value": value_json(&l.value),
+                "hash": hex(&l.hash),
+            })).collect::<Vec<_>>(),
+        })
+        .to_string(),
+    )
+}
+
+// -------------------------------------------------------------------- shapes
+
+fn hex_bytes(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn text_bundle(j: &Json) -> valang::TextBundle {
+    let mut out = valang::TextBundle::new();
+    if let Some(map) = j.as_object() {
+        for (key, per_locale) in map {
+            let mut inner = BTreeMap::new();
+            if let Some(l) = per_locale.as_object() {
+                for (locale, template) in l {
+                    if let Some(t) = template.as_str() {
+                        inner.insert(locale.clone(), t.to_string());
+                    }
+                }
+            }
+            out.insert(key.clone(), inner);
+        }
+    }
+    out
+}
+
+fn value_json(v: &Value) -> Json {
+    match v {
+        Value::Null => Json::Null,
+        Value::Bool(b) => json!(b),
+        Value::Int(i) => json!(i),
+        Value::Str(s) => json!(s),
+        Value::Bytes(b) => json!(hex_bytes(b)),
+        Value::List(items) => Json::Array(items.iter().map(value_json).collect()),
+        Value::Map(m) => Json::Object(m.iter().map(|(k, v)| (k.clone(), value_json(v))).collect()),
+        Value::Enum(e, member) => json!(format!("{e}.{member}")),
+        Value::Credential { ty, claims, verified } => json!({
+            "credential": ty,
+            "verified": verified,
+            "claims": Json::Object(claims.iter().map(|(k, v)| (k.clone(), value_json(v))).collect::<Map<_, _>>()),
+        }),
+    }
+}
+
+/// Field by field, by path, so the panel can show what moved rather than two
+/// blobs to compare by eye.
+fn diff(before: &BTreeMap<String, Value>, after: &BTreeMap<String, Value>) -> Json {
+    fn walk(prefix: &str, a: &Value, b: &Value, out: &mut Vec<Json>) {
+        match (a, b) {
+            (Value::Map(x), Value::Map(y)) => {
+                let mut keys: Vec<&String> = x.keys().chain(y.keys()).collect();
+                keys.sort();
+                keys.dedup();
+                for k in keys {
+                    let path = if prefix.is_empty() { k.clone() } else { format!("{prefix}.{k}") };
+                    walk(
+                        &path,
+                        x.get(k).unwrap_or(&Value::Null),
+                        y.get(k).unwrap_or(&Value::Null),
+                        out,
+                    );
+                }
+            }
+            _ if a != b => out.push(json!({ "path": prefix, "from": value_json(a), "to": value_json(b) })),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk("", &Value::Map(before.clone()), &Value::Map(after.clone()), &mut out);
+    Json::Array(out)
+}
+
+fn report_json(p: &Program) -> Json {
+    let r = valang::report::report(p);
+    let list = |s: &std::collections::BTreeSet<String>| Json::Array(s.iter().map(|x| json!(x)).collect());
+    json!({
+        "app": r.app,
+        "version": r.version,
+        "reads": list(&r.reads),
+        "discloses": list(&r.discloses),
+        "proves": list(&r.proves),
+        "issues": list(&r.issues),
+        "audiences": list(&r.audiences),
+        "payments": list(&r.payments),
+        "writes": list(&r.writes),
+        "irreversible": r.irreversible,
+    })
+}
+
+fn screens_json(p: &Program) -> Json {
+    Json::Array(
+        p.screens
+            .iter()
+            .map(|s| {
+                json!({
+                    "name": s.name,
+                    "data": s.data.iter().map(|d| match &d.source {
+                        DataSource::Credentials { ty, policy, .. } => json!({
+                            "name": d.name, "source": "credentials", "type": ty, "policy": policy,
+                        }),
+                        DataSource::Query { audience } => json!({
+                            "name": d.name, "source": "query", "audience": audience,
+                        }),
+                        DataSource::Unknown => json!({ "name": d.name, "source": "unknown" }),
+                    }).collect::<Vec<_>>(),
+                    "tree": s.tree.iter().map(ui_json).collect::<Vec<_>>(),
+                })
+            })
+            .collect(),
+    )
+}
+
+fn ui_json(n: &valang::ast::UiNode) -> Json {
+    let mut args = Map::new();
+    for (i, a) in n.args.iter().enumerate() {
+        let key = a.name.clone().unwrap_or_else(|| i.to_string());
+        // An expression is handed over as the text somebody wrote: the host
+        // resolves it against the wallet, because the wallet is the host's.
+        args.insert(key, json!(render(&a.value)));
+    }
+    if let Some(first) = args.get("0").cloned() {
+        args.entry("text".to_string()).or_insert(first);
+    }
+    json!({
+        "kind": n.kind,
+        "args": Json::Object(args),
+        "lambda": n.lambda,
+        "children": n.children.iter().map(ui_json).collect::<Vec<_>>(),
+    })
+}
+
+fn render(e: &valang::ast::Expr) -> String {
+    use valang::ast::Expr::*;
+    match e {
+        Num { value, .. } => value.to_string(),
+        Str { value, .. } => value.clone(),
+        Bool { value, .. } => value.to_string(),
+        Binary { op, lhs, rhs, .. } => format!("{} {op} {}", render(lhs), render(rhs)),
+        Call { callee, args, .. } => format!(
+            "{}({})",
+            render(callee),
+            args.iter().map(|a| render(&a.value)).collect::<Vec<_>>().join(", ")
+        ),
+        other => other.path().unwrap_or_else(|| "…".into()),
+    }
+}

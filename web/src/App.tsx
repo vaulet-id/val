@@ -4,33 +4,28 @@ import { Navbar, type Mode } from '@/components/Navbar'
 import { FileTree } from '@/components/FileTree'
 import { PreviewScreen } from '@/components/PreviewScreen'
 import { ReportPanel } from '@/components/ReportPanel'
-import { RunPanel } from '@/components/RunPanel'
-import { Button } from '@/components/ui/button'
-import { Play, Loader2 } from 'lucide-react'
+import { LogPanel, type Entry } from '@/components/LogPanel'
 import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { files } from '@/examples'
-import { parse } from '@/val/parse'
-import { report } from '@/val/report'
-import { build, run, type BuildResult, type RunResult } from '@/val/run'
+import { files, hostFiles, text as bundle } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
+import * as val from '@/val/wasm'
+
+const LOCALES = ['en', 'th']
 
 export default function App() {
   const [mode, setMode] = React.useState<Mode>('playground')
-  // Light by default, like the phone in somebody's hand on the first morning
-  // they open it. Dark is a preference; a default is what you are shown before
-  // you have expressed one.
   const [dark, setDark] = React.useState(false)
-  // English is the base: this is a public repository and a reader arrives from
-  // anywhere. Thai is one click away, which is what the switch is for — and
-  // switching is how you see that a missing translation fails the build.
   const [locale, setLocale] = React.useState<'th' | 'en'>('en')
   const [active, setActive] = React.useState(files[0].path)
   const [sources, setSources] = React.useState<Record<string, string>>(
-    Object.fromEntries(files.map((f) => [f.path, f.source])),
+    Object.fromEntries([...files, ...hostFiles].map((f) => [f.path, f.source])),
   )
+  const [ready, setReady] = React.useState(false)
+  const [tab, setTab] = React.useState('screen')
+  const [log, setLog] = React.useState<Entry[]>([])
   const monaco = useMonaco()
 
   React.useEffect(() => {
@@ -41,48 +36,93 @@ export default function App() {
     if (monaco) registerVal(monaco)
   }, [monaco])
 
+  // The real compiler, in the page. What a reader is told here is what a host
+  // would say, because it is the same code.
+  React.useEffect(() => {
+    val.load().then(() => setReady(true))
+  }, [])
+
+  const all = [...files, ...hostFiles]
+  const current = all.find((f) => f.path === active) ?? files[0]
+
+  // Editing the host's wallet must not empty the preview. It belongs to no
+  // package, so the package under inspection is the last `.val` one chosen —
+  // which is also what somebody means by it: they are changing the data behind
+  // the screen they were just looking at.
+  const [pkg, setPkg] = React.useState(files[0].pkg)
+  React.useEffect(() => {
+    if (current.path.endsWith('.val')) setPkg(current.pkg)
+  }, [current])
   const source = sources[active] ?? ''
   const isVal = active.endsWith('.val')
-  const program = React.useMemo(() => (isVal ? parse(source) : { decls: [], diagnostics: [] }), [source, isVal])
-  const rep = React.useMemo(() => report(program), [program])
 
-  const [tab, setTab] = React.useState('screen')
-  const [running, setRunning] = React.useState(false)
-  const [built, setBuilt] = React.useState<BuildResult | null>(null)
-  const [ran, setRan] = React.useState<RunResult | null>(null)
+  // A package is several files sharing one scope, so they are analysed
+  // together. `wallet.val` presses an action `loyalty.val` declares; either
+  // alone is half a program and fails for the right reason.
+  const packageSource = React.useMemo(
+    () =>
+      files
+        .filter((f) => f.pkg === pkg && f.path.endsWith('.val'))
+        .map((f) => sources[f.path] ?? '')
+        .join('\n'),
+    [sources, pkg],
+  )
 
-  // Build first, and run only what built — the host runs the same checks and
-  // would refuse the package, so running past a failed build would be a lie
-  // told by the tooling.
-  const buildAndRun = React.useCallback(async () => {
-    setRunning(true)
-    setTab('run')
-    const b = build(program)
-    setBuilt(b)
-    setRan(b.ok ? await run(program) : null)
-    setRunning(false)
-  }, [program])
+  const analysis = React.useMemo(() => {
+    if (!ready) return null
+    try {
+      return val.analyse(packageSource, bundle, LOCALES)
+    } catch {
+      return null
+    }
+  }, [ready, packageSource])
 
-  // Diagnostics from the lexer land as markers, so a float is underlined where
-  // it was written rather than described in a panel somewhere else.
+  const wallet = React.useMemo(() => {
+    try {
+      return JSON.parse(sources['fixtures/wallet.json'] ?? '{}')
+    } catch {
+      return {}
+    }
+  }, [sources])
+
+  const dispatch = React.useCallback(
+    (action: string) => {
+      if (!ready) return
+      const run = val.run(packageSource, action, wallet)
+      setLog((l) => [...l, { at: Date.now(), run }])
+      setTab('log')
+    },
+    [ready, packageSource, wallet],
+  )
+
+  // Diagnostics land as markers, so a float is underlined where it was written
+  // rather than described in a panel somewhere else. Only for the file being
+  // edited: a package's lines are numbered from the joined source.
   React.useEffect(() => {
-    if (!monaco) return
-    const model = monaco.editor.getModels()[0]
+    if (!monaco || !analysis || !isVal) return
+    const model = monaco.editor.getModels().find((m) => m.uri.path.endsWith(current.name))
     if (!model) return
-    monaco.editor.setModelMarkers(model, 'val', [
-      ...program.diagnostics.map((d) => ({
-        startLineNumber: d.line, startColumn: d.column,
-        endLineNumber: d.line, endColumn: d.column + 8,
-        message: d.message, severity: monaco.MarkerSeverity.Error,
-      })),
-      ...rep.findings.filter((f) => f.line > 0).map((f) => ({
-        startLineNumber: f.line, startColumn: 1,
-        endLineNumber: f.line, endColumn: 200,
-        message: f.message,
-        severity: f.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
-      })),
-    ])
-  }, [monaco, program, rep])
+    const inPkg = files.filter((f) => f.pkg === pkg && f.path.endsWith('.val'))
+    const before = inPkg
+      .slice(0, inPkg.findIndex((f) => f.path === active))
+      .reduce((n, f) => n + (sources[f.path] ?? '').split('\n').length + 1, 0)
+    const lines = source.split('\n').length
+
+    monaco.editor.setModelMarkers(
+      model,
+      'val',
+      analysis.diagnostics
+        .filter((d) => d.line > before && d.line <= before + lines)
+        .map((d) => ({
+          startLineNumber: d.line - before,
+          startColumn: d.column,
+          endLineNumber: d.line - before,
+          endColumn: d.column + 8,
+          message: d.message,
+          severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+        })),
+    )
+  }, [monaco, analysis, active, source, isVal, pkg, sources])
 
   return (
     <div className="flex h-full flex-col">
@@ -92,12 +132,8 @@ export default function App() {
         <DocsView />
       ) : (
         <ResizablePanelGroup direction="horizontal" autoSaveId="val-playground" className="min-h-0 flex-1">
-          {/* Which panel deserves the space depends on what the reader is doing
-              — reading the code, watching the screen, or arguing with the
-              report — and that is not ours to decide. Sizes persist, because
-              re-dragging them every reload is a small tax paid forever. */}
           <ResizablePanel defaultSize={15} minSize={9} maxSize={30}>
-            <FileTree heading="package" files={files} active={active} onSelect={setActive} />
+            <FileTree heading="package" files={files} hostFiles={hostFiles} active={active} onSelect={setActive} />
           </ResizablePanel>
 
           <ResizableHandle withHandle />
@@ -119,8 +155,6 @@ export default function App() {
                 padding: { top: 12 },
                 lineNumbersMinChars: 3,
                 tabSize: 2,
-                // Monaco measures its own container, so it has to be told the
-                // container is no longer the size it was.
                 automaticLayout: true,
               }}
             />
@@ -134,34 +168,32 @@ export default function App() {
                 <TabsList>
                   <TabsTrigger value="screen">Preview</TabsTrigger>
                   <TabsTrigger value="report">Report</TabsTrigger>
-                  <TabsTrigger value="run">Run</TabsTrigger>
+                  <TabsTrigger value="log">Log{log.length ? ` ${log.length}` : ''}</TabsTrigger>
                 </TabsList>
-                <Button size="sm" className="ml-auto" onClick={buildAndRun} disabled={running || !isVal}>
-                  {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
-                  Build &amp; Run
-                </Button>
+                {!ready && (
+                  <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">loading the compiler…</span>
+                )}
               </div>
-              {/* No ScrollArea: the frame scrolls itself, and two scrollers
-                  over one surface is the thing every embedded view gets wrong. */}
+
               <TabsContent value="screen" className="min-h-0 flex-1">
-                <PreviewScreen program={program} locale={locale} dark={dark} />
+                <PreviewScreen
+                  screens={analysis?.screens ?? []}
+                  wallet={wallet}
+                  locale={locale}
+                  dark={dark}
+                  onTap={dispatch}
+                />
               </TabsContent>
+
               <TabsContent value="report" className="min-h-0 flex-1">
                 <ScrollArea className="h-full">
-                  <ReportPanel report={rep} />
+                  {analysis && <ReportPanel analysis={analysis} />}
                 </ScrollArea>
               </TabsContent>
-              <TabsContent value="run" className="min-h-0 flex-1">
+
+              <TabsContent value="log" className="min-h-0 flex-1">
                 <ScrollArea className="h-full">
-                  {built ? (
-                    <RunPanel build={built} result={ran} />
-                  ) : (
-                    <p className="p-4 text-[11px] leading-relaxed text-[var(--color-muted-foreground)]">
-                      Build &amp; Run compiles what a host would check, then walks one
-                      action: phases in order, effects requested and never performed,
-                      and the Merkle root of the state it would commit.
-                    </p>
-                  )}
+                  <LogPanel entries={log} onClear={() => setLog([])} />
                 </ScrollArea>
               </TabsContent>
             </Tabs>

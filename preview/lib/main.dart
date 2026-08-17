@@ -33,7 +33,8 @@ void main() => runApp(const PreviewApp());
 class MockHost {
   MockHost._();
 
-  /// `state.…`
+  /// The fallback, for a frame nobody has posted into yet. The real wallet
+  /// arrives with the screen — `fixtures/wallet.json`, which somebody can edit.
   static const state = <String, Object?>{
     'lifetimePoints': 1365,
     'member': <String, Object?>{
@@ -62,14 +63,19 @@ class MockHost {
   /// expression this cannot follow comes back as itself, because a preview that
   /// guessed at arithmetic would be a third implementation of the language and
   /// the first one nobody tests.
-  static Object? slot(String expr, {String? bind, Map<String, Object?>? item}) {
+  static Object? slot(
+    String expr, {
+    required Incoming wallet,
+    String? bind,
+    Map<String, Object?>? item,
+  }) {
     final parts = expr.split('.');
     if (parts.isEmpty) return null;
 
     Object? cursor;
     var rest = parts;
     if (parts.first == 'state' || parts.first == 'next') {
-      cursor = state;
+      cursor = wallet.state;
       rest = parts.sublist(1);
     } else if (bind != null && parts.first == bind) {
       cursor = item;
@@ -223,23 +229,56 @@ class Incoming {
   const Incoming({
     required this.screens,
     required this.text,
+    required this.wallet,
     required this.locale,
     required this.dark,
   });
 
   final List<dynamic> screens;
   final Map<String, dynamic> text;
+
+  /// The host's own data. Editing it in the playground changes what this draws
+  /// without changing a line of the application — which is what "the data is
+  /// the host's" means, shown rather than argued.
+  final Map<String, dynamic> wallet;
   final String locale;
   final bool dark;
 
-  static const empty = Incoming(screens: [], text: {}, locale: 'en', dark: false);
+  static const empty = Incoming(
+    screens: [],
+    text: {},
+    wallet: {},
+    locale: 'en',
+    dark: false,
+  );
 
   factory Incoming.fromJson(Map<String, dynamic> j) => Incoming(
     screens: (j['screens'] as List?) ?? const [],
     text: (j['text'] as Map?)?.cast<String, dynamic>() ?? const {},
+    wallet: (j['wallet'] as Map?)?.cast<String, dynamic>() ?? const {},
     locale: (j['locale'] as String?) ?? 'en',
-    dark: (j['dark'] as bool?) ?? true,
+    dark: (j['dark'] as bool?) ?? false,
   );
+
+  Map<String, Object?> get state =>
+      (wallet['state'] as Map?)?.cast<String, Object?>() ?? MockHost.state;
+
+  List<Map<String, Object?>> rowsOf(String type) {
+    final rows = (wallet['credentials'] as Map?)?[type]?['rows'] as List?;
+    return rows?.cast<Map<String, Object?>>() ?? const [];
+  }
+
+  /// `list(receipts)` names a binding; the screen's `data` block says what that
+  /// binding resolves to. The host looks it up, because the host is what
+  /// resolved it in the first place.
+  String typeFor(String binding) {
+    for (final s in screens) {
+      for (final d in ((s as Map)['data'] as List? ?? const [])) {
+        if ((d as Map)['name'] == binding) return (d['type'] as String?) ?? '';
+      }
+    }
+    return '';
+  }
 }
 
 class PreviewApp extends StatefulWidget {
@@ -538,10 +577,14 @@ class _HomeIndicator extends StatelessWidget {
 }
 
 class _Node extends StatefulWidget {
-  const _Node({required this.node, required this.incoming});
+  const _Node({required this.node, required this.incoming, this.bind, this.item});
 
   final Map<String, dynamic> node;
   final Incoming incoming;
+
+  /// `list(receipts) { r -> … }` — what `r` is, and which row this is.
+  final String? bind;
+  final Map<String, Object?>? item;
 
   @override
   State<_Node> createState() => _NodeState();
@@ -582,22 +625,35 @@ class _NodeState extends State<_Node> {
     var at = 0;
     for (final m in pattern.allMatches(template)) {
       if (m.start > at) spans.add(TextSpan(text: template.substring(at, m.start)));
-      final slot = args[m.group(1)] as String?;
+      final expr = args[m.group(1)] as String?;
+      // The host resolves the slot against its own wallet and formats it. An
+      // application that formatted a number would get the thousands separator,
+      // the era and the currency position wrong separately from every other
+      // application — so it never touches one.
+      final value = expr == null
+          ? null
+          : MockHost.slot(
+              expr,
+              wallet: widget.incoming,
+              bind: widget.bind,
+              item: widget.item,
+            );
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            decoration: BoxDecoration(
-              color: slot == null
-                  ? Theme.of(context).colorScheme.errorContainer
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(3),
-            ),
+          child: Tooltip(
+            message: expr ?? '',
             child: Text(
-              slot ?? '${m.group(1)}?',
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+              value == null
+                  ? '${m.group(1)}?'
+                  : MockHost.format(value, widget.incoming.locale),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: value == null
+                    ? Theme.of(context).colorScheme.error
+                    : null,
+              ),
             ),
           ),
         ),
@@ -662,18 +718,33 @@ class _NodeState extends State<_Node> {
 
       case 'list':
         final row = children.isEmpty ? null : children.first;
+        // The rows the host handed back, not three copies of one. An empty list
+        // is the host's empty state — the application never draws one.
+        final type = widget.incoming.typeFor((args['0'] as String?) ?? '');
+        final rows = widget.incoming.rowsOf(type);
+        if (rows.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: Vaulet.xxl),
+            child: Center(
+              child: Text('Nothing here yet',
+                  style: TextStyle(color: Theme.of(context).colorScheme.outline, fontSize: 13)),
+            ),
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (var i = 0; i < 3; i++)
-              Opacity(
-                opacity: i == 2 ? 0.4 : 1,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: Vaulet.sm),
-                  child: row == null
-                      ? const Card(child: ListTile(dense: true, title: Text('row')))
-                      : _Node(node: row, incoming: widget.incoming),
-                ),
+            for (final item in rows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Vaulet.sm),
+                child: row == null
+                    ? const Card(child: ListTile(dense: true, title: Text('row')))
+                    : _Node(
+                        node: row,
+                        incoming: widget.incoming,
+                        bind: n['lambda'] as String?,
+                        item: item,
+                      ),
               ),
           ],
         );
