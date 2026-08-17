@@ -6,6 +6,7 @@ import { PreviewScreen } from '@/components/PreviewScreen'
 import { ReportPanel } from '@/components/ReportPanel'
 import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { files } from '@/examples'
 import { parse } from '@/val/parse'
@@ -63,10 +64,18 @@ export default function App() {
       {mode === 'docs' ? (
         <DocsView />
       ) : (
-        <div className="flex min-h-0 flex-1">
-          <FileTree heading="package" files={files} active={active} onSelect={setActive} />
+        <ResizablePanelGroup direction="horizontal" autoSaveId="val-playground" className="min-h-0 flex-1">
+          {/* Which panel deserves the space depends on what the reader is doing
+              — reading the code, watching the screen, or arguing with the
+              report — and that is not ours to decide. Sizes persist, because
+              re-dragging them every reload is a small tax paid forever. */}
+          <ResizablePanel defaultSize={15} minSize={9} maxSize={30}>
+            <FileTree heading="package" files={files} active={active} onSelect={setActive} />
+          </ResizablePanel>
 
-          <div className="min-w-0 flex-1 border-r border-[var(--color-border)]">
+          <ResizableHandle withHandle />
+
+          <ResizablePanel defaultSize={53} minSize={25}>
             <Editor
               height="100%"
               path={active}
@@ -83,12 +92,17 @@ export default function App() {
                 padding: { top: 12 },
                 lineNumbersMinChars: 3,
                 tabSize: 2,
+                // Monaco measures its own container, so it has to be told the
+                // container is no longer the size it was.
+                automaticLayout: true,
               }}
             />
-          </div>
+          </ResizablePanel>
 
-          <div className="flex w-[380px] shrink-0 flex-col">
-            <Tabs defaultValue="screen" className="flex min-h-0 flex-1 flex-col">
+          <ResizableHandle withHandle />
+
+          <ResizablePanel defaultSize={32} minSize={18}>
+            <Tabs defaultValue="screen" className="flex h-full min-h-0 flex-col">
               <div className="flex h-9 shrink-0 items-center border-b border-[var(--color-border)] px-2">
                 <TabsList>
                   <TabsTrigger value="screen">Preview</TabsTrigger>
@@ -106,8 +120,8 @@ export default function App() {
                 </ScrollArea>
               </TabsContent>
             </Tabs>
-          </div>
-        </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       )}
     </div>
   )

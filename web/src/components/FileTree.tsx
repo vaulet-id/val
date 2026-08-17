@@ -12,7 +12,7 @@ export function FileTree({
   heading: string
 }) {
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--color-border)]">
+    <aside className="flex h-full min-w-0 flex-col">
       <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-muted-foreground)]">
         {heading}
       </div>
