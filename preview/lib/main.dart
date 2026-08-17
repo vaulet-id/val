@@ -18,6 +18,84 @@ import 'package:web/web.dart' as web;
 
 void main() => runApp(const PreviewApp());
 
+/// The first host's tokens, copied from `vaulet-app/lib/core/theme/theme.dart`.
+///
+/// A copy, and the copy is the point: this preview shows what a VAL screen
+/// looks like **on Vaulet**, and a second host would supply its own. The
+/// language repository holds no theme; a renderer does, because a renderer is
+/// something a host is.
+///
+/// Kept to tokens rather than the whole file. What drifts here is cosmetic and
+/// visible; what would drift if the catalogue's *semantics* were copied is not.
+class Vaulet {
+  Vaulet._();
+
+  /// Teal ink — the old brand teal taken almost to black. Near-black rather
+  /// than black because `#000000` reads as a value nobody set.
+  static const seed = Color(0xFF10201C);
+
+  /// Success / verified green.
+  static const verified = Color(0xFF2E7D32);
+
+  // The 4-based spacing scale, so gaps stay on one rhythm.
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+
+  /// Buttons and cards share 14; sheets use 20.
+  static const radiusCard = 14.0;
+
+  /// A filled or outlined button is 52 tall, readable and easy to tap.
+  static const buttonHeight = 52.0;
+
+  static const cardTitle = TextStyle(fontSize: 16, fontWeight: FontWeight.w700);
+  static const sectionLabel =
+      TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.6);
+
+  /// A dark accent has to be set, not seeded: `fromSeed` rebuilds a seed's hue
+  /// at a fixed lightness, so asking it for near-black hands back the mid-tone
+  /// it started from. On a light ground the accent *is* the colour that was
+  /// chosen; dark keeps Material's derivation, because near-black on a
+  /// near-black ground is not an accent.
+  static ThemeData theme(Brightness brightness) {
+    var scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+    if (brightness == Brightness.light) {
+      scheme = scheme.copyWith(primary: seed, onPrimary: Colors.white);
+    }
+    final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusCard));
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(buttonHeight),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          shape: buttonShape,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(buttonHeight),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          shape: buttonShape,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusCard)),
+      ),
+      // Fainter and thinner than Material's default, app-wide.
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withValues(alpha: 0.4),
+        thickness: 0.5,
+      ),
+    );
+  }
+}
+
 /// What the playground posts in: the parsed screen, the signed text bundle, the
 /// locale and the theme. Nothing here is computed from source — the compiler
 /// did that, and a renderer that parsed VAL would be a second front end to keep
@@ -77,19 +155,15 @@ class _PreviewAppState extends State<PreviewApp> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF4C4CFF),
-      brightness: _in.dark ? Brightness.dark : Brightness.light,
-    );
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorScheme: scheme, useMaterial3: true),
+      theme: Vaulet.theme(_in.dark ? Brightness.dark : Brightness.light),
       home: Scaffold(
         backgroundColor: Colors.transparent,
         body: _in.screens.isEmpty
             ? const _NoScreen()
             : ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(Vaulet.lg),
                 children: [
                   for (final s in _in.screens) _Phone(screen: s as Map<String, dynamic>, incoming: _in),
                 ],
@@ -150,7 +224,7 @@ class _Phone extends StatelessWidget {
               borderRadius: BorderRadius.circular(28),
               border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), width: 6),
             ),
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+            padding: const EdgeInsets.fromLTRB(Vaulet.md, 10, Vaulet.md, Vaulet.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -187,10 +261,10 @@ class _WhatThisScreenSees extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(Vaulet.sm),
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(Vaulet.radiusCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,7 +305,7 @@ class _Grade extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, colour) = switch ((source, policy)) {
-      ('credentials', final p?) when p.isNotEmpty => ('issuer', const Color(0xFF16A34A)),
+      ('credentials', final p?) when p.isNotEmpty => ('issuer', Vaulet.verified),
       ('credentials', _) => ('unverified', Theme.of(context).colorScheme.error),
       ('query', _) => ('origin', const Color(0xFF2563EB)),
       _ => ('?', Theme.of(context).disabledColor),
@@ -322,14 +396,15 @@ class _NodeState extends State<_Node> {
 
       case 'row':
         return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), child: _text()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Vaulet.md, vertical: 10),
+            child: _text(),
+          ),
         );
 
       case 'card':
         return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(padding: const EdgeInsets.all(12), child: _text(style: const TextStyle(fontSize: 15))),
+          child: Padding(padding: const EdgeInsets.all(Vaulet.lg), child: _text(style: Vaulet.cardTitle)),
         );
 
       case 'tabs':
@@ -372,7 +447,7 @@ class _NodeState extends State<_Node> {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: row == null
-                      ? const Card(margin: EdgeInsets.zero, child: ListTile(dense: true, title: Text('row')))
+                      ? const Card(child: ListTile(dense: true, title: Text('row')))
                       : _Node(node: row, incoming: widget.incoming),
                 ),
               ),

@@ -1,17 +1,33 @@
-# val_preview
+# The preview renderer
 
-A new Flutter project.
+A Flutter web app that draws a VAL screen with the host's own toolkit. The
+playground embeds it and posts in the screen the compiler parsed; it posts back
+which action a press would call.
 
-## Getting Started
+**It renders nothing of its own accord.** No VAL is parsed here — the compiler
+did that, and a renderer with its own front end would be a second thing to keep
+faithful to the first. What arrives is structure, keys and action names.
 
-This project is a starting point for a Flutter application.
+## Whose theme this is
 
-A few resources to get you started if this is your first Flutter project:
+`Vaulet` in `lib/main.dart` holds tokens copied from
+`vaulet-app/lib/core/theme/theme.dart`: the teal-ink seed, the 4-based spacing
+scale, the 14pt corner radius, the 52pt button, the verified green.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+**A copy, and the copy is the point.** This shows what a VAL screen looks like
+*on Vaulet*, and a second host would supply its own. The language repository
+holds no theme; a renderer does, because a renderer is a thing a host is.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Only tokens are copied. What drifts here is cosmetic and visible on the first
+screenshot; copying the catalogue's *semantics* would drift invisibly, which is
+why the semantics live in `docs/spec.md` and are checked by the compiler.
+
+## Building
+
+```
+./build.sh
+```
+
+Writes `web/public/preview`, which is not checked in — it is forty megabytes of
+CanvasKit, and a repository keeps its history forever. The playground says so
+when it has not been built.
