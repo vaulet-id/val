@@ -192,8 +192,24 @@ class _NoScreen extends StatelessWidget {
 }
 
 /// The frame is the host's, and so is everything inside it.
+///
+/// The size is an iPhone's, not a rectangle that looked about right: **393 × 852
+/// logical points**, which is what an iPhone 15 and 16 Pro hand a Flutter app.
+/// A preview at some other size is a preview that will not tell you the one
+/// thing it is for — whether the Thai wraps, whether the row fits, whether the
+/// button is reachable with a thumb.
 class _Phone extends StatelessWidget {
   const _Phone({required this.screen, required this.incoming});
+
+  static const width = 393.0;
+  static const height = 852.0;
+
+  /// The screen's corner, and the bezel around it. iPhone corners are a
+  /// continuous curve rather than a circular one; `BorderRadius` is close
+  /// enough at this size and the difference is not what anybody is here to
+  /// check.
+  static const screenRadius = 47.0;
+  static const bezel = 12.0;
 
   final Map<String, dynamic> screen;
   final Incoming incoming;
@@ -201,6 +217,8 @@ class _Phone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = (screen['data'] as List?) ?? const [];
+    final scheme = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -208,46 +226,131 @@ class _Phone extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(screen['name'] as String? ?? '', style: const TextStyle(fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 6),
-            Text('screen', style: Theme.of(context).textTheme.labelSmall),
+            Text(screen['name'] as String? ?? '',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(width: Vaulet.xs),
+            Text('screen · 393 × 852', style: Theme.of(context).textTheme.labelSmall),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: Vaulet.sm),
         if (data.isNotEmpty) _WhatThisScreenSees(data: data),
-        const SizedBox(height: 8),
+        const SizedBox(height: Vaulet.md),
+        // Scaled to whatever the panel gives it, never stretched: a preview
+        // that changed the aspect ratio to fit would be answering a question
+        // nobody asked.
         Center(
-          child: Container(
-            width: 320,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6), width: 6),
-            ),
-            padding: const EdgeInsets.fromLTRB(Vaulet.md, 10, Vaulet.md, Vaulet.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+          child: FittedBox(
+            child: Container(
+              width: width + bezel * 2,
+              height: height + bezel * 2,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(screenRadius + bezel),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8)),
+                ],
+              ),
+              padding: const EdgeInsets.all(bezel),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(screenRadius),
+                child: Container(
+                  width: width,
+                  height: height,
+                  color: scheme.surface,
+                  child: Column(
+                    children: [
+                      const _StatusBar(),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, 0),
+                          child: ListView(
+                            children: [
+                              for (final node in (screen['tree'] as List?) ?? const [])
+                                _Node(node: node as Map<String, dynamic>, incoming: incoming),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const _HomeIndicator(),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                for (final node in (screen['tree'] as List?) ?? const [])
-                  _Node(node: node as Map<String, dynamic>, incoming: incoming),
-              ],
+              ),
             ),
           ),
         ),
       ],
     );
   }
+}
+
+/// The wallet's standard horizontal gutter.
+const double kScreenPadH = 16;
+
+/// Status bar and Dynamic Island. Drawn because they take space a screen does
+/// not get to use, and a preview that ignored them would show a layout that
+/// fits when the real one does not.
+class _StatusBar extends StatelessWidget {
+  const _StatusBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final on = Theme.of(context).colorScheme.onSurface;
+    return SizedBox(
+      height: 59,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text('9:41', style: TextStyle(color: on, fontSize: 15, fontWeight: FontWeight.w600)),
+                Row(
+                  children: [
+                    Icon(Icons.signal_cellular_alt, size: 15, color: on),
+                    const SizedBox(width: 4),
+                    Icon(Icons.wifi, size: 15, color: on),
+                    const SizedBox(width: 4),
+                    Icon(Icons.battery_full, size: 16, color: on),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Align(
+            alignment: const Alignment(0, -0.15),
+            child: Container(
+              width: 125,
+              height: 36,
+              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(18)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeIndicator extends StatelessWidget {
+  const _HomeIndicator();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 34,
+        child: Center(
+          child: Container(
+            width: 139,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ),
+      );
 }
 
 /// Three grades of data, drawn differently — by the host, because an
