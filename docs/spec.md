@@ -686,10 +686,48 @@ stay true, which means watching what people reach for.
 ## 7. Execution and its record
 
 ```
-VAL source → parser → AST → semantic analysis → type check →
-capability analysis → trust analysis → totality check → IR →
-(evaluator | Wasm) → host runtime → platform
+                        .val sources  (a package: several files, one scope)
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        │  the front end — the host runs all of it  │
+        │                                           │
+        │   lexer ─ parser ─ AST                    │
+        │   semantic analysis                       │
+        │   type checking      Verified<P>, T?, provenance
+        │   capability analysis                     │
+        │   trust analysis                          │
+        │   determinism + totality                  │
+        │   policy validation                       │
+        └─────────────────────┬─────────────────────┘
+                              │
+                    typed AST ┼ capability report   ← derived, not declared
+                              │
+                     IR ──────┴────── (v1 skips this)
+                      │
+        ┌─────────────┴──────────────┐
+        │  evaluator (v1)            │   walks the typed AST
+        │  Wasm back end (later)     │   only when fuel limits are worth it
+        └─────────────┬──────────────┘
+                      │
+        sources + manifest + text bundle + report + assets
+                      │
+             integrity hashes ─ signature
+                      │
+                   .va package
+                      │
+              host runtime ─ platform
 ```
+
+**The sources travel in the package.** Not "the sources or the bytecode" —
+both, when there is bytecode at all. A package the host cannot re-check from
+first principles puts the publisher back in the position of trust that §1
+removes, and a hash over a blob only proves it is the blob somebody signed, not
+that it is the program somebody read.
+
+Two stages are not in this drawing on purpose. **There is no bytecode of our
+own**: Wasm or the AST, and nothing in between (§8). And optimisation has no box
+because a total language with no allocation has little to optimise and every
+pass is another thing the host must reproduce exactly.
 
 ### Determinism is a language property, not a runtime one
 

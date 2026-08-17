@@ -137,21 +137,34 @@ the back end only.
 
 ## Status
 
-**The front end exists.** `valang` lexes, parses and checks: effect placement,
-capability declaration against use, exhaustive switching, unreachable arms,
-determinism, an acyclic call graph, narrowing, patch paths, no floats, no
-assignment, no list index. `valc <file.val>` prints the diagnostics and then the
-capability report.
+Against the pipeline in [§7](docs/spec.md), today:
+
+| stage | |
+| --- | --- |
+| lexer, parser, AST | **done** |
+| semantic analysis | **partial** — names and shapes, not types |
+| type checking | **not started** — `Verified<P>`, provenance, nullability |
+| capability analysis | **done** — declared against used, both directions |
+| trust analysis | **partial** — policies parse and are named; refinement is not checked |
+| determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
+| policy validation | **partial** — one disclosure per action, patch paths, no assignment |
+| capability report | **done** — derived from the code |
+| IR | not started (v1 skips it) |
+| evaluator | not started |
+| Wasm back end | not started |
+| manifest, text bundle | the bundle exists as data; nothing checks it yet |
+| integrity, signature, `.va` | not started |
 
 ```
 cargo run --bin valc -- examples/loyalty.val
 ```
 
-**Nothing else does.** There is no type checker — `Verified<P>`, provenance and
-nullability are the next pass and are the reason two of `rejected.val`'s
-programs are not yet refused. There is no evaluator, no IR, no Wasm back end, no
-packaging and no signature. The order of work is [§12 of the
-spec](docs/spec.md).
+prints the diagnostics and then the capability report — the whole of what a host
+runs over a package it received.
+
+Two of `rejected.val`'s twelve programs are not yet refused, both of them the
+type checker's: data used without `verify`, and data verified against the wrong
+policy. The order of work is [§12 of the spec](docs/spec.md).
 
 The tests are the examples, and the examples were written from the specification
 before this crate existed: `rejected.val` carries the error each program is owed
