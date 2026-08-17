@@ -137,7 +137,26 @@ the back end only.
 
 ## Status
 
-A specification and a skeleton that compiles and does nothing. The order of work
-is [§8 of the spec](docs/spec.md#8-order-of-work). Nothing is stable and nothing is
-published. The crates are `valang` and `valang-runtime` rather than `val`,
-because `val` on crates.io is somebody else's.
+**The front end exists.** `valang` lexes, parses and checks: effect placement,
+capability declaration against use, exhaustive switching, unreachable arms,
+determinism, an acyclic call graph, narrowing, patch paths, no floats, no
+assignment, no list index. `valc <file.val>` prints the diagnostics and then the
+capability report.
+
+```
+cargo run --bin valc -- examples/loyalty.val
+```
+
+**Nothing else does.** There is no type checker — `Verified<P>`, provenance and
+nullability are the next pass and are the reason two of `rejected.val`'s
+programs are not yet refused. There is no evaluator, no IR, no Wasm back end, no
+packaging and no signature. The order of work is [§12 of the
+spec](docs/spec.md).
+
+The tests are the examples, and the examples were written from the specification
+before this crate existed: `rejected.val` carries the error each program is owed
+in a comment, and the suite asserts the compiler says something with that shape.
+
+Nothing is stable and nothing is published. The crates are `valang` and
+`valang-runtime` rather than `val`, because `val` on crates.io is somebody
+else's.
