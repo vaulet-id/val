@@ -266,3 +266,72 @@ fn a_screen_declares_what_it_sees() {
     assert_eq!(s.data.len(), 1);
     assert!(!s.tree.is_empty(), "a screen with no components would be a parse failure in disguise");
 }
+
+/// Errors are outcomes, not values. There is no `Result` and no propagation,
+/// because an action has nowhere to propagate to: it is a transaction, and it
+/// either happens or it does not. What was missing was the third way for one
+/// not to happen — the application declining for its own reasons, which is
+/// neither a defect nor a trust failure.
+#[test]
+fn an_application_may_decline_for_its_own_reasons() {
+    let src = r#"
+app "example.decline"
+version 1
+capabilities { credential.read(Receipt) }
+credential Receipt { amount: int }
+trust FromShop(r: Receipt) { anchor: "shop" require { r.signature.valid } }
+action Earn {
+  input   { r: Credential<Receipt> }
+  verify  { const checked = r with FromShop }
+  compute { if (checked.claims.amount < 2_000) { refuse "tooSmall" } }
+}
+"#;
+    assert!(errors(src).is_empty(), "{:?}", errors(src));
+
+    // The message is a key, because a sentence assembled in code is a sentence
+    // nobody signed — and this one is read by the person being declined.
+    let inline = src.replace(r#"refuse "tooSmall""#, r#"refuse tooSmall"#);
+    let e = errors(&inline).join("\n");
+    assert!(e.contains("names a key in the text bundle"), "{e}");
+
+    // And it belongs before `execute`: by there the batch is built and the host
+    // is about to be offered it.
+    let late = src.replace(
+        r#"compute { if (checked.claims.amount < 2_000) { refuse "tooSmall" } }"#,
+        r#"execute { refuse "tooSmall" }"#,
+    );
+    let e = errors(&late).join("\n");
+    assert!(e.contains("too late to be one"), "{e}");
+}
+
+/// The bundle and the code are signed as one package, so they are checked as
+/// one: a key nothing translates is a screen that says `missing key` to
+/// somebody, and both are knowable before it ships.
+#[test]
+fn a_key_nothing_translates_is_a_failed_build() {
+    use std::collections::BTreeMap;
+
+    let src = r#"
+app "example.decline"
+version 1
+capabilities { }
+action Earn { compute { refuse "tooSmall" } }
+"#;
+    let locales = vec!["th".to_string(), "en".to_string()];
+
+    let empty: valang::TextBundle = BTreeMap::new();
+    let (_, d) = valang::analyse_with(src, Some((&empty, &locales)));
+    assert!(d.iter().any(|d| d.message.contains("has no `tooSmall`")), "{d:?}");
+
+    let half: valang::TextBundle =
+        BTreeMap::from([("tooSmall".into(), BTreeMap::from([("en".to_string(), "Too small".to_string())]))]);
+    let (_, d) = valang::analyse_with(src, Some((&half, &locales)));
+    assert!(d.iter().any(|d| d.message.contains("has no th")), "{d:?}");
+
+    let full: valang::TextBundle = BTreeMap::from([(
+        "tooSmall".into(),
+        BTreeMap::from([("en".to_string(), "Too small".into()), ("th".to_string(), "น้อยไป".into())]),
+    )]);
+    let (_, d) = valang::analyse_with(src, Some((&full, &locales)));
+    assert!(d.iter().all(|d| d.severity != valang::Severity::Error), "{d:?}");
+}

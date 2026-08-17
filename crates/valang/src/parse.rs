@@ -480,6 +480,20 @@ impl Parser {
             let value = self.expr(0);
             return Some(Stmt::Let { name, value, span });
         }
+        if self.at("refuse") {
+            self.bump();
+            self.skip_newlines();
+            let t = self.peek().clone();
+            if t.kind != Kind::Str {
+                self.diagnostics.push(Diagnostic::error(
+                    t.span,
+                    "`refuse` names a key in the text bundle. A sentence assembled here is a sentence nobody signed, and this one is read by the person the application is declining",
+                ));
+                return Some(Stmt::Refuse { key: String::new(), span });
+            }
+            self.bump();
+            return Some(Stmt::Refuse { key: t.text, span });
+        }
         if self.at("if") {
             self.bump();
             // Parenthesised, which is what removes every ambiguity between a

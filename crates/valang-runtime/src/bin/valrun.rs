@@ -98,6 +98,7 @@ fn main() -> ExitCode {
             Outcome::Refused(w) => format!("refused — {w}"),
             Outcome::Failed(w) => format!("ordinary outcome — {w}"),
             Outcome::Defect(w) => format!("defect — {w}"),
+            Outcome::Declined(k) => format!("declined — the app said no, showing \"{k}\""),
         }
     );
     println!("  code hash      {}", &hex(&r.code_hash)[..24]);

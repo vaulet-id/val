@@ -179,6 +179,11 @@ pub enum Stmt {
     Return { value: Expr, span: Span },
     /// `const holdings = credentials of Holding verified with Policy`
     Data { name: String, source: DataSource, span: Span },
+    /// `refuse "notEnoughPoints"` — the application declining for its own
+    /// reasons. An ordinary outcome, not a defect: the person is told, and
+    /// what they are told comes from the signed text bundle rather than from a
+    /// sentence assembled here.
+    Refuse { key: String, span: Span },
     /// `if (cond) { … } else { … }`. A statement, never an expression — the
     /// expression form is `?:`, and two ways to write one thing is what this
     /// language spends its budget avoiding (§3).
@@ -195,7 +200,8 @@ impl Stmt {
             | Stmt::Effect { span, .. }
             | Stmt::Return { span, .. }
             | Stmt::Data { span, .. }
-            | Stmt::If { span, .. } => *span,
+            | Stmt::If { span, .. }
+            | Stmt::Refuse { span, .. } => *span,
         }
     }
 }

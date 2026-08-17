@@ -91,6 +91,14 @@ action ScanToEarn {
   compute {
     // Pure, and so is every `function`. An effect here is a compile error, and
     // there is no effectful function it could hide behind.
+
+    // The application declining for its own reasons: not a defect, which is
+    // what `require` is for, and not a trust failure, which is what `verify`
+    // is for. A third thing — and the person is told in words somebody signed,
+    // because `refuse` names a key in the text bundle rather than carrying a
+    // sentence nobody reviewed.
+    if (checked.claims.amount < 2_000) { refuse "tooSmallToEarn" }
+
     const satangPerBaht = 100
     const earned = checked.claims.amount / satangPerBaht
     const total  = state.lifetimePoints + earned     // traps on overflow

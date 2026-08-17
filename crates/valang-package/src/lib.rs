@@ -178,7 +178,7 @@ pub fn build(
     key: Option<&SigningKey>,
 ) -> Result<Package, Refusal> {
     let joined = sources.values().cloned().collect::<Vec<_>>().join("\n");
-    let (program, diagnostics) = valang::analyse(&joined);
+    let (program, diagnostics) = valang::analyse_with(&joined, Some((&text_bundle, &manifest.locales)));
     let errors: Vec<String> = diagnostics
         .iter()
         .filter(|d| d.severity == valang::Severity::Error)
@@ -260,7 +260,7 @@ pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> 
     // 3. It compiles — checked here, not taken on trust from a build we did not
     //    run.
     let joined = p.sources.values().cloned().collect::<Vec<_>>().join("\n");
-    let (program, diagnostics) = valang::analyse(&joined);
+    let (program, diagnostics) = valang::analyse_with(&joined, Some((&p.text_bundle, &p.manifest.locales)));
     let errors: Vec<String> = diagnostics
         .iter()
         .filter(|d| d.severity == valang::Severity::Error)

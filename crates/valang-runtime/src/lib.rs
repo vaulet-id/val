@@ -38,6 +38,10 @@ pub enum Outcome {
     Failed(String),
     /// `require` failed, or arithmetic trapped. A defect in the application.
     Defect(String),
+    /// The application declined, naming a key in the text bundle. Nothing
+    /// commits, nothing went wrong, and the person is told in words somebody
+    /// signed.
+    Declined(String),
 }
 
 #[derive(Debug, Clone)]
@@ -137,6 +141,7 @@ pub fn encode_record(r: &ExecutionRecord) -> Vec<u8> {
             Outcome::Refused(w) => format!("refused: {w}"),
             Outcome::Failed(w) => format!("failed: {w}"),
             Outcome::Defect(w) => format!("defect: {w}"),
+            Outcome::Declined(k) => format!("declined: {k}"),
         }),
     );
     DeterministicCbor.encode(&Value::Map(m))
@@ -227,6 +232,7 @@ pub fn run_action(
         for s in &block.stmts {
             if let Err(trap) = ev.stmt(s, block.phase, &mut next) {
                 record.outcome = match trap {
+                    Trap::Refused(key) => Outcome::Declined(key),
                     Trap::Failed(m) => Outcome::Failed(m),
                     Trap::Defect(m) => Outcome::Defect(m),
                     Trap::DivideByZero => Outcome::Defect("division by zero traps, as overflow does".into()),

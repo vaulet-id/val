@@ -19,9 +19,23 @@ pub use diag::{Diagnostic, Severity};
 /// Parse and check one source file. The host runs exactly this over the package
 /// it received; a publisher's build passing proves nothing (§1).
 pub fn analyse(src: &str) -> (ast::Program, Vec<Diagnostic>) {
+    analyse_with(src, None)
+}
+
+/// The text bundle a package ships. Key to locale to template.
+pub type TextBundle = std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>;
+
+/// Analyse against the bundle as well as the code. They are signed as one
+/// package, so checking them apart would mean signing a pairing nobody verified
+/// (§9) — and every sentence a person reads is in there rather than in the
+/// program.
+pub fn analyse_with(src: &str, bundle: Option<(&TextBundle, &[String])>) -> (ast::Program, Vec<Diagnostic>) {
     let (program, mut diagnostics) = parse::parse(src);
     diagnostics.extend(check::check(&program));
     diagnostics.extend(typeck::check_types(&program));
+    if let Some((bundle, locales)) = bundle {
+        diagnostics.extend(check::check_bundle(&program, bundle, locales));
+    }
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
     // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:

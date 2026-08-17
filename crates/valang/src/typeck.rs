@@ -247,6 +247,7 @@ impl<'a> Cx<'a> {
                     ),
                 }
             }
+            Stmt::Refuse { .. } => {}
             Stmt::If { cond, then, other, .. } => {
                 let c = self.expr(cond);
                 if !c.ty.is_unknown() && c.ty != Ty::Bool {

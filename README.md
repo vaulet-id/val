@@ -142,7 +142,8 @@ Against the pipeline in [§7](docs/spec.md), today:
 | stage | |
 | --- | --- |
 | lexer, parser, AST | **done** |
-| semantic analysis | **done** — scopes, names, narrowing |
+| semantic analysis | **done** — scopes, names, narrowing, duplicates |
+| the text bundle | **done** — checked against the code, in every locale the manifest promises |
 | type checking | **done** — `Verified<P>`, provenance, nullability, arity, claim types |
 | capability analysis | **done** — name *and* argument, both directions |
 | trust analysis | **done** — subject types, anchors, refinement as syntactic containment |

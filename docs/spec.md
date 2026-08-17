@@ -483,6 +483,39 @@ Phases may be omitted but not reordered.
 | **`update`** | the next state |
 | **`execute`** | effects — the only phase where any appear |
 
+### Errors are outcomes, not values
+
+There is no `Result<T, E>` and no propagation. An action has nowhere to
+propagate to: it is a transaction, and it either happens or it does not — so an
+error type would need early return everywhere, which is a second control flow
+for a language that has one.
+
+What an application does need is a way to decline **for its own reasons**, which
+is neither of the two failures above:
+
+```
+compute {
+  if (checked.claims.amount < 2_000) { refuse "tooSmallToEarn" }
+}
+```
+
+`refuse` names a key in the text bundle, never a sentence. The person being
+declined reads it, so it comes from something signed — the same rule as every
+other line of text a screen shows, and the reason it is checkable at build time.
+
+**It belongs before `execute`.** By there the batch is built and the host is
+about to be offered it; declining then is a decision taken too late to be one.
+
+So there are four ways for an action not to commit, and they are different
+things to different people:
+
+| | who sees it | what it means |
+| --- | --- | --- |
+| `require` fails | nobody | a defect: the application asked for something it had no business asking |
+| `verify` fails | the person | the credential was forged, stale, or outside the anchor |
+| `refuse` | the person | the application declined, for a reason it named |
+| the host refuses the batch | the person | consent was not given, and nothing went wrong |
+
 ### `require` and `verify` fail differently, and that is why there are two
 
 Both refuse to continue and both narrow types. Splitting them on how they *read*
@@ -1250,12 +1283,6 @@ verdict do.
 2. **`type` is declared in §2 and specified nowhere.** Plain records exist. What
    is unsettled is whether one may hold verified and unverified fields side by
    side, which is a provenance question (§4) rather than a syntax one.
-3. **Errors.** `Result<T, E>` was in an early draft and is in none of the
-   examples, because nothing has needed it yet: `require` aborts, `verify` fails
-   as an outcome, arithmetic traps, and the host reports its own failures. That
-   may be the whole answer, or it may be a gap that the first real application
-   finds.
-
 Everything else that was numbered here has been settled and moved into the body.
 
 ---

@@ -23,9 +23,31 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     updates_take_paths(p, &mut d);
     nothing_is_declared_twice(p, &mut d);
     effects_do_not_read_each_other(p, &mut d);
+    refusals_come_before_effects(p, &mut d);
     policies_name_an_anchor(p, &mut d);
     navigation_goes_somewhere(p, &mut d);
     d
+}
+
+/// An application declines before it asks, never after. By `execute` the batch
+/// has been built and the host is about to be offered it — a refusal there is a
+/// decision taken too late to be one.
+fn refusals_come_before_effects(p: &Program, d: &mut Vec<Diagnostic>) {
+    for a in &p.actions {
+        for block in &a.phases {
+            if block.phase != Phase::Execute {
+                continue;
+            }
+            walk_stmts(&block.stmts, &mut |s| {
+                if let Stmt::Refuse { span, .. } = s {
+                    d.push(Diagnostic::error(
+                        *span,
+                        "`refuse` belongs before `execute`. By here the batch is built and the host is about to be offered it, so declining is a decision taken too late to be one — put the rule in `require`, in `verify`, or in `compute`",
+                    ));
+                }
+            });
+        }
+    }
 }
 
 /// A trust policy without an anchor trusts nobody in particular, which reads
@@ -253,6 +275,66 @@ fn nothing_is_declared_twice(p: &Program, d: &mut Vec<Diagnostic>) {
             d.push(Diagnostic::error(c.span, format!("`{key}` is declared twice")));
         }
     }
+}
+
+/// Every key the program names, against the bundle it ships with.
+///
+/// A missing key is a screen that says `missing key "balance"` to somebody, and
+/// a missing locale is a market where the application is unusable — both are
+/// failed builds rather than bug reports, because both are knowable now.
+pub fn check_bundle(
+    p: &Program,
+    bundle: &crate::TextBundle,
+    locales: &[String],
+) -> Vec<Diagnostic> {
+    let mut d = Vec::new();
+    let mut want: Vec<(String, crate::diag::Span, &'static str)> = Vec::new();
+
+    for a in &p.actions {
+        for block in &a.phases {
+            walk_stmts(&block.stmts, &mut |s| {
+                if let Stmt::Refuse { key, span } = s {
+                    want.push((key.clone(), *span, "refusal"));
+                }
+            });
+        }
+    }
+    for s in &p.screens {
+        for n in &s.tree {
+            walk_ui(n, &mut |node| {
+                for a in &node.args {
+                    let is_text = a.name.as_deref() == Some("text") || (a.name.is_none() && node.kind == "tab");
+                    if !is_text {
+                        continue;
+                    }
+                    if let Expr::Str { value, span } = &a.value {
+                        want.push((value.clone(), *span, "screen"));
+                    }
+                }
+            });
+        }
+    }
+
+    for (key, span, what) in want {
+        let Some(entry) = bundle.get(&key) else {
+            d.push(Diagnostic::error(
+                span,
+                format!("the text bundle has no `{key}`, and this {what} names it"),
+            ));
+            continue;
+        };
+        for locale in locales {
+            if !entry.contains_key(locale) {
+                d.push(Diagnostic::error(
+                    span,
+                    format!(
+                        "`{key}` has no {locale}. A market's language missing is a failed build, not a bug report"
+                    ),
+                ));
+            }
+        }
+    }
+    d
 }
 
 const EFFECT_ROOTS: &[&str] = &["credential", "payment", "storage", "message", "network", "disclosure"];
@@ -722,7 +804,7 @@ fn narrowing_before_use(p: &Program, d: &mut Vec<Diagnostic>) {
                         }
                     }
                     Stmt::If { cond, .. } => check_expr(cond),
-                    Stmt::Binding { .. } | Stmt::Data { .. } => {}
+                    Stmt::Binding { .. } | Stmt::Data { .. } | Stmt::Refuse { .. } => {}
                 }
             });
         }
@@ -798,7 +880,7 @@ fn for_each_expr(p: &Program, f: &mut impl FnMut(&Expr)) {
                 }
             }
             Stmt::If { cond, .. } => cond.walk(f),
-            Stmt::Binding { .. } | Stmt::Data { .. } => {}
+            Stmt::Binding { .. } | Stmt::Data { .. } | Stmt::Refuse { .. } => {}
         })
     };
     for a in &p.actions {

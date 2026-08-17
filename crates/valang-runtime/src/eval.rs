@@ -14,6 +14,10 @@ use crate::value::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Trap {
+    /// The application declined, for its own reasons, naming a key in the text
+    /// bundle. Not a defect and not a trust failure — a third thing, which is
+    /// why the language needed it.
+    Refused(String),
     Overflow(String),
     DivideByZero,
     /// `require` failed: a defect in the application. Nobody is shown this.
@@ -58,6 +62,8 @@ impl<'a> Eval<'a> {
     pub fn stmt(&mut self, s: &Stmt, phase: Phase, state: &mut BTreeMap<String, Value>) -> R<()> {
         match s {
             Stmt::Binding { .. } | Stmt::Data { .. } => Ok(()),
+
+            Stmt::Refuse { key, .. } => Err(Trap::Refused(key.clone())),
 
             Stmt::Let { name, value, .. } => {
                 let v = self.expr(value, state)?;

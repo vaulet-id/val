@@ -409,3 +409,46 @@ action Grow {
     let ok = run_action(&program, src, "Grow", &before, &BTreeMap::new(), &Wallet { approve: true });
     assert_eq!(ok.outcome, Outcome::Committed);
 }
+
+/// Declining is an ordinary outcome and not a defect: nothing went wrong, the
+/// state does not move, and what the person is shown is a key somebody signed
+/// rather than a sentence the application assembled.
+#[test]
+fn a_declined_run_commits_nothing_and_names_what_to_show() {
+    struct SmallPurchase;
+    impl Host for SmallPurchase {
+        fn context(&self) -> Context {
+            Context { time_now: 1_755_426_600_000, random_uuid: "0f2a-c71b".into() }
+        }
+        fn credential(&self, _ty: &str, _p: Option<&str>) -> Option<BTreeMap<String, Value>> {
+            Some(BTreeMap::from([
+                ("merchant".to_string(), Value::Str("Codefin Coffee".into())),
+                // Under the twenty baht the example declines below.
+                ("amount".to_string(), Value::Int(1_500)),
+                ("purchased_at".to_string(), Value::Int(1_755_335_520_000)),
+            ]))
+        }
+        fn decide(&self, _e: &[EffectRequest]) -> Verdict {
+            panic!("the host is never asked: the application declined before there was a batch")
+        }
+        fn sign(&self, bytes: &[u8]) -> Vec<u8> {
+            use sha2::{Digest, Sha256};
+            Sha256::digest(bytes).to_vec()
+        }
+        fn device_key(&self) -> Vec<u8> {
+            b"test-device".to_vec()
+        }
+    }
+
+    let (program, _) = valang::analyse(LOYALTY);
+    let before = start();
+    let run = run_action(&program, LOYALTY, "ScanToEarn", &before, &BTreeMap::new(), &SmallPurchase);
+
+    match &run.outcome {
+        Outcome::Declined(key) => assert_eq!(key, "tooSmallToEarn"),
+        other => panic!("expected a decline, got {other:?}"),
+    }
+    assert_eq!(run.next_state, before);
+    assert!(run.effects.is_empty(), "there was never a batch");
+    assert!(!run.record.signature.is_empty(), "and it is still a record of what happened");
+}

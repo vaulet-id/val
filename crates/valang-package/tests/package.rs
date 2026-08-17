@@ -22,11 +22,20 @@ fn sources() -> BTreeMap<String, String> {
     BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())])
 }
 
+/// Every key `loyalty.val` names, in every locale the manifest promises. The
+/// compiler checks the bundle against the code because they are signed as one
+/// package — which this fixture found out by being wrong.
 fn text() -> BTreeMap<String, BTreeMap<String, String>> {
-    BTreeMap::from([(
-        "balance".to_string(),
-        BTreeMap::from([("th".to_string(), "แต้ม {points}".to_string()), ("en".to_string(), "{points} points".to_string())]),
-    )])
+    let entry = |th: &str, en: &str| {
+        BTreeMap::from([("th".to_string(), th.to_string()), ("en".to_string(), en.to_string())])
+    };
+    BTreeMap::from([
+        ("balance".to_string(), entry("แต้ม {points}", "{points} points")),
+        (
+            "tooSmallToEarn".to_string(),
+            entry("ยอดต่ำกว่า 20 บาท ยังไม่ได้แต้ม", "Purchases under ฿20 do not earn points"),
+        ),
+    ])
 }
 
 #[test]
