@@ -93,18 +93,31 @@ impl fmt::Display for Ty {
 /// backed by nobody (§7).
 pub type Provenance = BTreeSet<String>;
 
+/// Where a value came from, when nobody signed it. An empty `from` covers two
+/// different things and the specification distinguishes them: state is
+/// **self-asserted** — nobody vouched for it but the chain of records produced
+/// it — while a query answer is **origin-asserted**, and the host knows exactly
+/// which origin answered. Collapsing the two would tell a verifier that a price
+/// scraped from an API and a number this application computed are the same kind
+/// of fact.
+pub type Origins = BTreeSet<String>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Typed {
     pub ty: Ty,
     pub from: Provenance,
+    pub origins: Origins,
 }
 
 impl Typed {
     pub fn plain(ty: Ty) -> Typed {
-        Typed { ty, from: Provenance::new() }
+        Typed { ty, from: Provenance::new(), origins: Origins::new() }
     }
     pub fn with(ty: Ty, from: Provenance) -> Typed {
-        Typed { ty, from }
+        Typed { ty, from, origins: Origins::new() }
+    }
+    pub fn from_origin(ty: Ty, origin: &str) -> Typed {
+        Typed { ty, from: Provenance::new(), origins: [origin.to_string()].into_iter().collect() }
     }
     pub fn unknown() -> Typed {
         Typed::plain(Ty::Unknown)
@@ -114,6 +127,8 @@ impl Typed {
     pub fn join(a: &Typed, b: &Typed, ty: Ty) -> Typed {
         let mut from = a.from.clone();
         from.extend(b.from.iter().cloned());
-        Typed { ty, from }
+        let mut origins = a.origins.clone();
+        origins.extend(b.origins.iter().cloned());
+        Typed { ty, from, origins }
     }
 }

@@ -34,6 +34,29 @@ struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
+    /// The origin a query answers from is the audience fixed in the manifest,
+    /// not the head of the call — `broker.quotes(…)` is an operation on
+    /// `broker.co.th`, and reporting the operation as the party would name the
+    /// wrong thing in the one place a person is being told who saw their data.
+    fn audience_for(&self, head: &str) -> String {
+        let declared: Vec<String> = self
+            .p
+            .capabilities
+            .iter()
+            .filter(|c| c.name == "api.query")
+            .filter_map(|c| {
+                c.args.iter().find(|a| a.name.as_deref() == Some("audience")).and_then(|a| match &a.value {
+                    Expr::Str { value, .. } => Some(value.clone()),
+                    _ => None,
+                })
+            })
+            .collect();
+        match declared.as_slice() {
+            [only] => only.clone(),
+            _ => head.to_string(),
+        }
+    }
+
     fn new(p: &'a Program) -> Self {
         Cx { p, scope: vec![HashMap::new()], diagnostics: Vec::new() }
     }
@@ -130,9 +153,12 @@ impl<'a> Cx<'a> {
                 DataSource::Credentials { ty, policy: None, .. } => {
                     Typed::plain(Ty::List(Box::new(Ty::Credential(ty.clone()))))
                 }
-                // Origin-asserted: no policy, so an empty provenance set, which
-                // is what tells a verifier this is nobody's word but the API's.
-                DataSource::Query { .. } => Typed::plain(Ty::List(Box::new(Ty::Unknown))),
+                // Origin-asserted: no policy, and the origin recorded, so a
+                // verifier is told whose word this is rather than being left to
+                // assume it is nobody's.
+                DataSource::Query { audience } => {
+                    Typed::from_origin(Ty::List(Box::new(Ty::Unknown)), &self.audience_for(audience))
+                }
                 DataSource::Unknown => Typed::unknown(),
             };
             self.bind(&d.name, t);
@@ -168,7 +194,10 @@ impl<'a> Cx<'a> {
                     DataSource::Credentials { ty, policy: None, .. } => {
                         Typed::plain(Ty::List(Box::new(Ty::Credential(ty.clone()))))
                     }
-                    _ => Typed::unknown(),
+                    DataSource::Query { audience } => {
+                        Typed::from_origin(Ty::List(Box::new(Ty::Unknown)), &self.audience_for(audience))
+                    }
+                    DataSource::Unknown => Typed::unknown(),
                 };
                 self.bind(name, t);
             }
@@ -221,6 +250,18 @@ impl<'a> Cx<'a> {
             Stmt::Effect { name, args, body, span } => {
                 for a in args {
                     let t = self.expr(&a.value);
+                    // A proof asserts something about data an issuer stood
+                    // behind. Over an API's answer it asserts something nobody
+                    // stood behind, in a form that looks exactly as strong.
+                    if name == "prove" && !t.origins.is_empty() {
+                        self.err(
+                            a.value.span(),
+                            format!(
+                                "this proves something about data from {}, which nobody signed. A proof over an origin-asserted value looks exactly as strong as a proof over a credential and is not — verify a credential, or disclose the number and say where it came from",
+                                t.origins.iter().cloned().collect::<Vec<_>>().join(", ")
+                            ),
+                        );
+                    }
                     // `credential.issue(LoyaltyMember { … })`: the claims being
                     // signed are the place provenance has to be demanded, since
                     // it is the only point where this application's word becomes
@@ -261,6 +302,15 @@ impl<'a> Cx<'a> {
                     continue;
                 };
                 let got = self.expr(value);
+                if !got.origins.is_empty() {
+                    self.err(
+                        value.span(),
+                        format!(
+                            "`{name}.{field}` would be signed by this application's publisher, and this value came from {}. Issuing somebody else's unsigned answer under your own name is the one thing a credential must not be able to say",
+                            got.origins.iter().cloned().collect::<Vec<_>>().join(", ")
+                        ),
+                    );
+                }
                 let want_ty = self.resolve(&want.ty);
                 if !want_ty.accepts(&got.ty) {
                     self.err(
@@ -485,18 +535,21 @@ impl<'a> Cx<'a> {
                     let recv = self.expr(obj);
                     if let Ty::List(item) = recv.ty.clone() {
                         let mut from = recv.from.clone();
+                        let mut origins = recv.origins.clone();
                         for a in args {
-                            from.extend(self.expr(&a.value).from);
+                            let t = self.expr(&a.value);
+                            from.extend(t.from);
+                            origins.extend(t.origins);
                         }
+                        let out = |ty| Typed { ty, from: from.clone(), origins: origins.clone() };
                         return match name.as_str() {
-                            "fold" => Typed::with(Ty::Int, from),
-                            "map" | "filter" => Typed::with(Ty::List(item), from),
-                            "any" | "all" => Typed::with(Ty::Bool, from),
-                            "count" => Typed::with(Ty::Int, from),
-                            "first" => Typed::with(Ty::Optional(item), from),
+                            "fold" | "count" => out(Ty::Int),
+                            "map" | "filter" => out(Ty::List(item)),
+                            "any" | "all" => out(Ty::Bool),
+                            "first" => out(Ty::Optional(item)),
                             other => {
                                 self.err(*span, format!("a list has no `{other}`. It is consumed by `map`, `filter`, `fold`, `any`, `all`, `count` and `first`"));
-                                Typed::with(Ty::Unknown, from)
+                                out(Ty::Unknown)
                             }
                         };
                     }
@@ -510,7 +563,10 @@ impl<'a> Cx<'a> {
 
                 // Named once there are two of them (§2).
                 let constructing = args.len() == 1 && matches!(args[0].value, Expr::Record { .. });
-                if args.len() > 1 && !constructing && args.iter().any(|a| a.name.is_none()) {
+                // `fold(0) { acc, x -> … }` reads as one argument and a block,
+                // which is how it is written and how it should be counted.
+                let named_count = args.iter().filter(|a| !matches!(a.value, Expr::Lambda { .. })).count();
+                if named_count > 1 && !constructing && args.iter().any(|a| a.name.is_none() && !matches!(a.value, Expr::Lambda { .. })) {
                     self.err(
                         *span,
                         format!("`{name}` takes {} arguments, so they are named. A call site is read far more often than it is written, frequently by somebody deciding whether to approve what it does", args.len()),
@@ -564,6 +620,13 @@ impl<'a> Cx<'a> {
                 }
                 if name.split('.').next().is_some_and(is_nondeterministic_root) {
                     return Typed::with(Ty::Unknown, from);
+                }
+                // A method on something this pass could not type. The mistake,
+                // if there is one, was reported where the type was lost.
+                if let Expr::Member { obj, .. } = callee.as_ref() {
+                    if self.expr(obj).ty.is_unknown() {
+                        return Typed::with(Ty::Unknown, from);
+                    }
                 }
                 self.err(
                     *span,
@@ -653,7 +716,7 @@ impl<'a> Cx<'a> {
                 match decl.fields.iter().find(|f| f.name == name) {
                     Some(f) => {
                         let ty = self.resolve(&f.ty);
-                        Typed::with(ty, base.from.clone())
+                        Typed { ty, from: base.from.clone(), origins: base.origins.clone() }
                     }
                     None => {
                         self.err(span, format!("`{cred}` has no claim called `{name}`"));
@@ -682,7 +745,7 @@ impl<'a> Cx<'a> {
                 }
                 Typed::unknown()
             }
-            _ => Typed::with(Ty::Unknown, base.from.clone()),
+            _ => Typed { ty: Ty::Unknown, from: base.from.clone(), origins: base.origins.clone() },
         }
     }
 }

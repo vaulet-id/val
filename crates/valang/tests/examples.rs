@@ -190,6 +190,32 @@ action Peek {
     assert!(e.contains("is not least privilege"), "{e}");
 }
 
+/// Three grades of data, and only two of them are somebody's word. An empty
+/// provenance set used to cover both "this app computed it" and "an API said
+/// so", which are not the same fact and must not prove the same way.
+#[test]
+fn a_proof_over_an_apis_answer_is_refused() {
+    let src = r#"
+app "example.oracle"
+version 1
+capabilities {
+  api.query(audience: "broker.co.th", presenting: Holding)
+  disclosure.present
+}
+credential Holding { market_value: int }
+action Bad {
+  verify  { const quotes = query broker.quotes() }
+  compute { const total = quotes.fold(0) { sum, q -> sum + 1 } }
+  execute { present { prove total >= 100 } }
+}
+"#;
+    let e = errors(src).join("\n");
+    assert!(e.contains("data from broker.co.th, which nobody signed"), "{e}");
+    // Named by the audience in the manifest, not by the call — the person is
+    // being told who saw their data, and `broker.quotes` is not a party.
+    assert!(!e.contains("broker.quotes"), "{e}");
+}
+
 #[test]
 fn a_screen_declares_what_it_sees() {
     let (p, _) = analyse(WALLET);
