@@ -1,0 +1,60 @@
+{
+  "_comment": [
+    "A host's answers, and nothing an application is allowed to carry.",
+    "",
+    "This is not part of any package: a `.va` never contains somebody's wallet.",
+    "It is what a host would hand back when a program declares what it needs —",
+    "state, the credentials it holds, what a query answers — and it is one file",
+    "because three places used to invent this separately: the runtime's tests,",
+    "`valrun`, and the preview.",
+    "",
+    "Nothing here is signed. `verified` names the policy a real host would have",
+    "checked before handing the credential over; this one asserts it, which is",
+    "why the preview says so out loud."
+  ],
+
+  "context": {
+    "time": "2026-08-17T10:30:00Z",
+    "uuid": "0f2a-c71b"
+  },
+
+  "state": {
+    "lifetimePoints": 1240,
+    "member": {
+      "member_id": "M-2891",
+      "points": 1240,
+      "tier": "bronze"
+    }
+  },
+
+  "credentials": {
+    "PurchaseReceipt": {
+      "verified": "ReceiptFromMerchant",
+      "rows": [
+        { "merchant": "Codefin Coffee", "amount": 12500, "purchased_at": "2026-08-16T09:12:00Z" },
+        { "merchant": "Siam Bookshop",  "amount": 48000, "purchased_at": "2026-08-14T18:40:00Z" },
+        { "merchant": "Ari Market",     "amount":  6900, "purchased_at": "2026-08-11T07:05:00Z" }
+      ]
+    },
+    "NationalId": {
+      "verified": "GovernmentIssued",
+      "rows": [
+        { "given_name": "Somchai", "family_name": "Prasert", "birthdate": "1996-01-01T00:00:00Z", "country": "TH" }
+      ]
+    },
+    "Holding": {
+      "verified": "FromLicensedBroker",
+      "rows": [
+        { "symbol": "PTT",  "quantity": 1500000, "cost_basis": 6400000, "market_value": 8990000, "valued_at": "2026-08-17T09:00:00Z", "account_id": "A-114" },
+        { "symbol": "SCB",  "quantity":  800000, "cost_basis": 3100000, "market_value": 2870000, "valued_at": "2026-08-17T09:00:00Z", "account_id": "A-114" }
+      ]
+    }
+  },
+
+  "queries": {
+    "broker.co.th": [
+      { "symbol": "PTT", "last": 3596 },
+      { "symbol": "SCB", "last": 3588 }
+    ]
+  }
+}

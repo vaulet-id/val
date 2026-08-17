@@ -18,6 +18,108 @@ import 'package:web/web.dart' as web;
 
 void main() => runApp(const PreviewApp());
 
+/// A wallet with nothing in it that anybody signed.
+///
+/// The preview is a host, so the wallet belongs here rather than in the
+/// playground: resolving what a screen declared is the host's half of the
+/// division, and putting it on the other side would have been a second
+/// evaluator to keep faithful to the first.
+///
+/// Everything below is invented. It is shaped like the declarations in the
+/// examples and stands in for a phone that has a membership and a few receipts
+/// on it. **No issuer is behind any of it**, which the panel says out loud —
+/// a preview that let mock data look issuer-backed would be teaching the one
+/// habit this whole system exists to break.
+class MockHost {
+  MockHost._();
+
+  /// `state.…`
+  static const state = <String, Object?>{
+    'lifetimePoints': 1365,
+    'member': <String, Object?>{
+      'member_id': 'M-2891',
+      'points': 1365,
+      'tier': 'bronze',
+    },
+  };
+
+  /// What `credentials of PurchaseReceipt verified with ReceiptFromMerchant`
+  /// resolves to. A real host would have checked the policy before handing
+  /// these over; this one pretends it did.
+  static const receipts = <Map<String, Object?>>[
+    {'merchant': 'Codefin Coffee', 'amount': 12500, 'purchased_at': '2026-08-16T09:12:00Z'},
+    {'merchant': 'Siam Bookshop', 'amount': 48000, 'purchased_at': '2026-08-14T18:40:00Z'},
+    {'merchant': 'Ari Market', 'amount': 6900, 'purchased_at': '2026-08-11T07:05:00Z'},
+  ];
+
+  /// How many rows a `list` draws. The declaration's `limit` bounds it; this
+  /// host simply has three.
+  static int get rows => receipts.length;
+
+  /// Resolve one slot expression — `state.member.points`, `r.claims.merchant`.
+  ///
+  /// Deliberately not an evaluator. It walks a path and nothing else: an
+  /// expression this cannot follow comes back as itself, because a preview that
+  /// guessed at arithmetic would be a third implementation of the language and
+  /// the first one nobody tests.
+  static Object? slot(String expr, {String? bind, Map<String, Object?>? item}) {
+    final parts = expr.split('.');
+    if (parts.isEmpty) return null;
+
+    Object? cursor;
+    var rest = parts;
+    if (parts.first == 'state' || parts.first == 'next') {
+      cursor = state;
+      rest = parts.sublist(1);
+    } else if (bind != null && parts.first == bind) {
+      cursor = item;
+      // `r.claims.merchant` — a credential's claims are one hop the host knows
+      // about, because the host is what handed the credential over.
+      rest = parts.sublist(1);
+      if (rest.isNotEmpty && rest.first == 'claims') rest = rest.sublist(1);
+    } else {
+      return null;
+    }
+
+    for (final key in rest) {
+      if (cursor is Map<String, Object?>) {
+        cursor = cursor[key];
+      } else {
+        return null;
+      }
+    }
+    return cursor;
+  }
+
+  /// The host formats. An application that formatted a number would get the
+  /// thousands separator, the era and the currency position wrong separately
+  /// from every other application — so it never touches one.
+  static String format(Object? value, String locale) {
+    if (value == null) return '—';
+    if (value is int) {
+      final digits = value.abs().toString();
+      final out = StringBuffer(value < 0 ? '-' : '');
+      for (var i = 0; i < digits.length; i++) {
+        if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+        out.write(digits[i]);
+      }
+      return out.toString();
+    }
+    if (value is String) {
+      final at = DateTime.tryParse(value);
+      if (at == null) return value;
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const thai = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      // Buddhist era in Thai, which is the sort of thing that is wrong in forty
+      // applications the moment forty applications are allowed to do it.
+      return locale == 'th'
+          ? '${at.day} ${thai[at.month - 1]} ${at.year + 543}'
+          : '${at.day} ${months[at.month - 1]} ${at.year}';
+    }
+    return value.toString();
+  }
+}
+
 /// The first host's tokens, copied from `vaulet-app/lib/core/theme/theme.dart`.
 ///
 /// A copy, and the copy is the point: this preview shows what a VAL screen

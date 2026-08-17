@@ -11,6 +11,14 @@ valang.workspace = true
 # Hashing is a specification and a security boundary; both are reasons not to
 # write one here.
 sha2 = "0.10"
+# Reading the host fixture. JSON because a person edits it — in the playground's
+# editor, in a diff, in a test — and a canonical binary encoding is for what is
+# hashed rather than for what is typed.
+serde_json = { version = "1", optional = true }
+
+[features]
+default = ["fixture"]
+fixture = ["dep:serde_json"]
 
 [dev-dependencies]
 sha2 = "0.10"

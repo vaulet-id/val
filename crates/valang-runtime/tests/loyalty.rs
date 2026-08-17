@@ -13,6 +13,14 @@ use valang_runtime::value::Value;
 use valang_runtime::{run_action, Outcome};
 
 const LOYALTY: &str = include_str!("../../../examples/loyalty.val");
+const FIXTURE: &str = include_str!("../../../fixtures/wallet.json");
+
+/// The same wallet the playground shows and `valrun` uses. Three separate
+/// inventions of "what is on this phone" meant three answers and no way to tell
+/// which one a bug was about.
+fn fixture() -> valang_runtime::fixture::Fixture {
+    valang_runtime::fixture::Fixture::parse(FIXTURE).expect("the fixture parses")
+}
 
 struct Wallet {
     approve: bool,
@@ -451,4 +459,30 @@ fn a_declined_run_commits_nothing_and_names_what_to_show() {
     assert_eq!(run.next_state, before);
     assert!(run.effects.is_empty(), "there was never a batch");
     assert!(!run.record.signature.is_empty(), "and it is still a record of what happened");
+}
+
+/// The fixture is the wallet, and a run over it agrees with the one over the
+/// hand-written host above — which is the only reason to have one file instead
+/// of three.
+#[test]
+fn the_fixture_is_the_same_wallet_the_tests_were_writing_by_hand() {
+    let (program, _) = valang::analyse(LOYALTY);
+    let host = fixture();
+
+    let run = run_action(&program, LOYALTY, "ScanToEarn", &host.state(), &BTreeMap::new(), &host);
+    assert_eq!(run.outcome, Outcome::Committed);
+    assert_eq!(run.next_state["lifetimePoints"], Value::Int(1_365));
+
+    // Times in the file are ISO-8601 and integers here, because that is what
+    // comparing one to `context.time.now` needs — a string compares false and
+    // says nothing, which is how the freshness rule in every trust policy would
+    // have quietly stopped working.
+    let host = fixture();
+    let receipts = host.credentials_of("PurchaseReceipt", Some("ReceiptFromMerchant"), Some(2));
+    assert_eq!(receipts.len(), 2, "the declaration's limit bounds what the host hands back");
+    assert!(matches!(receipts[0]["purchased_at"], Value::Int(_)));
+
+    let refused = fixture().refusing();
+    let run = run_action(&program, LOYALTY, "ScanToEarn", &refused.state(), &BTreeMap::new(), &refused);
+    assert!(matches!(run.outcome, Outcome::Refused(_)));
 }

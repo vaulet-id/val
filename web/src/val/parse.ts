@@ -196,7 +196,7 @@ export function parse(src: string): Program {
       }
       expect('}')
     }
-    return { kind, args, children, line }
+    return { kind, args, children, lambda, line }
   }
 
   const parseFields = (): Field[] => {

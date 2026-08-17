@@ -29,6 +29,9 @@ function args(node: Node): Record<string, string> {
 const serialise = (node: Node): unknown => ({
   kind: node.kind,
   args: args(node),
+  // `list(receipts) { r -> … }` — the row needs to know what `r` is bound to,
+  // or the host cannot resolve a single slot inside it.
+  lambda: node.lambda ?? null,
   children: node.children.map(serialise),
 })
 

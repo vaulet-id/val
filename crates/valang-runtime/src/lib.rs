@@ -7,6 +7,8 @@
 pub mod canonical;
 pub mod decode;
 pub mod eval;
+#[cfg(feature = "fixture")]
+pub mod fixture;
 pub mod host;
 pub mod merkle;
 pub mod render;

@@ -9,44 +9,10 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use valang_runtime::host::{Context, EffectRequest, Host, Verdict};
+use valang_runtime::fixture::Fixture;
 use valang_runtime::merkle::hex;
 use valang_runtime::value::Value;
 use valang_runtime::{encode_record, run_action, Outcome};
-
-struct StubWallet;
-
-impl Host for StubWallet {
-    fn context(&self) -> Context {
-        Context { time_now: 1_755_426_600_000, random_uuid: "0f2a-c71b".into() }
-    }
-    fn credential(&self, _ty: &str, _policy: Option<&str>) -> Option<BTreeMap<String, Value>> {
-        let mut c = BTreeMap::new();
-        c.insert("merchant".into(), Value::Str("Codefin Coffee".into()));
-        c.insert("amount".into(), Value::Int(12_500));
-        c.insert("market_value".into(), Value::Int(89_900));
-        c.insert("cost_basis".into(), Value::Int(64_000));
-        c.insert("symbol".into(), Value::Str("PTT".into()));
-        c.insert("purchased_at".into(), Value::Int(1_755_335_520_000));
-        c.insert("valued_at".into(), Value::Int(1_755_400_000_000));
-        c.insert("birthdate".into(), Value::Int(820_454_400_000));
-        c.insert("country".into(), Value::Str("TH".into()));
-        Some(c)
-    }
-    fn decide(&self, _effects: &[EffectRequest]) -> Verdict {
-        Verdict::Approved
-    }
-    // A stub, and it says so in the output: a real device signs with a key in
-    // secure hardware, and this hashes. Enough to show the record has a shape
-    // that is signed over, not enough to be believed by anybody.
-    fn sign(&self, bytes: &[u8]) -> Vec<u8> {
-        use sha2::{Digest, Sha256};
-        Sha256::digest(bytes).to_vec()
-    }
-    fn device_key(&self) -> Vec<u8> {
-        b"stub-device".to_vec()
-    }
-}
 
 fn hex_bytes(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
@@ -73,21 +39,19 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut state = BTreeMap::new();
-    for f in &program.state {
-        // A wallet that already holds a membership, so the interesting path runs.
-        if f.ty.optional {
-            let mut m = BTreeMap::new();
-            m.insert("member_id".into(), Value::Str("M-2891".into()));
-            m.insert("points".into(), Value::Int(1_240));
-            m.insert("tier".into(), Value::Enum("Tier".into(), "bronze".into()));
-            state.insert(f.name.clone(), Value::Map(m));
-        } else {
-            state.insert(f.name.clone(), Value::Int(1_240));
+    // One wallet, shared with the tests and with the playground. Three separate
+    // inventions of "what is on this phone" meant three answers and no way to
+    // tell which one a bug was about.
+    let host = match std::fs::read_to_string("fixtures/wallet.json").map_err(|e| e.to_string()).and_then(|t| Fixture::parse(&t)) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("fixtures/wallet.json: {e}");
+            return ExitCode::FAILURE;
         }
-    }
+    };
+    let state = host.state();
 
-    let run = run_action(&program, &src, action, &state, &BTreeMap::new(), &StubWallet);
+    let run = run_action(&program, &src, action, &state, &BTreeMap::new(), &host);
     let r = &run.record;
 
     println!("{} v{} · {}", r.app, r.version, r.action);
@@ -113,6 +77,6 @@ fn main() -> ExitCode {
     for l in &run.leaves {
         println!("    {:<22} {:<30} {}", l.path, l.value.to_string(), &hex(&l.hash)[..8]);
     }
-    println!("\n  the wallet here is a stub: credentials signed by nobody, every batch approved");
+    println!("\n  fixtures/wallet.json — credentials signed by nobody, every batch approved");
     ExitCode::SUCCESS
 }
