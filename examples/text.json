@@ -1,0 +1,18 @@
+{
+  "_comment": "The text bundle, signed with the package. Code names a key and supplies slot values; it never assembles a sentence. A locale missing a key is a failed build, not a bug report — spec §9.",
+  "locales": ["th", "en"],
+  "keys": {
+    "balance":         { "th": "คุณมี {points} แต้ม",              "en": "You have {points} points" },
+    "scan":            { "th": "สแกนใบเสร็จ",                      "en": "Scan a receipt" },
+    "history":         { "th": "ประวัติ",                          "en": "History" },
+    "rewards":         { "th": "ของรางวัล",                        "en": "Rewards" },
+    "receiptLine":     { "th": "{merchant} · {at}",                "en": "{merchant} · {at}" },
+    "rewardLine":      { "th": "{name}",                           "en": "{name}" },
+    "accountLine":     { "th": "บัญชี {account}",                  "en": "Account {account}" },
+    "portfolioTotal":  { "th": "มูลค่ารวม {value} ({change})",     "en": "Total value {value} ({change})" },
+    "holdings":        { "th": "ถือครอง",                          "en": "Holdings" },
+    "accounts":        { "th": "บัญชี",                            "en": "Accounts" },
+    "holdingLine":     { "th": "{symbol} · {quantity} · {value}",  "en": "{symbol} · {quantity} · {value}" },
+    "proveAccredited": { "th": "พิสูจน์คุณสมบัติผู้ลงทุน",          "en": "Prove accreditation" }
+  }
+}
