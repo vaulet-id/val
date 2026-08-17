@@ -147,10 +147,10 @@ Against the pipeline in [§7](docs/spec.md), today:
 | capability analysis | **done** — name *and* argument, both directions |
 | trust analysis | **done** — subject types, refinement as syntactic containment |
 | determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
-| policy validation | **partial** — one disclosure per action, patch paths, no assignment |
+| policy validation | **done** — one disclosure per action, patch paths, no assignment, and no effect reading another's result |
 | capability report | **done** — derived from the code |
 | IR | not started, and not needed: both back ends read the typed AST |
-| evaluator | **done** — phases, effects as requests, traps |
+| evaluator | **done** — phases, effects as requests, traps, and screens resolved through host capabilities before anything is drawn |
 | canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
 | state Merkle root | **done** — `(path, value)` leaves, one per list element, with inclusion proofs |
 | execution record | **done** — code, input, roots, effects, context, outcome, **signed by the host** |

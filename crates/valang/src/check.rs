@@ -22,7 +22,65 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     patches_have_no_index(p, &mut d);
     updates_take_paths(p, &mut d);
     nothing_is_declared_twice(p, &mut d);
+    effects_do_not_read_each_other(p, &mut d);
     d
+}
+
+/// The effects in `execute` are one batch, offered together. There is no moment
+/// between them for one to read what another produced — and an application
+/// written as if there were is one whose author believes the state commits
+/// halfway, which is the belief §5 exists to remove.
+fn effects_do_not_read_each_other(p: &Program, d: &mut Vec<Diagnostic>) {
+    for a in &p.actions {
+        for block in &a.phases {
+            if block.phase != Phase::Execute {
+                continue;
+            }
+            let mut bound: HashSet<String> = HashSet::new();
+            for s in &block.stmts {
+                match s {
+                    Stmt::Let { name, value, span } => {
+                        let mut reads_effect = None;
+                        value.walk(&mut |e| {
+                            if let Expr::Call { callee, .. } = e {
+                                if let Some(path) = callee.path() {
+                                    if is_effect(&path) {
+                                        reads_effect = Some(path);
+                                    }
+                                }
+                            }
+                        });
+                        if let Some(path) = reads_effect {
+                            d.push(Diagnostic::error(
+                                *span,
+                                format!(
+                                    "`{path}` is requested, not performed, so there is nothing here to bind. The effects in `execute` are one batch the host takes or refuses whole — if one genuinely depends on another's outcome, that is two actions, and the person gets to see both"
+                                ),
+                            ));
+                        }
+                        bound.insert(name.clone());
+                    }
+                    Stmt::Effect { args, span, .. } => {
+                        for arg in args {
+                            arg.value.walk(&mut |e| {
+                                if let Expr::Ident { name, .. } = e {
+                                    if bound.contains(name) {
+                                        d.push(Diagnostic::error(
+                                            *span,
+                                            format!(
+                                                "`{name}` was bound from an earlier effect in this block, and an effect has no result until the host has taken the whole batch"
+                                            ),
+                                        ));
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 /// Two declarations of one name is the kind of mistake that produces a program

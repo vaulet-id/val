@@ -9,6 +9,7 @@ pub mod decode;
 pub mod eval;
 pub mod host;
 pub mod merkle;
+pub mod render;
 pub mod value;
 
 use std::collections::BTreeMap;

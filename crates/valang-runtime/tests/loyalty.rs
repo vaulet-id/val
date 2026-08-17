@@ -280,3 +280,72 @@ fn the_record_is_signed_whichever_way_the_run_went() {
     let b = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve: false });
     assert_ne!(a.record.signature, b.record.signature);
 }
+
+/// A screen declares and the host resolves — before anything is drawn, which is
+/// why there is no half-drawn screen and no prompt arriving mid-scroll. What
+/// comes back is a description for the host's toolkit, with the grades decided
+/// here rather than by the application, which has an interest in the answer.
+#[test]
+fn a_screen_is_resolved_by_the_host_before_it_is_drawn() {
+    use valang_runtime::render::render;
+
+    const WALLET: &str = include_str!("../../../examples/wallet.val");
+    let (program, diagnostics) = valang::analyse(WALLET);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+    struct Shop;
+    impl Host for Shop {
+        fn context(&self) -> Context {
+            Context { time_now: 0, random_uuid: String::new() }
+        }
+        fn credential(&self, _ty: &str, _p: Option<&str>) -> Option<BTreeMap<String, Value>> {
+            None
+        }
+        fn decide(&self, _e: &[EffectRequest]) -> Verdict {
+            Verdict::Approved
+        }
+        fn sign(&self, _b: &[u8]) -> Vec<u8> {
+            Vec::new()
+        }
+        fn device_key(&self) -> Vec<u8> {
+            Vec::new()
+        }
+        fn credentials_of(&self, ty: &str, policy: Option<&str>, limit: Option<i64>) -> Vec<BTreeMap<String, Value>> {
+            assert_eq!(ty, "PurchaseReceipt");
+            assert_eq!(policy, Some("ReceiptFromMerchant"), "the policy the screen named travels with the request");
+            assert_eq!(limit, Some(50), "and so does the bound that makes it finite");
+            (0..2)
+                .map(|i| {
+                    BTreeMap::from([
+                        ("merchant".to_string(), Value::Str(format!("Shop {i}"))),
+                        ("amount".to_string(), Value::Int(10_000)),
+                        ("purchased_at".to_string(), Value::Int(1_700_000_000_000)),
+                    ])
+                })
+                .collect()
+        }
+    }
+
+    let screen = render(&program, "Wallet", &BTreeMap::new(), &Shop).expect("renders");
+    assert_eq!(screen.name, "Wallet");
+    assert_eq!(screen.data.len(), 1);
+    assert_eq!(screen.data[0].grade, "issuer", "a policy was named, so an issuer stands behind it");
+    assert_eq!(screen.data[0].rows, 2);
+    assert!(!screen.tree.is_empty());
+
+    // `onTap` carries an action's name, not a value: evaluating it would look
+    // for something that is not there.
+    fn find<'a>(cs: &'a [valang_runtime::render::Component], kind: &str) -> Option<&'a valang_runtime::render::Component> {
+        for c in cs {
+            if c.kind == kind {
+                return Some(c);
+            }
+            if let Some(found) = find(&c.children, kind) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    let button = find(&screen.tree, "button").expect("the screen has a button");
+    assert_eq!(button.args.get("onTap"), Some(&Value::Str("ScanToEarn".into())));
+}

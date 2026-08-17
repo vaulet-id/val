@@ -46,6 +46,20 @@ pub trait Host {
     /// Asked once, with the whole batch, after the pure phases have run.
     fn decide(&self, effects: &[EffectRequest]) -> Verdict;
 
+    /// The credentials a screen declared, already checked against the policy it
+    /// named. A screen declares its data and the host resolves it *before*
+    /// drawing — which is why there is no half-drawn screen and no prompt
+    /// arriving mid-scroll.
+    fn credentials_of(&self, _ty: &str, _policy: Option<&str>, _limit: Option<i64>) -> Vec<BTreeMap<String, Value>> {
+        Vec::new()
+    }
+
+    /// A query answer. The host performed the presentation and holds the token;
+    /// the application never sees it, and never learns why a query failed.
+    fn query(&self, _audience: &str, _operation: &str) -> Vec<Value> {
+        Vec::new()
+    }
+
     /// Sign the execution record. The key stays here: the evaluator has no
     /// business holding one, and a runtime that could sign could sign a record
     /// of a run that did not happen.

@@ -216,6 +216,28 @@ action Bad {
     assert!(!e.contains("broker.quotes"), "{e}");
 }
 
+/// One batch, offered together, so there is no moment between two effects for
+/// one to read what the other produced. An application written as if there were
+/// is one whose author believes the state commits halfway.
+#[test]
+fn an_effect_cannot_read_another_effects_result() {
+    let src = r#"
+app "example.chain"
+version 1
+capabilities { credential.issue(Card) }
+credential Card { points: int }
+action Two {
+  execute {
+    const issued = credential.issue(Card { points: 1 })
+    credential.issue(Card { points: issued })
+  }
+}
+"#;
+    let e = errors(src).join("\n");
+    assert!(e.contains("requested, not performed, so there is nothing here to bind"), "{e}");
+    assert!(e.contains("that is two actions"), "{e}");
+}
+
 #[test]
 fn a_screen_declares_what_it_sees() {
     let (p, _) = analyse(WALLET);
