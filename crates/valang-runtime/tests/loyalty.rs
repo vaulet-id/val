@@ -289,8 +289,11 @@ fn the_record_is_signed_whichever_way_the_run_went() {
 fn a_screen_is_resolved_by_the_host_before_it_is_drawn() {
     use valang_runtime::render::render;
 
+    // The screen is the second file of the loyalty package, so it is analysed
+    // with the first — alone it presses an action that is not there.
     const WALLET: &str = include_str!("../../../examples/wallet.val");
-    let (program, diagnostics) = valang::analyse(WALLET);
+    let package = format!("{LOYALTY}\n{WALLET}");
+    let (program, diagnostics) = valang::analyse(&package);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
     struct Shop;
@@ -348,4 +351,61 @@ fn a_screen_is_resolved_by_the_host_before_it_is_drawn() {
     }
     let button = find(&screen.tree, "button").expect("the screen has a button");
     assert_eq!(button.args.get("onTap"), Some(&Value::Str("ScanToEarn".into())));
+}
+
+/// Totality bounds steps and not memory, so the sizes are the host's to carry
+/// and its to refuse. Checked before the state commits rather than while it is
+/// being built: a limit that stopped an action halfway would leave a state no
+/// phase produced.
+#[test]
+fn a_state_too_large_for_this_host_does_not_commit() {
+    use valang_runtime::host::Limits;
+
+    let src = r#"
+app "example.big"
+version 1
+capabilities { }
+state { note: string default "" }
+action Grow {
+  update { note: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+}
+"#;
+    let (program, diagnostics) = valang::analyse(src);
+    assert!(diagnostics.iter().all(|d| d.severity != valang::Severity::Error), "{diagnostics:?}");
+
+    struct Tiny;
+    impl Host for Tiny {
+        fn context(&self) -> Context {
+            Context { time_now: 0, random_uuid: String::new() }
+        }
+        fn limits(&self) -> Limits {
+            Limits { max_list: 4, max_string_bytes: 8, max_state_bytes: 64 }
+        }
+        fn credential(&self, _t: &str, _p: Option<&str>) -> Option<BTreeMap<String, Value>> {
+            None
+        }
+        fn decide(&self, _e: &[EffectRequest]) -> Verdict {
+            Verdict::Approved
+        }
+        fn sign(&self, _b: &[u8]) -> Vec<u8> {
+            Vec::new()
+        }
+        fn device_key(&self) -> Vec<u8> {
+            Vec::new()
+        }
+    }
+
+    let before = BTreeMap::from([("note".to_string(), Value::Str(String::new()))]);
+    let run = run_action(&program, src, "Grow", &before, &BTreeMap::new(), &Tiny);
+
+    match &run.outcome {
+        Outcome::Defect(why) => assert!(why.contains("bytes of text"), "{why}"),
+        other => panic!("a state this host cannot carry should not commit, got {other:?}"),
+    }
+    assert_eq!(run.next_state, before, "and nothing moved");
+    assert_eq!(run.record.previous_root, run.record.next_root);
+
+    // The same program under a host that can carry it commits.
+    let ok = run_action(&program, src, "Grow", &before, &BTreeMap::new(), &Wallet { approve: true });
+    assert_eq!(ok.outcome, Outcome::Committed);
 }

@@ -23,7 +23,103 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     updates_take_paths(p, &mut d);
     nothing_is_declared_twice(p, &mut d);
     effects_do_not_read_each_other(p, &mut d);
+    policies_name_an_anchor(p, &mut d);
+    navigation_goes_somewhere(p, &mut d);
     d
+}
+
+/// A trust policy without an anchor trusts nobody in particular, which reads
+/// like a policy and is not one. Resolving the anchor is the host's — the
+/// language cannot fetch a chain — but *having* one is checkable here, and a
+/// policy that forgot is a policy that will be discovered by a credential it
+/// should have refused.
+fn policies_name_an_anchor(p: &Program, d: &mut Vec<Diagnostic>) {
+    for t in &p.trusts {
+        match &t.anchor {
+            None => d.push(Diagnostic::error(
+                t.span,
+                format!(
+                    "`{}` names no anchor, so it says which predicates must hold and nothing about who may satisfy them. A signature that is valid is a signature by somebody",
+                    t.name
+                ),
+            )),
+            Some(a) if a.trim().is_empty() => d.push(Diagnostic::error(
+                t.span,
+                format!("`{}` has an empty anchor", t.name),
+            )),
+            Some(_) => {}
+        }
+        if t.requires.is_empty() {
+            d.push(Diagnostic::warning(
+                t.span,
+                format!(
+                    "`{}` requires nothing, so verifying against it establishes only that the credential exists",
+                    t.name
+                ),
+            ));
+        }
+    }
+}
+
+/// `navigate` sends somebody somewhere. Somewhere has to be a screen this
+/// package declares — a name that resolves at run time or not at all is how an
+/// application takes a person to a blank frame.
+fn navigation_goes_somewhere(p: &Program, d: &mut Vec<Diagnostic>) {
+    let screens: HashSet<&str> = p.screens.iter().map(|s| s.name.as_str()).collect();
+    let mut check = |args: &[Arg], span| {
+        let Some(target) = args.first().and_then(|a| a.value.path()) else {
+            d.push(Diagnostic::error(span, "`navigate` names a screen"));
+            return;
+        };
+        if !screens.contains(target.as_str()) {
+            d.push(Diagnostic::error(
+                span,
+                format!("`{target}` is not a screen this package declares"),
+            ));
+        }
+    };
+    for a in &p.actions {
+        for block in &a.phases {
+            walk_stmts(&block.stmts, &mut |s| {
+                if let Stmt::Effect { name, args, span, .. } = s {
+                    if name == "navigate" {
+                        check(args, *span);
+                    }
+                }
+            });
+        }
+    }
+    for s in &p.screens {
+        for n in &s.tree {
+            walk_ui(n, &mut |node| {
+                for a in &node.args {
+                    if a.name.as_deref() == Some("onTap") {
+                        if let Some(target) = a.value.path() {
+                            // `onTap` names an action or a screen; either has to
+                            // exist, and which one it is decides what happens.
+                            if !screens.contains(target.as_str())
+                                && !p.actions.iter().any(|x| x.name == target)
+                            {
+                                d.push(Diagnostic::error(
+                                    a.span,
+                                    format!(
+                                        "`{target}` is neither an action nor a screen this package declares. A press names one of them and nothing else"
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+}
+
+fn walk_ui(n: &UiNode, f: &mut impl FnMut(&UiNode)) {
+    f(n);
+    for c in &n.children {
+        walk_ui(c, f);
+    }
 }
 
 /// The effects in `execute` are one batch, offered together. There is no moment

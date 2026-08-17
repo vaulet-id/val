@@ -16,7 +16,7 @@ export type SourceFile = { path: string; name: string; source: string; note: str
 export const files: SourceFile[] = [
   { path: 'examples/loyalty.val', name: 'loyalty.val', source: loyalty, note: 'every phase, both verifiability types' },
   { path: 'examples/portfolio.val', name: 'portfolio.val', source: portfolio, note: 'no state, no issuance, a proof that discloses nothing' },
-  { path: 'examples/wallet.val', name: 'wallet.val', source: wallet, note: 'a screen — declared data, a press that names an action' },
+  { path: 'examples/wallet.val', name: 'wallet.val', source: wallet, note: 'a screen — the second file of the loyalty package' },
   { path: 'examples/door.val', name: 'door.val', source: door, note: 'prove an age, disclose nothing' },
   { path: 'examples/rejected.val', name: 'rejected.val', source: rejected, note: 'programs that must not compile' },
   { path: 'examples/text.json', name: 'text.json', source: textBundle, note: 'the signed text bundle' },

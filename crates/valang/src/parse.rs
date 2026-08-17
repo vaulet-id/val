@@ -105,10 +105,20 @@ impl Parser {
             let t = self.peek().clone();
             match t.text.as_str() {
                 "app" => {
+                    let at = self.peek().span;
                     self.bump();
                     self.skip_newlines();
                     if self.peek().kind == Kind::Str {
-                        p.app = Some(self.bump().text);
+                        let name = self.bump().text;
+                        if let Some(first) = &p.app {
+                            if *first != name {
+                                self.diagnostics.push(Diagnostic::error(
+                                    at,
+                                    format!("this package already calls itself `{first}`, and this file calls it `{name}`"),
+                                ));
+                            }
+                        }
+                        p.app = Some(name);
                     } else {
                         let bad = self.bump();
                         self.diagnostics.push(Diagnostic::error(
@@ -122,8 +132,22 @@ impl Parser {
                     p.version = Some(self.bump().text);
                 }
                 "capabilities" => {
+                    let at = self.peek().span;
                     self.bump();
-                    p.capabilities = self.capabilities();
+                    let more = self.capabilities();
+                    // One block per package. A package is several files sharing
+                    // one scope, and "which file says what this app may do" is
+                    // exactly the question that has to have one answer —
+                    // merging them quietly would answer it in whatever order
+                    // the files were read.
+                    if p.capabilities.is_empty() {
+                        p.capabilities = more;
+                    } else {
+                        self.diagnostics.push(Diagnostic::error(
+                            at,
+                            "a package declares its capabilities once. This is the second block, and a person consented to a list rather than to a sum of lists",
+                        ));
+                    }
                 }
                 "enum" => p.enums.push(self.enum_decl()),
                 "credential" => p.credentials.push(self.credential_decl()),
@@ -554,6 +578,18 @@ impl Parser {
                 let args = if self.at("(") { self.args() } else { Vec::new() };
                 let body = if self.at("{") { self.stmt_block() } else { Vec::new() };
                 return Some(Stmt::Effect { name, args, body, span });
+            }
+            // `navigate Home` — an effect the host performs, and the only one
+            // that changes what somebody is looking at.
+            if name == "navigate" {
+                let args = if self.at("(") {
+                    self.args()
+                } else {
+                    let span = self.peek().span;
+                    let value = self.expr(0);
+                    vec![Arg { name: None, value, span }]
+                };
+                return Some(Stmt::Effect { name, args, body: Vec::new(), span });
             }
             // `disclose x` / `prove x` inside a `present` block.
             if name == "disclose" || name == "prove" {

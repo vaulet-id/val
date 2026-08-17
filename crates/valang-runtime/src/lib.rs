@@ -19,7 +19,7 @@ use valang::ast::{Phase, Program, Stmt};
 
 use canonical::{Canonical, DeterministicCbor};
 use eval::{Eval, Trap};
-use host::{Context, EffectRequest, Host, Verdict};
+use host::{Context, EffectRequest, Host, Limits, Verdict};
 use merkle::{Hash, Leaf};
 use value::Value;
 
@@ -65,6 +65,42 @@ pub struct ExecutionRecord {
 /// verifier re-encodes and checks — so it carries the outcome too: "refused" is
 /// part of what happened, and a record that only attested to successes would be
 /// evidence of a different thing than it claims.
+fn within(state: &State, enc: &DeterministicCbor, limits: Limits) -> Result<(), String> {
+    fn walk(v: &Value, limits: Limits, path: &str) -> Result<(), String> {
+        match v {
+            Value::List(items) if items.len() > limits.max_list => Err(format!(
+                "`{path}` would hold {} items and this host carries at most {}. Totality bounds how many steps a program takes and says nothing about how large a value becomes",
+                items.len(),
+                limits.max_list
+            )),
+            Value::Str(s) if s.len() > limits.max_string_bytes => Err(format!(
+                "`{path}` would hold {} bytes of text and this host carries at most {}",
+                s.len(),
+                limits.max_string_bytes
+            )),
+            Value::List(items) => items.iter().try_for_each(|i| walk(i, limits, path)),
+            Value::Map(m) => m.iter().try_for_each(|(k, v)| walk(v, limits, &format!("{path}.{k}"))),
+            Value::Credential { claims, .. } => {
+                claims.iter().try_for_each(|(k, v)| walk(v, limits, &format!("{path}.{k}")))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    for (k, v) in state {
+        walk(v, limits, k)?;
+    }
+    let bytes = enc.encode(&Value::Map(state.clone()));
+    if bytes.len() > limits.max_state_bytes {
+        return Err(format!(
+            "this state would be {} bytes and this host carries at most {}",
+            bytes.len(),
+            limits.max_state_bytes
+        ));
+    }
+    Ok(())
+}
+
 pub fn encode_record(r: &ExecutionRecord) -> Vec<u8> {
     let mut m = BTreeMap::new();
     m.insert("app".into(), Value::Str(r.app.clone()));
@@ -218,6 +254,14 @@ pub fn run_action(
             Run { outcome: Outcome::Refused(why), next_state: state.clone(), effects, record, leaves: previous }
         }
         Verdict::Approved => {
+            // Checked before the state is committed rather than while it is
+            // being built: a limit that stops an action halfway leaves a state
+            // that no phase produced.
+            if let Err(why) = within(&next, &enc, host.limits()) {
+                record.outcome = Outcome::Defect(why.clone());
+                record.signature = host.sign(&encode_record(&record));
+                return Run { outcome: Outcome::Defect(why), next_state: state.clone(), effects, record, leaves: previous };
+            }
             let leaves = merkle::leaves(&next, &enc);
             record.next_root = merkle::root(&leaves);
             record.effects_executed = effects.len();

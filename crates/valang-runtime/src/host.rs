@@ -35,8 +35,33 @@ pub enum Verdict {
     Refused(String),
 }
 
+/// What the host will carry. Totality bounds the number of steps a program
+/// takes and says nothing about how large a value may become — a `fold` whose
+/// accumulator grows is finite in steps and unbounded in memory. So the bounds
+/// live here, where they can be honest, rather than being implied by a word
+/// that does not cover them (§6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    pub max_list: usize,
+    pub max_string_bytes: usize,
+    /// The whole of a state, canonically encoded.
+    pub max_state_bytes: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        // Numbers a phone can hold without thinking about it. A host with a
+        // reason picks its own; a host with no reason should not have to.
+        Limits { max_list: 4_096, max_string_bytes: 64 * 1024, max_state_bytes: 1024 * 1024 }
+    }
+}
+
 pub trait Host {
     fn context(&self) -> Context;
+
+    fn limits(&self) -> Limits {
+        Limits::default()
+    }
 
     /// The credential the person chose, already checked against the policy the
     /// program named. The runtime does not verify signatures — it could not,

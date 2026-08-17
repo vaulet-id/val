@@ -23,9 +23,18 @@ const REJECTED: &str = include_str!("../../../examples/rejected.val");
 
 #[test]
 fn the_valid_examples_have_nothing_to_say_about_them() {
-    for (name, src) in [("loyalty", LOYALTY), ("door", DOOR), ("wallet", WALLET), ("portfolio", PORTFOLIO)] {
+    // `wallet.val` presses an action `loyalty.val` declares: it is the second
+    // file of that package, not a program on its own. A package is several
+    // files sharing one scope, so checking either alone would be checking half
+    // of it — and the half would fail for the right reason.
+    let loyalty_package = format!("{LOYALTY}\n{WALLET}");
+    for (name, src) in [
+        ("door", DOOR),
+        ("portfolio", PORTFOLIO),
+        ("the loyalty package", loyalty_package.as_str()),
+    ] {
         let e = errors(src);
-        assert!(e.is_empty(), "{name}.val should compile clean, got:\n  {}", e.join("\n  "));
+        assert!(e.is_empty(), "{name} should compile clean, got:\n  {}", e.join("\n  "));
     }
 }
 
@@ -238,9 +247,20 @@ action Two {
     assert!(e.contains("that is two actions"), "{e}");
 }
 
+/// One `capabilities` block per package, and one `app`. A person consented to a
+/// list rather than to a sum of lists, and which file said what would otherwise
+/// depend on the order they were read in.
+#[test]
+fn a_package_says_what_it_may_do_once() {
+    let e = errors(&format!("{LOYALTY}\n{LOYALTY}")).join("\n");
+    assert!(e.contains("declares its capabilities once"), "{e}");
+    let renamed = errors(&format!("{LOYALTY}\napp \"somebody.else\"\n")).join("\n");
+    assert!(renamed.contains("already calls itself"), "{renamed}");
+}
+
 #[test]
 fn a_screen_declares_what_it_sees() {
-    let (p, _) = analyse(WALLET);
+    let (p, _) = analyse(&format!("{LOYALTY}\n{WALLET}"));
     assert_eq!(p.screens.len(), 1);
     let s = &p.screens[0];
     assert_eq!(s.data.len(), 1);

@@ -145,7 +145,7 @@ Against the pipeline in [§7](docs/spec.md), today:
 | semantic analysis | **done** — scopes, names, narrowing |
 | type checking | **done** — `Verified<P>`, provenance, nullability, arity, claim types |
 | capability analysis | **done** — name *and* argument, both directions |
-| trust analysis | **done** — subject types, refinement as syntactic containment |
+| trust analysis | **done** — subject types, anchors, refinement as syntactic containment |
 | determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
 | policy validation | **done** — one disclosure per action, patch paths, no assignment, and no effect reading another's result |
 | capability report | **done** — derived from the code |

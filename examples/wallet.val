@@ -5,12 +5,10 @@
 // state — the host ships all three, so accessibility, dark mode and Thai text
 // are earned once instead of broken forty times.
 
-app "th.co.codefin.loyalty"
-version 1
-
-capabilities {
-  credential.read(PurchaseReceipt)
-}
+// The second file of the loyalty package: one `app`, one `version`, one
+// `capabilities` block, all of them in `loyalty.val`. A package is several files
+// sharing one scope, and the list of what this application may do is not a sum
+// of lists — a person consented to one.
 
 screen Wallet {
   // Declared, not fetched. The host resolves this before it draws, so there is
