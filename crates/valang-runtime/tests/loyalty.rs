@@ -46,6 +46,13 @@ impl Host for Wallet {
             Verdict::Refused("the person said no".into())
         }
     }
+    fn sign(&self, bytes: &[u8]) -> Vec<u8> {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(bytes).to_vec()
+    }
+    fn device_key(&self) -> Vec<u8> {
+        b"test-device".to_vec()
+    }
 }
 
 fn member(points: i64, tier: &str) -> Value {
@@ -245,4 +252,31 @@ fn one_field_can_be_proved_without_opening_the_others() {
     let other = root(&leaves(&start(), &enc));
     let honest = prove(&ls, "member.points").unwrap();
     assert!(!verify_inclusion(&honest, &other, &enc));
+}
+
+/// A refused run is signed too. The record is evidence of what happened, and
+/// "the host would not take this batch" is something that happened — a record
+/// that only attested to successes would be evidence of a different thing than
+/// it claims to be.
+#[test]
+fn the_record_is_signed_whichever_way_the_run_went() {
+    use valang_runtime::encode_record;
+
+    let (program, _) = valang::analyse(LOYALTY);
+    for approve in [true, false] {
+        let run = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve });
+        assert!(!run.record.signature.is_empty(), "unsigned with approve={approve}");
+        assert_eq!(run.record.device_key, b"test-device".to_vec());
+
+        // The outcome is inside the signed bytes, so the two runs cannot be
+        // swapped for one another.
+        let bytes = encode_record(&run.record);
+        assert!(!bytes.is_empty());
+        let sig = Wallet { approve }.sign(&bytes);
+        assert_eq!(sig, run.record.signature, "the signature is over these bytes");
+    }
+
+    let a = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve: true });
+    let b = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve: false });
+    assert_ne!(a.record.signature, b.record.signature);
 }

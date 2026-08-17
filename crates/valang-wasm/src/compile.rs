@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use valang::ast::*;
 use wasm_encoder::{
-    CodeSection, ExportSection, Function, FunctionSection, ImportSection, Instruction, Module as Enc,
-    TypeSection, ValType,
+    CodeSection, CustomSection, ExportSection, Function, FunctionSection, ImportSection, Instruction,
+    Module as Enc, TypeSection, ValType,
 };
 
 /// The constants a module needs, in the order the module refers to them. The
@@ -154,7 +154,86 @@ pub fn compile_function(program: &Program) -> Module {
     module.section(&exports);
     module.section(&code);
 
+    // The constants travel inside the module. Handing them alongside made the
+    // module something that only ran next to the compiler that produced it,
+    // which is not a thing anybody can ship, sign or hash on its own.
+    let pool = encode_konsts(&ctx.konsts);
+    module.section(&CustomSection { name: KONST_SECTION.into(), data: pool.into() });
+
     Module { bytes: module.finish(), konsts: ctx.konsts, functions: names }
+}
+
+/// The custom section the constants live in. A custom section is ignored by any
+/// Wasm runtime that does not know it, which is the right shape: a host that
+/// cannot read the pool cannot run the module either, and will say so.
+pub const KONST_SECTION: &str = "val.konsts";
+
+fn encode_konsts(ks: &[Konst]) -> Vec<u8> {
+    use valang_runtime::canonical::{Canonical, DeterministicCbor};
+    use valang_runtime::value::Value;
+
+    let items: Vec<Value> = ks
+        .iter()
+        .map(|k| match k {
+            Konst::Int(i) => Value::Int(*i),
+            Konst::Str(s) => Value::Str(s.clone()),
+            Konst::Bool(b) => Value::Bool(*b),
+            Konst::Enum(e, m) => Value::Enum(e.clone(), m.clone()),
+        })
+        .collect();
+    DeterministicCbor.encode(&Value::List(items))
+}
+
+/// Read the pool back out of a module somebody handed you.
+pub fn konsts_of(bytes: &[u8]) -> Option<Vec<Konst>> {
+    use valang_runtime::decode::decode;
+    use valang_runtime::value::Value;
+
+    let data = custom_section(bytes, KONST_SECTION)?;
+    let Value::List(items) = decode(data).ok()? else { return None };
+    items
+        .into_iter()
+        .map(|v| match v {
+            Value::Int(i) => Some(Konst::Int(i)),
+            Value::Str(s) => Some(Konst::Str(s)),
+            Value::Bool(b) => Some(Konst::Bool(b)),
+            Value::Enum(e, m) => Some(Konst::Enum(e, m)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn custom_section<'a>(bytes: &'a [u8], want: &str) -> Option<&'a [u8]> {
+    let mut i = 8; // magic + version
+    while i < bytes.len() {
+        let id = *bytes.get(i)?;
+        i += 1;
+        let (len, used) = leb(bytes, i)?;
+        i += used;
+        let body = bytes.get(i..i + len)?;
+        i += len;
+        if id == 0 {
+            let (name_len, used) = leb(body, 0)?;
+            let name = std::str::from_utf8(body.get(used..used + name_len)?).ok()?;
+            if name == want {
+                return body.get(used + name_len..);
+            }
+        }
+    }
+    None
+}
+
+fn leb(bytes: &[u8], mut i: usize) -> Option<(usize, usize)> {
+    let (mut out, mut shift, start) = (0usize, 0u32, i);
+    loop {
+        let b = *bytes.get(i)?;
+        i += 1;
+        out |= ((b & 0x7f) as usize) << shift;
+        if b & 0x80 == 0 {
+            return Some((out, i - start));
+        }
+        shift += 7;
+    }
 }
 
 fn count_lets(body: &[Stmt]) -> u32 {

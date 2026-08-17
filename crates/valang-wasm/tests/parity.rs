@@ -109,3 +109,28 @@ function double(n: int): int { return n * n }
     assert!(err.contains("overflow"), "{err}");
     assert!(walked(src, "double", &[Value::Int(i64::MAX)]).is_err());
 }
+
+/// A module has to be a thing somebody can ship. The constants used to travel
+/// beside it, which made it something that only ran next to the compiler that
+/// produced it — not something to sign, hash, or hand to a host.
+#[test]
+fn the_constants_travel_inside_the_module() {
+    use valang_wasm::konsts_of;
+
+    let (program, _) = valang::analyse(LOYALTY);
+    let module = compile_function(&program);
+    let recovered = konsts_of(&module.bytes).expect("the pool is in the module");
+    assert_eq!(recovered, module.konsts);
+
+    // And running from only the bytes gives the same answer as running from the
+    // compiler's own copy.
+    let from_bytes = valang_wasm::Module {
+        bytes: module.bytes.clone(),
+        konsts: recovered,
+        functions: module.functions.clone(),
+    };
+    assert_eq!(
+        run_function(&from_bytes, "tierFor", &[Value::Int(5_000)]).unwrap(),
+        Value::Enum("Tier".into(), "silver".into())
+    );
+}

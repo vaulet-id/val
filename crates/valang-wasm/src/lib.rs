@@ -13,5 +13,5 @@
 pub mod compile;
 pub mod run;
 
-pub use compile::{compile_function, Module};
+pub use compile::{compile_function, konsts_of, Module};
 pub use run::{run_function, run_with_fuel, Wasm};

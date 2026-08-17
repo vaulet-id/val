@@ -11,3 +11,6 @@ valang.workspace = true
 # Hashing is a specification and a security boundary; both are reasons not to
 # write one here.
 sha2 = "0.10"
+
+[dev-dependencies]
+sha2 = "0.10"

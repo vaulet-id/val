@@ -12,7 +12,7 @@ use std::process::ExitCode;
 use valang_runtime::host::{Context, EffectRequest, Host, Verdict};
 use valang_runtime::merkle::hex;
 use valang_runtime::value::Value;
-use valang_runtime::{run_action, Outcome};
+use valang_runtime::{encode_record, run_action, Outcome};
 
 struct StubWallet;
 
@@ -36,6 +36,20 @@ impl Host for StubWallet {
     fn decide(&self, _effects: &[EffectRequest]) -> Verdict {
         Verdict::Approved
     }
+    // A stub, and it says so in the output: a real device signs with a key in
+    // secure hardware, and this hashes. Enough to show the record has a shape
+    // that is signed over, not enough to be believed by anybody.
+    fn sign(&self, bytes: &[u8]) -> Vec<u8> {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(bytes).to_vec()
+    }
+    fn device_key(&self) -> Vec<u8> {
+        b"stub-device".to_vec()
+    }
+}
+
+fn hex_bytes(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 fn main() -> ExitCode {
@@ -93,6 +107,7 @@ fn main() -> ExitCode {
     for e in &r.effects_requested {
         println!("    {} {}{}", e.capability, match &e.payload { Value::Credential { ty, claims, .. } => format!("{ty} {}", Value::Map(claims.clone())), other => other.to_string() }, if e.reversible { "" } else { "   (irreversible)" });
     }
+    println!("  record         {} bytes, signed {}", encode_record(r).len(), &hex_bytes(&r.signature)[..16]);
     println!("  state leaves");
     for l in &run.leaves {
         println!("    {:<22} {:<30} {}", l.path, l.value.to_string(), &hex(&l.hash)[..8]);

@@ -153,10 +153,10 @@ Against the pipeline in [§7](docs/spec.md), today:
 | evaluator | **done** — phases, effects as requests, traps |
 | canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
 | state Merkle root | **done** — `(path, value)` leaves, one per list element, with inclusion proofs |
-| execution record | **done** — code, input, roots, effects, context, outcome |
+| execution record | **done** — code, input, roots, effects, context, outcome, **signed by the host** |
 | manifest, text bundle | **done** — a locale missing a key refuses the package |
 | integrity, signature, `.va` | **done** — written and read back; a strict decoder refuses any non-canonical encoding |
-| Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel; actions stay with the host, since `execute` describes effects rather than performing them |
+| Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel, and the module carries its own constants; actions stay with the host, since `execute` describes effects rather than performing them |
 
 ```
 cargo run --bin valc   -- examples/loyalty.val

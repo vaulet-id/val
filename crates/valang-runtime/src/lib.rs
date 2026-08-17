@@ -54,6 +54,55 @@ pub struct ExecutionRecord {
     pub effects_executed: usize,
     pub context: Context,
     pub outcome: Outcome,
+    /// Over `encode_record` of everything above. Absent only when a run ended
+    /// before there was anything to attest to.
+    pub signature: Vec<u8>,
+    pub device_key: Vec<u8>,
+}
+
+/// The record's bytes, canonically. This is what the device signs and what a
+/// verifier re-encodes and checks — so it carries the outcome too: "refused" is
+/// part of what happened, and a record that only attested to successes would be
+/// evidence of a different thing than it claims.
+pub fn encode_record(r: &ExecutionRecord) -> Vec<u8> {
+    let mut m = BTreeMap::new();
+    m.insert("app".into(), Value::Str(r.app.clone()));
+    m.insert("version".into(), Value::Str(r.version.clone()));
+    m.insert("action".into(), Value::Str(r.action.clone()));
+    m.insert("code".into(), Value::Bytes(r.code_hash.to_vec()));
+    m.insert("input".into(), Value::Bytes(r.input_hash.to_vec()));
+    m.insert("previous_root".into(), Value::Bytes(r.previous_root.to_vec()));
+    m.insert("next_root".into(), Value::Bytes(r.next_root.to_vec()));
+    m.insert("policies".into(), Value::List(r.policies.iter().cloned().map(Value::Str).collect()));
+    m.insert("capabilities".into(), Value::List(r.capabilities.iter().cloned().map(Value::Str).collect()));
+    m.insert(
+        "effects".into(),
+        Value::List(
+            r.effects_requested
+                .iter()
+                .map(|e| {
+                    let mut em = BTreeMap::new();
+                    em.insert("capability".to_string(), Value::Str(e.capability.clone()));
+                    em.insert("payload".to_string(), e.payload.clone());
+                    em.insert("reversible".to_string(), Value::Bool(e.reversible));
+                    Value::Map(em)
+                })
+                .collect(),
+        ),
+    );
+    m.insert("executed".into(), Value::Int(r.effects_executed as i64));
+    m.insert("time".into(), Value::Int(r.context.time_now));
+    m.insert("uuid".into(), Value::Str(r.context.random_uuid.clone()));
+    m.insert(
+        "outcome".into(),
+        Value::Str(match &r.outcome {
+            Outcome::Committed => "committed".into(),
+            Outcome::Refused(w) => format!("refused: {w}"),
+            Outcome::Failed(w) => format!("failed: {w}"),
+            Outcome::Defect(w) => format!("defect: {w}"),
+        }),
+    );
+    DeterministicCbor.encode(&Value::Map(m))
 }
 
 pub struct Run {
@@ -96,9 +145,12 @@ pub fn run_action(
         effects_executed: 0,
         context: context.clone(),
         outcome: Outcome::Defect("no such action".into()),
+        signature: Vec::new(),
+        device_key: host.device_key(),
     };
 
     let Some(action) = action else {
+        record.signature = host.sign(&encode_record(&record));
         return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: Vec::new(), record, leaves: previous };
     };
 
@@ -145,6 +197,7 @@ pub fn run_action(
                     Trap::Unsupported(m) => Outcome::Defect(m),
                 };
                 record.effects_requested = ev.effects.clone();
+                record.signature = host.sign(&encode_record(&record));
                 return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: ev.effects, record, leaves: previous };
             }
         }
@@ -160,6 +213,7 @@ pub fn run_action(
     match host.decide(&effects) {
         Verdict::Refused(why) => {
             record.outcome = Outcome::Refused(why.clone());
+            record.signature = host.sign(&encode_record(&record));
             Run { outcome: Outcome::Refused(why), next_state: state.clone(), effects, record, leaves: previous }
         }
         Verdict::Approved => {
@@ -167,6 +221,7 @@ pub fn run_action(
             record.next_root = merkle::root(&leaves);
             record.effects_executed = effects.len();
             record.outcome = Outcome::Committed;
+            record.signature = host.sign(&encode_record(&record));
             Run { outcome: Outcome::Committed, next_state: next, effects, record, leaves }
         }
     }

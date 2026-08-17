@@ -45,4 +45,13 @@ pub trait Host {
 
     /// Asked once, with the whole batch, after the pure phases have run.
     fn decide(&self, effects: &[EffectRequest]) -> Verdict;
+
+    /// Sign the execution record. The key stays here: the evaluator has no
+    /// business holding one, and a runtime that could sign could sign a record
+    /// of a run that did not happen.
+    fn sign(&self, bytes: &[u8]) -> Vec<u8>;
+
+    /// The public half, so a verifier can check the signature without asking
+    /// the device for anything.
+    fn device_key(&self) -> Vec<u8>;
 }
