@@ -78,6 +78,53 @@ not privileged in the language. Where the language needs something only a host
 can supply — a canonical encoding, a clock, randomness, trust resolution — the
 interface is specified here and the host implements it.
 
+### Said against the thing it resembles
+
+A blockchain answers three questions: what execution means, who decides it
+happened, and where the state lives. So does this, differently.
+
+```
+blockchain = verifiable state machine + distributed consensus
+                                      + replicated global state
+
+VAL        = verifiable state machine + capability security
+                                      + private local state
+                                      + transferable evidence
+                                      + existing authority
+```
+
+The first term is the same, and it is why this smells like a contract language:
+determinism and totality are what independent re-execution requires. The
+difference is who re-executes. A blockchain is re-run by everyone; a VAL action
+is re-run by whoever you handed the evidence to.
+
+**Evidence replaces replication, not consensus.** A blockchain copies the state
+so anyone can check it. This keeps the state and hands out proofs. Same goal,
+opposite direction of travel.
+
+**Capability security does not replace consensus**, and pretending otherwise
+would hide a real gap. They sit on different axes: consensus settles, after the
+fact, whose version of events counts; capabilities decide, beforehand, what may
+be attempted at all. The thing consensus provides that this does not is
+protection against a person rewriting their own history — what stands in for it
+is a verifier's memory of the last root it saw, and an issuer's signature over
+the root a credential derived from (§7). That is weaker, deliberately.
+
+**The last term is the one that is easy to miss.** Mining and staking exist to
+manufacture an authority where none exists — a world with no one entitled to say
+what is true. VAL never manufactures one, because the authorities are already
+there: a state's CSCA, a licensed broker, an employer, a bank.
+
+> A blockchain produces authority where there is none. VAL transmits authority
+> that already exists.
+
+Which draws the boundary of this design honestly: nothing here provides
+consensus, so **bearer value passing between strangers is out of scope.** While
+points are only good with whoever issued them there is a single party entitled
+to settle disputes about them, and no ledger is needed. The day they are
+transferable and honoured by merchants who do not trust the issuer, this
+paragraph stops being true and the question has to be asked again.
+
 ### Who is trusted
 
 **The application is not.** Its publisher wrote code we did not review line by
@@ -1106,11 +1153,19 @@ verdict do.
 6. **`fold` and totality.** A fold whose accumulator grows is bounded in steps
    but not in memory. *Recommended:* bound value sizes at the host interface,
    and say so there rather than pretending totality covers it.
-7. **How is a list laid out in the state tree?** One leaf per element proves a
+7. **What stops a person spending the same credential twice?** Rolling back state
+   and rescanning the same receipt is a double-spend with one party entitled to
+   care, so the answer is a nullifier the issuer records rather than a ledger.
+   *Recommended:* a nullifier computed inside the proof from the holder's secret
+   and the scheme's identifier — a naive "receipt id already used" list links
+   every presentation to the one before it and undoes the unlinkability the
+   proof system was bought for. It needs one hash gadget in the provable subset,
+   not an architecture.
+8. **How is a list laid out in the state tree?** One leaf per element proves a
    single entry and reveals the length; one leaf for the whole list hides the
    length and proves nothing selectively. *Recommended:* per element, with
    padding to a declared bound where the length is itself sensitive.
-8. **`type` is declared in §2 and specified nowhere.** Plain records exist, and
+9. **`type` is declared in §2 and specified nowhere.** Plain records exist, and
    whether they may hold verified and unverified data side by side is a
    provenance question (§4), not a syntax one.
 
