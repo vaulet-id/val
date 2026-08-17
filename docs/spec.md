@@ -941,6 +941,11 @@ Keeping the source in the package is not optional when this happens — see §1,
 *Who is trusted*. Bytecode alone would mean the host verifying a blob whose
 correspondence to reviewed source only the publisher can attest.
 
+**Both tails read the typed AST.** There is no IR between them, and adding one
+would be adding a second thing to keep faithful to the first. A second back end
+is checked one way only: it must compute what the first computes, over the same
+source.
+
 **Wasm is the destination, reached when there is a reason** — untrusted
 third-party code needing hard fuel limits and signed bytecode. The front end
 does not change; only the back end.

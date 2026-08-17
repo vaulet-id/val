@@ -149,14 +149,14 @@ Against the pipeline in [§7](docs/spec.md), today:
 | determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
 | policy validation | **partial** — one disclosure per action, patch paths, no assignment |
 | capability report | **done** — derived from the code |
-| IR | not started (v1 skips it) |
+| IR | not started, and not needed: both back ends read the typed AST |
 | evaluator | **done** — phases, effects as requests, traps |
 | canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
 | state Merkle root | **done** — `(path, value)` leaves, one per list element |
 | execution record | **done** — code, input, roots, effects, context, outcome |
 | manifest, text bundle | **done** — a locale missing a key refuses the package |
 | integrity, signature, `.va` | **done** — Ed25519 over a deterministic encoding, reproducible |
-| Wasm back end | not started, and not needed until untrusted code needs fuel limits |
+| Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel; actions stay with the host, since `execute` describes effects rather than performing them |
 
 ```
 cargo run --bin valc   -- examples/loyalty.val

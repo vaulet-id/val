@@ -1,0 +1,15 @@
+[package]
+name = "valang-wasm"
+description = "A Wasm back end for VAL: the same typed AST, emitted as a module instead of walked"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+valang.workspace = true
+valang-runtime = { path = "../valang-runtime" }
+wasm-encoder = "0.221"
+# iOS forbids JIT, so the runtime has to interpret. One integration covers iOS,
+# Android and desktop; browsers come free.
+wasmi = "0.40"
