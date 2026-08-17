@@ -811,6 +811,70 @@ That is the same trade as never drawing: control given up in exchange for
 behaviour that is correct everywhere without each application getting it right
 separately.
 
+### Not everything on a screen is a credential
+
+Prices, news, a catalogue, a transaction history — data that is fetched to be
+looked at. Issuing a credential for each of them would be absurd, and the volume
+and volatility is exactly why this tier exists.
+
+```
+screen Portfolio {
+  data {
+    holdings: credentials of Holding verified with FromLicensedBroker
+    prices:   query broker.quotes(symbols: holdings.symbols) as List<Quote>
+  }
+}
+```
+
+**The application authenticates by presenting a credential, and never touches
+the token.** The host performs the presentation, obtains the access token, makes
+the request and returns the rows. An application that held a bearer token could
+send it somewhere else, and the person consented to it being used, not to it
+being had.
+
+What that requires:
+
+- **the audience is in the signed manifest**, never assembled at runtime — which
+  strings could not do anyway (§3)
+- **obtaining access is a disclosure**, so it declares `disclosure.present`,
+  appears in the consent the person gave, and is in the execution record. The
+  rows that come back are not the disclosure; the credential handed over to get
+  them is.
+- consent is once per application and audience — "this app may act as you at
+  broker.co.th, showing it your brokerage account credential" — not once per
+  screen refresh.
+
+### Three grades of data, and the host draws the difference
+
+| grade | where it came from | provenance |
+| --- | --- | --- |
+| **issuer-backed** | a claim in a credential | the trust policy it was verified under |
+| **self-asserted** | the application's own `state` | empty, but anchored to the chain of roots |
+| **origin-asserted** | a query answered by an authenticated API | the audience that answered |
+
+The third is not nothing — the host knows exactly which origin it authenticated
+to, so it can say "from broker.co.th, unsigned" rather than "unverified". But it
+is not a signature, and the person must be able to see which numbers on a screen
+somebody stood behind.
+
+**The host renders the difference, and the application cannot choose how.** Same
+rule as consent chrome: an application that could make fetched figures look
+issuer-backed would break the one promise the wallet makes.
+
+### Fetched data and the record
+
+Query results are **not** recorded — an execution record full of news headlines
+buries what it exists to prove.
+
+But the moment such a value crosses into `compute`, `update`, `issue` or
+`prove`, the state depends on something that cannot be replayed, and the chain
+is worth nothing. So: **a value that crosses that line is recorded in the
+runtime context**, the way an oracle input is, and replay works again.
+
+The compiler can tell which is which, because provenance already tracks it —
+and `from { … }` on an issued claim (§4) rejects the crossing outright where the
+claim declared a policy no query can satisfy.
+
 ### Presets and free composition are one system
 
 The host ships **archetypes** — a list screen, a detail screen, a form screen, a

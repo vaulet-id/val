@@ -15,6 +15,13 @@ version 1
 capabilities {
   credential.read(Holding)
 
+  // Live quotes are fetched, not issued: nobody signs a credential per price
+  // tick, and volume and volatility are exactly why this tier exists. The
+  // audience is fixed in the signed manifest, the host performs the
+  // presentation and holds the token, and this app never sees it — a bearer
+  // token an app could hold is a bearer token an app could send elsewhere.
+  api.query(audience: "broker.co.th", presenting: BrokerageAccount)
+
   // Only for the accreditation proof at the bottom. An app that merely displays
   // a portfolio does not declare this, and the consent sheet says so.
   disclosure.present
@@ -70,6 +77,11 @@ screen Portfolio {
     holdings: credentials of Holding verified with FromLicensedBroker
       order by market_value desc
       limit 200
+
+    // Origin-asserted, not issuer-backed. The host knows which origin answered
+    // and draws it differently — "from broker.co.th, unsigned" — and this app
+    // cannot make it look like the signed figures beside it.
+    quotes: query broker.quotes(symbols: holdings.symbols) as List<Quote>
   }
 
   // PROPOSED. The spec gives a screen `data` and no way to derive anything from
