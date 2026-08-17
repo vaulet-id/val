@@ -611,6 +611,46 @@ same one everywhere: a second canonicalisation is a second thing to get subtly
 wrong. Deterministic CBOR (dCBOR) is the intended shape. A host that already has
 one supplies it through the interface rather than the language carrying a rival.
 
+### State is a Merkle tree, not a blob
+
+The execution record carries a **root**, not a hash of the whole state.
+
+Leaves are `(path, value)` pairs — the same paths `update` patches,
+`member.tier` and `lifetimePoints` — each encoded canonically, sorted by path,
+built into a binary tree with a defined shape. dCBOR already fixes the encoding
+of a value and the ordering of fields, so nothing new has to be invented to make
+two implementations agree.
+
+A single hash would have meant that proving anything about state requires
+opening all of it. That is the opposite of what the rest of this language does:
+a credential can disclose one claim and prove another, while the application's
+own state — which is where "gold tier" and "portfolio total" actually live — was
+a solid block.
+
+With a root:
+
+```
+disclose state.member.tier
+prove state.lifetimePoints >= 10_000
+```
+
+Each is an inclusion proof against the root that is already in the record, and
+Merkle inclusion inside a circuit is a well-worn gadget, so this composes with
+§10 rather than needing anything of its own.
+
+**A proof about state is not a proof about a credential, and the difference must
+reach the verifier.** A credential claim is backed by an issuer who signed it. A
+state field is backed only by the chain of records that produced it — the
+application asserted it, correctly, by rules anybody can re-run, but no third
+party stood behind the input. Provenance (§4) carries this without new
+machinery: a value derived from state has no trust policy in its provenance set,
+and a verifier reading a proof over an empty provenance set is being told, in
+the type, that this is self-asserted.
+
+Open: **how a list is laid out in the tree.** One leaf per element allows
+proving one entry without revealing the others, and reveals the length; one leaf
+for the list hides the length and proves nothing selectively.
+
 ### Package
 
 Manifest, code, types, credentials, capabilities, assets, runtime version,
@@ -640,10 +680,56 @@ An application that cannot afford to lose state should keep it where state
 belongs — in a credential it issued, or on its own backend — rather than in a
 field it can silently rename.
 
+### Nothing here is consensus
+
+This resembles a smart contract and differs in the one way that matters: state
+lives on one device and no network agrees about it. The chain of roots is
+**tamper-evident, not tamper-proof** — a person can discard the whole chain and
+start again, and nothing stops them. What the chain gives is detection, and only
+to somebody who kept an earlier record.
+
+That is not a defect to be engineered away; it is the consequence of the state
+being the person's own. Two things make it enough in practice, and neither
+requires new infrastructure:
+
+- **A verifier remembers the last root it saw** from this person, and refuses a
+  record that reaches back behind it. This catches rollback inside a
+  relationship, which is where the value is: the loyalty scheme that would be
+  defrauded is the one that has been talking to this wallet all along.
+- **An issued credential records the root it was derived from.** Rolling back
+  then leaves a signed credential pointing at a state that no longer exists in
+  the chain, which the issuer can see. The issuer becomes a witness to time
+  without being told what the state contained.
+
+A transparency log for the wallet's whole chain would catch the rest. It is a
+component to run and a way to leak metadata, and it waits for somebody who needs
+it.
+
+### Who signs a credential an application issues
+
+An application has no issuer key and must not have one. `credential.issue`
+therefore does not sign anything: it produces an effect request, the device
+signs the execution record, and **the publisher's backend verifies that record
+and signs the credential with its own key**.
+
+This is why a publisher has a server at all, and it is the whole of what the
+server does: it does not run VAL, does not hold state, and does not see it. It
+checks the signature, resolves the code hash to a version it published, checks
+the trust chains, verifies any proof — the verification key derives from the
+compiled circuit, so it knows which predicate was proved rather than being told
+— and then either signs or refuses.
+
+Refusing is the point. A person holding the device can rewrite their state; they
+cannot make the publisher sign a credential for a run that does not verify.
+
+Where a credential carries no value, the weaker form is available: the device
+signs it as "this application, this version, on this device", which is checkable
+and self-asserted, and says so.
+
 ### Execution record
 
 Application id and version, publisher, code hash, action, input hash, previous
-and new state hashes, policies used, capabilities used, effects requested and
+and new state **roots**, policies used, capabilities used, effects requested and
 effects executed — **disclosures among them** — runtime context, timestamp,
 signature.
 
@@ -808,8 +894,11 @@ Inside it:
 - `switch` and `?:`, with the cost of **every** branch, not the taken one — this
   has to be stated or nobody will understand why a proof is slow
 - list combinators where the length is known at compile time
+- **Merkle inclusion against the state root**, so a proof may be about state as
+  well as about claims — with the provenance distinction of §7 reaching the
+  verifier rather than being flattened into "verified"
 
-Outside it: `state`, effects, anything whose size is not statically known.
+Outside it: effects, and anything whose size is not statically known.
 
 What the host supplies, and what VAL does not: the circuit proving that the
 claims came from a credential an anchor-resolvable issuer signed. VAL provides
@@ -848,7 +937,11 @@ verdict do.
 6. **`fold` and totality.** A fold whose accumulator grows is bounded in steps
    but not in memory. *Recommended:* bound value sizes at the host interface,
    and say so there rather than pretending totality covers it.
-7. **`type` is declared in §2 and specified nowhere.** Plain records exist, and
+7. **How is a list laid out in the state tree?** One leaf per element proves a
+   single entry and reveals the length; one leaf for the whole list hides the
+   length and proves nothing selectively. *Recommended:* per element, with
+   padding to a declared bound where the length is itself sensitive.
+8. **`type` is declared in §2 and specified nowhere.** Plain records exist, and
    whether they may hold verified and unverified data side by side is a
    provenance question (§4), not a syntax one.
 
