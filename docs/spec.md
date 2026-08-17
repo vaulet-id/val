@@ -78,6 +78,36 @@ not privileged in the language. Where the language needs something only a host
 can supply — a canonical encoding, a clock, randomness, trust resolution — the
 interface is specified here and the host implements it.
 
+### Who is trusted
+
+**The application is not.** Its publisher wrote code we did not review line by
+line, may be a company nobody has heard of, and has an interest in the person's
+credentials that is not the person's interest. Nothing in this document assumes
+otherwise, and every rule that looks like an inconvenience is that assumption
+being applied.
+
+**The host is**, by the person, because they chose it and because it holds their
+keys. It is what scopes capabilities, draws consent, performs disclosures, holds
+tokens, and refuses.
+
+Two consequences that are easy to miss and expensive to discover late:
+
+**The package must verify itself, from itself.** Every check in this document —
+effect placement, capability declaration, provenance, totality, exhaustiveness,
+text bundle completeness, the bound that makes a circuit finite — is re-run *by
+the host* over the package it received. A publisher's build passing proves
+nothing: they own the build. Nothing may therefore be checkable only with
+information outside the package, and the checker has to be small enough to run
+on a phone at install time. That is another reason the language is small and
+total, and it is a constraint on everything added to it later.
+
+**The artifact is the source.** v1 ships the program as VAL and walks its typed
+AST, so what a reviewer read is what executes — there is no compiled blob to
+compare against a repository nobody can see. When the Wasm back end arrives (§8)
+this stops being free: the package must still carry the source and let the host
+compile it, or the build must be reproducible. Shipping bytecode alone would put
+the publisher back in a position of trust that this section just removed.
+
 ---
 
 ## 2. Shape of a program
@@ -746,6 +776,10 @@ not the point.
 lines, deterministic, and by far the easiest thing to instrument for an
 execution record.
 
+Keeping the source in the package is not optional when this happens — see §1,
+*Who is trusted*. Bytecode alone would mean the host verifying a blob whose
+correspondence to reviewed source only the publisher can attest.
+
 **Wasm is the destination, reached when there is a reason** — untrusted
 third-party code needing hard fuel limits and signed bytecode. The front end
 does not change; only the back end.
@@ -932,6 +966,10 @@ anything that overflows or falls below contrast.
 An application that composes its own screens and looks unlike the others is
 working as intended. One that composes its own screens and breaks on a small
 phone in Thai does not get published.
+
+"At build time" means the host's build, not the publisher's. A publisher who
+skips our tooling has skipped nothing: the interface is data in the package, and
+the check is re-run before the application is admitted.
 
 ### Text comes from the manifest, checked by the compiler
 
