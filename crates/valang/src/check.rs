@@ -21,7 +21,84 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     narrowing_before_use(p, &mut d);
     patches_have_no_index(p, &mut d);
     updates_take_paths(p, &mut d);
+    nothing_is_declared_twice(p, &mut d);
     d
+}
+
+/// Two declarations of one name is the kind of mistake that produces a program
+/// which runs and is not the program anybody read — the later one wins silently,
+/// and which one is later depends on file order in a package with several files.
+fn nothing_is_declared_twice(p: &Program, d: &mut Vec<Diagnostic>) {
+    let mut seen: HashMap<String, crate::diag::Span> = HashMap::new();
+    let mut check = |kind: &str, name: &str, span, d: &mut Vec<Diagnostic>| {
+        let key = format!("{kind}:{name}");
+        match seen.get(&key) {
+            Some(first) => d.push(Diagnostic::error(
+                span,
+                format!("`{name}` is already declared as a {kind}, on line {}", first.line),
+            )),
+            None => {
+                seen.insert(key, span);
+            }
+        }
+    };
+
+    for e in &p.enums {
+        check("type", &e.name, e.span, d);
+        let mut members = HashSet::new();
+        for m in &e.members {
+            if !members.insert(m) {
+                d.push(Diagnostic::error(e.span, format!("`{}` lists `{m}` twice", e.name)));
+            }
+        }
+    }
+    for c in p.credentials.iter().chain(&p.types) {
+        check("type", &c.name, c.span, d);
+        let mut fields = HashSet::new();
+        for f in &c.fields {
+            if !fields.insert(&f.name) {
+                d.push(Diagnostic::error(f.span, format!("`{}` has two claims called `{}`", c.name, f.name)));
+            }
+        }
+    }
+    for t in &p.trusts {
+        check("trust policy", &t.name, t.span, d);
+    }
+    for f in &p.functions {
+        check("function", &f.name, f.span, d);
+    }
+    for a in &p.actions {
+        check("action", &a.name, a.span, d);
+        // Phases may be omitted but not repeated: two `compute` blocks is two
+        // places to look for what an action computes.
+        let mut phases = HashSet::new();
+        for b in &a.phases {
+            if !phases.insert(b.phase) {
+                d.push(Diagnostic::error(
+                    b.span,
+                    format!("`{}` has two `{}` blocks. A phase appears once", a.name, b.phase.name()),
+                ));
+            }
+        }
+    }
+    for s in &p.screens {
+        check("screen", &s.name, s.span, d);
+    }
+
+    let mut fields = HashSet::new();
+    for f in &p.state {
+        if !fields.insert(&f.name) {
+            d.push(Diagnostic::error(f.span, format!("`state` has two fields called `{}`", f.name)));
+        }
+    }
+
+    let mut caps = HashSet::new();
+    for c in &p.capabilities {
+        let key = capability_key(&c.name, c.args.first().and_then(|a| a.value.path()).as_deref());
+        if !caps.insert(key.clone()) {
+            d.push(Diagnostic::error(c.span, format!("`{key}` is declared twice")));
+        }
+    }
 }
 
 const EFFECT_ROOTS: &[&str] = &["credential", "payment", "storage", "message", "network", "disclosure"];

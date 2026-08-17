@@ -23,6 +23,87 @@ pub struct Report {
     pub irreversible: bool,
 }
 
+/// Which claims are read, not only which credential. §7's example is
+/// `PurchaseReceipt.amount, PurchaseReceipt.purchased_at` — a person deciding
+/// whether to install this is owed the fields, since "reads your receipts" and
+/// "reads the amount and the date" are different sentences.
+fn claim_paths(p: &Program) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let policy_subject = |name: &str| {
+        p.trusts.iter().find(|t| t.name == name).map(|t| t.subject_type.clone())
+    };
+
+    // `checked.claims.amount`, where `checked` came from `x with Policy`.
+    let mut verified: std::collections::BTreeMap<String, String> = Default::default();
+    let visit = |e: &Expr, verified: &mut std::collections::BTreeMap<String, String>, out: &mut BTreeSet<String>| {
+        e.walk(&mut |inner| {
+            if let Expr::Member { obj, name, .. } = inner {
+                if let Expr::Member { obj: root, name: claims, .. } = obj.as_ref() {
+                    if claims == "claims" {
+                        if let Some(base) = root.path() {
+                            if let Some(ty) = verified.get(&base) {
+                                out.insert(format!("{ty}.{name}"));
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    };
+
+    for a in &p.actions {
+        for block in &a.phases {
+            for s in &block.stmts {
+                match s {
+                    Stmt::Let { name, value, .. } => {
+                        if let Expr::With { policy, .. } = value {
+                            if let Some(ty) = policy_subject(policy) {
+                                verified.insert(name.clone(), ty);
+                            }
+                        }
+                        visit(value, &mut verified, &mut out);
+                    }
+                    Stmt::Expr { value, .. } | Stmt::Patch { value, .. } => visit(value, &mut verified, &mut out),
+                    Stmt::Effect { args, body, .. } => {
+                        for arg in args {
+                            visit(&arg.value, &mut verified, &mut out);
+                        }
+                        for inner in body {
+                            if let Stmt::Effect { args, .. } = inner {
+                                for arg in args {
+                                    visit(&arg.value, &mut verified, &mut out);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `checked.claims.country` is what the author wrote; `NationalId.country` is
+/// what the person is being asked about. The report is read by the second one.
+fn in_credential_terms(p: &Program, expr: &str) -> String {
+    let Some((base, rest)) = expr.split_once(".claims.") else { return expr.to_string() };
+    for a in &p.actions {
+        for block in &a.phases {
+            for s in &block.stmts {
+                if let Stmt::Let { name, value: Expr::With { policy, .. }, .. } = s {
+                    if name == base {
+                        if let Some(t) = p.trusts.iter().find(|t| t.name == *policy) {
+                            return format!("{}.{rest}", t.subject_type);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    expr.to_string()
+}
+
 pub fn report(p: &Program) -> Report {
     let mut r = Report {
         app: p.app.clone().unwrap_or_default(),
@@ -71,6 +152,27 @@ pub fn report(p: &Program) -> Report {
                 }
             }
         }
+    }
+
+    r.discloses = r.discloses.iter().map(|d| in_credential_terms(p, d)).collect();
+
+    // Narrow `reads` to the claims actually touched, where they are known.
+    let claims = claim_paths(p);
+    if !claims.is_empty() {
+        let mut narrowed = BTreeSet::new();
+        for entry in &r.reads {
+            let (ty, rest) = entry.split_once(' ').unwrap_or((entry.as_str(), ""));
+            let touched: Vec<&String> = claims.iter().filter(|c| c.starts_with(&format!("{ty}."))).collect();
+            if touched.is_empty() {
+                narrowed.insert(entry.clone());
+            } else {
+                narrowed.insert(format!(
+                    "{} {rest}",
+                    touched.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ")
+                ));
+            }
+        }
+        r.reads = narrowed;
     }
 
     r.irreversible = !r.discloses.is_empty() || !r.proves.is_empty() || !r.payments.is_empty();

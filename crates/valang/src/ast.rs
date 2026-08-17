@@ -10,6 +10,9 @@ pub struct Program {
     pub capabilities: Vec<Capability>,
     pub enums: Vec<EnumDecl>,
     pub credentials: Vec<CredentialDecl>,
+    /// Plain records. The same shape as a credential's claims and none of the
+    /// four faces, because nobody signed one — which is the whole difference.
+    pub types: Vec<CredentialDecl>,
     pub state: Vec<Field>,
     pub trusts: Vec<TrustDecl>,
     pub functions: Vec<FunctionDecl>,
@@ -81,7 +84,7 @@ pub struct FunctionDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Phase {
     Input,
     Require,

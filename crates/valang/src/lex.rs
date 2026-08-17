@@ -98,17 +98,51 @@ impl<'a> Lexer<'a> {
             if c == b'"' {
                 let span = self.span(1);
                 self.bump(1);
-                let start = self.i;
-                while self.i < self.bytes.len() && self.bytes[self.i] != b'"' {
-                    if self.bytes[self.i] == b'\n' {
-                        self.diagnostics.push(Diagnostic::error(span, "unterminated string"));
-                        break;
+                let mut text = String::new();
+                let mut closed = false;
+                while self.i < self.bytes.len() {
+                    match self.bytes[self.i] {
+                        b'"' => {
+                            self.bump(1);
+                            closed = true;
+                            break;
+                        }
+                        // A string is one line. A newline inside one is almost
+                        // always a missing quote, and saying so beats carrying
+                        // the mistake to the end of the file.
+                        b'\n' => break,
+                        b'\\' => {
+                            let at = self.span(2);
+                            self.bump(1);
+                            let esc = *self.bytes.get(self.i).unwrap_or(&b'"');
+                            self.bump(1);
+                            match esc {
+                                b'"' => text.push('"'),
+                                b'\\' => text.push('\\'),
+                                b'n' => text.push('\n'),
+                                b't' => text.push('\t'),
+                                other => {
+                                    // A closed set, so that what a string means
+                                    // is answerable without a table nobody has.
+                                    self.diagnostics.push(Diagnostic::error(
+                                        at,
+                                        format!(
+                                            "`\\{}` is not an escape. The set is `\\\"`, `\\\\`, `\\n` and `\\t`",
+                                            other as char
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {
+                            let start = self.i;
+                            self.bump(1);
+                            text.push_str(&self.src[start..self.i]);
+                        }
                     }
-                    self.bump(1);
                 }
-                let text = self.src[start..self.i].to_string();
-                if self.i < self.bytes.len() {
-                    self.bump(1);
+                if !closed {
+                    self.diagnostics.push(Diagnostic::error(span, "this string is never closed"));
                 }
                 out.push(Token { kind: Kind::Str, text, span });
                 continue;

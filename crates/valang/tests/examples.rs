@@ -47,7 +47,12 @@ fn loyalty_parses_into_the_shape_the_document_describes() {
 fn the_report_is_derived_not_declared() {
     let (p, _) = analyse(LOYALTY);
     let r = report(&p);
-    assert!(r.reads.iter().any(|s| s == "PurchaseReceipt under ReceiptFromMerchant"), "{r}");
+    // The claims, not only the credential: "reads your receipts" and "reads the
+    // amount and the date" are different sentences to whoever is deciding.
+    assert!(
+        r.reads.iter().any(|s| s == "PurchaseReceipt.amount, PurchaseReceipt.purchased_at under ReceiptFromMerchant"),
+        "{r}"
+    );
     assert!(r.issues.contains("LoyaltyMember"), "{r}");
     assert!(r.discloses.is_empty(), "{r}");
     assert!(!r.irreversible, "{r}");
@@ -56,6 +61,18 @@ fn the_report_is_derived_not_declared() {
         r.writes.iter().cloned().collect::<Vec<_>>(),
         ["lifetimePoints", "member.points", "member.tier"]
     );
+}
+
+/// A disclosure is reported in the person's terms, not the author's: they are
+/// being asked about their national ID, not about a local binding called
+/// `checked`.
+#[test]
+fn a_disclosure_names_the_credential_and_not_the_variable() {
+    const DOOR: &str = include_str!("../../../examples/door.val");
+    let (p, _) = analyse(DOOR);
+    let r = report(&p);
+    assert!(r.discloses.contains("NationalId.country"), "{r}");
+    assert!(r.reads.iter().any(|s| s.contains("NationalId.birthdate")), "{r}");
 }
 
 #[test]

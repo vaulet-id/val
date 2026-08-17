@@ -127,6 +127,11 @@ impl Parser {
                 }
                 "enum" => p.enums.push(self.enum_decl()),
                 "credential" => p.credentials.push(self.credential_decl()),
+                "type" => {
+                    let mut t = self.credential_decl();
+                    t.span = self.peek().span;
+                    p.types.push(t);
+                }
                 "state" => {
                     self.bump();
                     p.state = self.fields();

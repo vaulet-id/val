@@ -70,7 +70,7 @@ impl<'a> Cx<'a> {
             "Verified" => Ty::Verified(t.args.first().map(|a| a.name.clone()).unwrap_or_default()),
             "Proof" => Ty::Proof,
             other if self.p.enums.iter().any(|e| e.name == other) => Ty::Enum(other.into()),
-            other if self.p.credentials.iter().any(|c| c.name == other) => Ty::Record(other.into()),
+            other if self.credential(other).is_some() => Ty::Record(other.into()),
             _ => Ty::Unknown,
         };
         if t.optional {
@@ -80,8 +80,11 @@ impl<'a> Cx<'a> {
         }
     }
 
+    /// A plain record and a credential's claims resolve the same way: the
+    /// difference is who signed them, which is a question for `verify` and not
+    /// for field access.
     fn credential(&self, name: &str) -> Option<&'a CredentialDecl> {
-        self.p.credentials.iter().find(|c| c.name == name)
+        self.p.credentials.iter().chain(&self.p.types).find(|c| c.name == name)
     }
     fn policy(&self, name: &str) -> Option<&'a TrustDecl> {
         self.p.trusts.iter().find(|t| t.name == name)
@@ -659,13 +662,19 @@ impl<'a> Cx<'a> {
                 }
             }
             Ty::Record(cred) | Ty::Enum(cred) if !cred.is_empty() => {
-                if let Some(decl) = self.credential(cred) {
+                let cred = cred.clone();
+                if let Some(decl) = self.credential(&cred) {
                     if let Some(f) = decl.fields.iter().find(|f| f.name == name) {
                         let ty = self.resolve(&f.ty);
                         return Typed::with(ty, base.from.clone());
                     }
+                    // The type is known, so a field it does not have is a
+                    // mistake and not an unknown — saying nothing here is how a
+                    // typo reaches a customer.
+                    self.err(span, format!("`{cred}` has no field called `{name}`"));
+                    return Typed::unknown();
                 }
-                if let Some(en) = self.p.enums.iter().find(|e| e.name == *cred) {
+                if let Some(en) = self.p.enums.iter().find(|e| e.name == cred) {
                     if en.members.iter().any(|m| m == name) {
                         return Typed::plain(Ty::Enum(cred.clone()));
                     }
