@@ -687,6 +687,50 @@ Manifest, code, types, credentials, capabilities, assets, runtime version,
 integrity, signature — signed. It answers who published this, which version is
 running, whether it was modified, what it may do, and what is executing.
 
+### The package reports on itself, and the report is derived
+
+Compiling produces a **capability report**: what this application can do to the
+person, computed from the code rather than written by its author.
+
+The distinction is the whole value. A mobile permission list is a declaration —
+the developer writes it, it is coarse, and inside it the application may do
+anything. This is derived by the checker, so a publisher cannot understate it,
+and it is precise in a way a declaration cannot be:
+
+```
+reads          PurchaseReceipt.amount, PurchaseReceipt.purchased_at
+               under ReceiptFromMerchant
+discloses      nothing
+proves         sum(Holding.market_value) >= 5_000_000_00   to broker.co.th
+issues         LoyaltyMember, signed by th.co.codefin
+talks to       broker.co.th
+writes state   member, lifetimePoints
+irreversible   none
+```
+
+Every line of that is answerable statically because of decisions taken for other
+reasons: effects appear only in `execute`, provenance follows values, strings
+cannot be assembled, audiences are fixed in the manifest, and the language is
+total. **A language where this report is computable is the point; the report is
+just where it becomes visible.**
+
+Two rules keep it honest:
+
+- **The host recomputes it and refuses on mismatch.** The publisher ships a copy
+  for review and for a store listing, and it is evidence of nothing on its own —
+  the host owns the checker (§1).
+- **The report states facts; the host does the judging.** No risk score comes
+  from the package. How a disclosure is described, how loudly, in what words and
+  in which language, is host chrome, for the same reason the consent sheet is.
+
+**The consent sheet is a rendering of this report**, not a separate document
+somebody writes and keeps in sync. What the person approves and what the checker
+verified are the same object.
+
+An application that declares a capability the report shows it never uses is a
+build failure, not a warning. Consent asked for something unused is consent
+spent on nothing, and it trains people to say yes.
+
 ### State outlives the code that wrote it
 
 `version` is on the first line of every program, and a published application
