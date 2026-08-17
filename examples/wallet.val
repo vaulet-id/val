@@ -29,24 +29,18 @@ screen Wallet {
     // and that every locale this app ships to has a translation.
     card(text: "balance", points: state.member.points)
 
-    tabs {
-      // Which tab is open is the host's business. It is not app state, so it is
-      // not hashed, not committed, and not a line in the execution record.
-      tab("history") {
-        list(receipts) { r ->
-          row(text: "receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at)
-        }
-      }
+    // A section subhead, which is how this host groups a list. There are no
+    // tabs in the catalogue — the wallet has never had one, and a screen cannot
+    // ask for a component the host does not draw.
+    section(text: "history")
 
-      tab("rewards") {
-        list(state.rewards) { reward -> row(text: "rewardLine", name: reward.name) }
-      }
+    list(receipts) { r ->
+      row(text: "receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at)
     }
 
-    // A press names an action. There is no other kind of handler, so everything
-    // a screen can start goes through require → verify → compute → update →
-    // execute, with the same consent and the same record. A screen adds no path
-    // to an effect that an action did not already have.
+    // Primary, so the host docks it. A call to action that scrolls with the
+    // content is one that is sometimes not on screen, and this host answered
+    // that once for every screen.
     button(text: "scan", emphasis: primary, onTap: ScanToEarn)
   }
 }

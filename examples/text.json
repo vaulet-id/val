@@ -17,21 +17,9 @@
       "en": "History",
       "th": "ประวัติ"
     },
-    "rewards": {
-      "en": "Rewards",
-      "th": "ของรางวัล"
-    },
     "receiptLine": {
       "en": "{merchant} · {at}",
       "th": "{merchant} · {at}"
-    },
-    "rewardLine": {
-      "en": "{name}",
-      "th": "{name}"
-    },
-    "accountLine": {
-      "en": "Account {account}",
-      "th": "บัญชี {account}"
     },
     "portfolioTotal": {
       "en": "Total value {value} ({change})",
@@ -40,10 +28,6 @@
     "holdings": {
       "en": "Holdings",
       "th": "ถือครอง"
-    },
-    "accounts": {
-      "en": "Accounts",
-      "th": "บัญชี"
     },
     "holdingLine": {
       "en": "{symbol} · {quantity} · {value}",

@@ -51,11 +51,19 @@ class Vaulet {
   static const buttonHeight = 52.0;
 
   static const cardTitle = TextStyle(fontSize: 16, fontWeight: FontWeight.w700);
-  static const sectionLabel = TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.6,
-  );
+
+  /// A section subhead: uppercase, small, letter-spaced, on `outline`. Padding
+  /// `(16, 16, 16, 8)` — the wallet's, not Material's.
+  static const sectionLabel = TextStyle(fontSize: 11, letterSpacing: 1);
+  static const sectionPad = EdgeInsets.fromLTRB(lg, lg, lg, sm);
+
+  /// The app-wide inset under a docked action: `(16, 8, 16, 24)`.
+  static const bottomBarInset = EdgeInsets.fromLTRB(16, sm, 16, xxl);
+
+  /// `surfaceContainerHighest @ 0.4` — the subtle grouped-card fill, and the
+  /// reason a card here does not look like a Material card.
+  static Color cardFill(ColorScheme s) =>
+      s.surfaceContainerHighest.withValues(alpha: 0.4);
 
   /// A dark accent has to be set, not seeded: `fromSeed` rebuilds a seed's hue
   /// at a fixed lightness, so asking it for near-black hands back the mid-tone
@@ -88,9 +96,14 @@ class Vaulet {
       cardTheme: CardThemeData(
         margin: EdgeInsets.zero,
         elevation: 0,
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        color: cardFill(scheme),
+        clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusCard)),
       ),
+      // One leading column for every row in the app, so a tile with a 28pt icon
+      // and one with a 28pt swatch put their titles in the same place.
+      listTileTheme: const ListTileThemeData(minLeadingWidth: 36),
+      appBarTheme: AppBarTheme(centerTitle: false, backgroundColor: scheme.surface, elevation: 0),
       // Fainter and thinner than Material's default, app-wide.
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant.withValues(alpha: 0.4),
@@ -261,17 +274,7 @@ class _Phone extends StatelessWidget {
               child: Column(
                 children: [
                   const _StatusBar(),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, 0),
-                      child: ListView(
-                        children: [
-                          for (final node in (screen['tree'] as List?) ?? const [])
-                            _Node(node: node as Map<String, dynamic>, incoming: incoming),
-                        ],
-                      ),
-                    ),
-                  ),
+                  Expanded(child: _Screen(screen: screen, incoming: incoming)),
                   const _HomeIndicator(),
                 ],
               ),
@@ -279,6 +282,80 @@ class _Phone extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A screen, built the way the wallet builds one: an `AppBar`, a scrolling body
+/// on the standard 16pt gutter, and the primary action **docked at the bottom**
+/// rather than sitting inline in the content.
+///
+/// The last one is a layout fact rather than a preference. A screen whose call
+/// to action scrolls with the content is a screen where it is sometimes not on
+/// screen, and the wallet answered that once — in `BottomActionBar`, for every
+/// screen — so a preview that put the button inline would be showing a layout
+/// the host does not produce.
+class _Screen extends StatelessWidget {
+  const _Screen({required this.screen, required this.incoming});
+
+  final Map<String, dynamic> screen;
+  final Incoming incoming;
+
+  static bool _isPrimary(Map<String, dynamic> n) =>
+      n['kind'] == 'button' && ((n['args'] as Map?)?['emphasis'] as String?)?.trim() == 'primary';
+
+  static List<Map<String, dynamic>> _flatten(List<Map<String, dynamic>> ns) => [
+        for (final n in ns) ...[
+          n,
+          ..._flatten(((n['children'] as List?) ?? const []).cast<Map<String, dynamic>>()),
+        ],
+      ];
+
+  /// The docked action is taken *out* of the tree, not filtered off the top of
+  /// it. Filtering the top level left a button nested in a `column` in both
+  /// places at once — drawn inline and docked, which is a layout no host
+  /// produces.
+  static List<Map<String, dynamic>> _prune(List<Map<String, dynamic>> ns) => [
+        for (final n in ns)
+          if (!_isPrimary(n))
+            {
+              ...n,
+              'children': _prune(((n['children'] as List?) ?? const []).cast<Map<String, dynamic>>()),
+            },
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final nodes = ((screen['tree'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final docked = _flatten(nodes).where(_isPrimary).toList();
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      appBar: AppBar(
+        toolbarHeight: 52,
+        title: Text(
+          screen['name'] as String? ?? '',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, Vaulet.lg),
+        children: [
+          for (final n in _prune(nodes)) _Node(node: n, incoming: incoming),
+        ],
+      ),
+      bottomNavigationBar: docked.isEmpty
+          ? null
+          : Padding(
+              padding: Vaulet.bottomBarInset,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final b in docked)
+                    SizedBox(width: double.infinity, child: _Node(node: b, incoming: incoming)),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -369,10 +446,6 @@ class _Node extends StatefulWidget {
 }
 
 class _NodeState extends State<_Node> {
-  // Which tab is open is the host's. It is not application state, so it is not
-  // hashed, not committed, and not a line in the execution record.
-  int _tab = 0;
-
   Map<String, dynamic> get n => widget.node;
   List<Map<String, dynamic>> get children =>
       ((n['children'] as List?) ?? const []).cast<Map<String, dynamic>>();
@@ -383,7 +456,7 @@ class _NodeState extends State<_Node> {
   /// an application that formatted a number would get Thai digits, the
   /// thousands separator and the currency position wrong separately from every
   /// other application.
-  Widget _text({TextStyle? style}) {
+  Widget _text({TextStyle? style, bool upper = false}) {
     final key = args['text'] as String?;
     if (key == null) return const SizedBox.shrink();
     final entry = (widget.incoming.text[key] as Map?)?.cast<String, dynamic>();
@@ -393,7 +466,8 @@ class _NodeState extends State<_Node> {
         style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
       );
     }
-    final template = entry[widget.incoming.locale] as String?;
+    var template = entry[widget.incoming.locale] as String?;
+    if (upper) template = template?.toUpperCase();
     if (template == null) {
       return Text(
         '“$key” has no ${widget.incoming.locale}',
@@ -441,17 +515,38 @@ class _NodeState extends State<_Node> {
           children: [
             for (final c in children)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: Vaulet.sm),
                 child: _Node(node: c, incoming: widget.incoming),
               ),
           ],
         );
 
+      // A section subhead, which is how the wallet groups a list — uppercase,
+      // small, on `outline`, and never a heavier treatment invented per screen.
+      case 'section':
+        return Padding(
+          padding: Vaulet.sectionPad,
+          child: _text(
+            style: Vaulet.sectionLabel.copyWith(color: Theme.of(context).colorScheme.outline),
+            upper: true,
+          ),
+        );
+
+      // `AppCard` + `ListTile`: the leading icon, the title, a subtitle capped
+      // at two lines, and a chevron when a press goes somewhere. A bare row of
+      // text would put the title in a different place from every other row on
+      // the phone.
       case 'row':
+        final action = (args['onTap'] as String?)?.trim();
         return Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Vaulet.md, vertical: 10),
-            child: _text(),
+          child: ListTile(
+            leading: Icon(Icons.receipt_long_outlined, size: 28,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            title: _text(),
+            trailing: action == null
+                ? null
+                : Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            onTap: action == null ? null : () => _tap(action),
           ),
         );
 
@@ -463,36 +558,6 @@ class _NodeState extends State<_Node> {
           ),
         );
 
-      case 'tabs':
-        final tabs = children.where((c) => c['kind'] == 'tab').toList();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              segments: [
-                for (var i = 0; i < tabs.length; i++)
-                  ButtonSegment(
-                    value: i,
-                    label: Text(_label(tabs[i]), style: const TextStyle(fontSize: 11)),
-                  ),
-              ],
-              selected: {_tab.clamp(0, tabs.isEmpty ? 0 : tabs.length - 1)},
-              onSelectionChanged: (s) => setState(() => _tab = s.first),
-            ),
-            const SizedBox(height: 8),
-            if (tabs.isNotEmpty)
-              for (final c
-                  in ((tabs[_tab.clamp(0, tabs.length - 1)]['children'] as List?) ?? const [])
-                      .cast<Map<String, dynamic>>())
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: _Node(node: c, incoming: widget.incoming),
-                ),
-          ],
-        );
-
       case 'list':
         final row = children.isEmpty ? null : children.first;
         return Column(
@@ -502,47 +567,53 @@ class _NodeState extends State<_Node> {
               Opacity(
                 opacity: i == 2 ? 0.4 : 1,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.only(bottom: Vaulet.sm),
                   child: row == null
                       ? const Card(child: ListTile(dense: true, title: Text('row')))
                       : _Node(node: row, incoming: widget.incoming),
                 ),
               ),
-            Text(
-              'the host draws the empty state too',
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
           ],
         );
 
       case 'button':
-        final primary = (args['emphasis'] as String?)?.trim() == 'primary';
+        final emphasis = (args['emphasis'] as String?)?.trim();
         final action = (args['onTap'] as String?)?.trim();
-        final child = _text(style: const TextStyle(fontSize: 13));
-        // A press names an action. There is no other kind of handler, so
-        // everything a screen can start goes through the same phases, the same
-        // consent and the same record.
-        void tap() => web.window.parent?.postMessage(
-          jsonEncode({'type': 'tap', 'action': action}).toJS,
-          '*'.toJS,
-        );
+        final child = _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600));
         return Tooltip(
           message: action == null
               ? ''
               : 'calls $action, through require → verify → compute → update → execute',
-          child: primary
-              ? FilledButton(onPressed: tap, child: child)
-              : OutlinedButton(onPressed: tap, child: child),
+          child: emphasis == 'primary'
+              ? FilledButton(onPressed: () => _tap(action), child: child)
+              : OutlinedButton(onPressed: () => _tap(action), child: child),
         );
 
+      // Not a component this host ships. Drawing something approximate would be
+      // the preview inventing a catalogue — which is the whole mistake it exists
+      // to stop, and the thing a version number is for.
       default:
-        return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: Vaulet.sm),
+          child: Container(
+            padding: const EdgeInsets.all(Vaulet.md),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+            ),
+            child: Text(
+              '`${n['kind']}` is not in this catalogue',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onErrorContainer),
+            ),
+          ),
+        );
     }
   }
 
-  String _label(Map<String, dynamic> tab) {
-    final raw = ((tab['args'] as Map?)?['text'] ?? (tab['args'] as Map?)?['0'] ?? '') as String;
-    final entry = (widget.incoming.text[raw] as Map?)?.cast<String, dynamic>();
-    return (entry?[widget.incoming.locale] as String?) ?? raw;
-  }
+  void _tap(String? action) => web.window.parent?.postMessage(
+        jsonEncode({'type': 'tap', 'action': action}).toJS,
+        '*'.toJS,
+      );
+
+
 }
