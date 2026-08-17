@@ -142,7 +142,13 @@ pub fn compile_function(program: &Program) -> Module {
         let extra = count_lets(&f.body);
         let mut body = Function::new(if extra > 0 { vec![(extra, ValType::I32)] } else { vec![] });
         let mut next_local = f.params.len() as u32;
-        emit_body(&mut ctx, &f.body, &mut body, &mut next_local);
+        // A function whose branches all return still needs a value on the stack
+        // for the paths Wasm can see but the language cannot reach.
+        if !emit_body(&mut ctx, &f.body, &mut body, &mut next_local) {
+            ctx.push_konst(Konst::Bool(false), &mut body);
+        } else {
+            ctx.push_konst(Konst::Bool(false), &mut body);
+        }
         body.instruction(&Instruction::End);
         code.function(&body);
     }
@@ -240,8 +246,9 @@ fn count_lets(body: &[Stmt]) -> u32 {
     body.iter().filter(|s| matches!(s, Stmt::Let { .. })).count() as u32
 }
 
-fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u32) {
-    let mut returned = false;
+/// True when this body ends by returning on every path, so the caller knows
+/// whether it still has to leave a value on the stack.
+fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u32) -> bool {
     for s in body {
         match s {
             Stmt::Let { name, value, .. } => {
@@ -253,17 +260,28 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
             }
             Stmt::Return { value, .. } => {
                 emit(ctx, value, f);
-                returned = true;
-                break;
+                // `return` from inside a block leaves the function, not the
+                // block — the tree-walker learned this the same day.
+                f.instruction(&Instruction::Return);
+                return true;
             }
-            // A function is pure and total: nothing else can appear in one, and
-            // `check.rs` has already refused anything that did.
+            Stmt::If { cond, then, other, .. } => {
+                emit(ctx, cond, f);
+                ctx.call_op("truthy", f);
+                f.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                emit_body(ctx, then, f, next_local);
+                if !other.is_empty() {
+                    f.instruction(&Instruction::Else);
+                    emit_body(ctx, other, f, next_local);
+                }
+                f.instruction(&Instruction::End);
+            }
+            // Nothing else can appear in a function: it is pure and total, and
+            // `check.rs` has already refused anything that was not.
             _ => {}
         }
     }
-    if !returned {
-        ctx.push_konst(Konst::Bool(false), f);
-    }
+    false
 }
 
 fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {

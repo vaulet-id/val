@@ -179,6 +179,10 @@ pub enum Stmt {
     Return { value: Expr, span: Span },
     /// `const holdings = credentials of Holding verified with Policy`
     Data { name: String, source: DataSource, span: Span },
+    /// `if (cond) { … } else { … }`. A statement, never an expression — the
+    /// expression form is `?:`, and two ways to write one thing is what this
+    /// language spends its budget avoiding (§3).
+    If { cond: Expr, then: Vec<Stmt>, other: Vec<Stmt>, span: Span },
 }
 
 impl Stmt {
@@ -190,7 +194,8 @@ impl Stmt {
             | Stmt::Binding { span, .. }
             | Stmt::Effect { span, .. }
             | Stmt::Return { span, .. }
-            | Stmt::Data { span, .. } => *span,
+            | Stmt::Data { span, .. }
+            | Stmt::If { span, .. } => *span,
         }
     }
 }

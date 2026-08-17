@@ -247,6 +247,21 @@ impl<'a> Cx<'a> {
                     ),
                 }
             }
+            Stmt::If { cond, then, other, .. } => {
+                let c = self.expr(cond);
+                if !c.ty.is_unknown() && c.ty != Ty::Bool {
+                    self.err(cond.span(), format!("a condition is `bool`, and this is `{}`", c.ty));
+                }
+                // Each branch is its own scope: a binding made in one is not in
+                // the other, and neither survives the statement.
+                for (branch, _) in [(then, 0), (other, 1)] {
+                    self.push();
+                    for s in branch {
+                        self.stmt(s, phase);
+                    }
+                    self.pop();
+                }
+            }
             Stmt::Effect { name, args, body, span } => {
                 for a in args {
                     let t = self.expr(&a.value);

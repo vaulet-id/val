@@ -456,6 +456,25 @@ impl Parser {
             let value = self.expr(0);
             return Some(Stmt::Let { name, value, span });
         }
+        if self.at("if") {
+            self.bump();
+            // Parenthesised, which is what removes every ambiguity between a
+            // block and a record literal (§2).
+            self.expect("(");
+            let cond = self.expr(0);
+            self.expect(")");
+            let then = self.stmt_block();
+            let mut other = Vec::new();
+            self.skip_newlines();
+            if self.eat("else") {
+                other = if self.at("if") {
+                    self.stmt(phase).into_iter().collect()
+                } else {
+                    self.stmt_block()
+                };
+            }
+            return Some(Stmt::If { cond, then, other, span });
+        }
         if self.at("return") {
             self.bump();
             let value = self.expr(0);

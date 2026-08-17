@@ -134,3 +134,26 @@ fn the_constants_travel_inside_the_module() {
         Value::Enum("Tier".into(), "silver".into())
     );
 }
+
+/// `if` is a statement in this language and `return` inside one leaves the
+/// function. Both back ends have to agree about that, and the failure it
+/// prevents is quiet: the rest of the body running and a later `return`
+/// winning.
+#[test]
+fn an_early_return_from_a_branch_leaves_the_function() {
+    let src = r#"
+app "x"
+version 1
+function sign(n: int): int {
+  if (n < 0) { return 0 - 1 }
+  if (n == 0) { return 0 }
+  return 1
+}
+"#;
+    for n in [-5, -1, 0, 1, 7] {
+        both_agree(src, "sign", &[Value::Int(n)]);
+    }
+    assert_eq!(emitted(src, "sign", &[Value::Int(-5)]).unwrap(), Value::Int(-1));
+    assert_eq!(emitted(src, "sign", &[Value::Int(0)]).unwrap(), Value::Int(0));
+    assert_eq!(emitted(src, "sign", &[Value::Int(9)]).unwrap(), Value::Int(1));
+}

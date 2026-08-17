@@ -43,6 +43,9 @@ impl<'a> Eval<'a> {
     fn lookup(&self, name: &str) -> Option<&Value> {
         self.scope.iter().rev().find_map(|s| s.get(name))
     }
+    pub fn returned(&self) -> bool {
+        self.lookup("__return").is_some()
+    }
     fn push(&mut self) {
         self.scope.push(BTreeMap::new());
     }
@@ -65,6 +68,20 @@ impl<'a> Eval<'a> {
             Stmt::Return { value, .. } => {
                 let v = self.expr(value, state)?;
                 self.bind("__return", v);
+                Ok(())
+            }
+
+            Stmt::If { cond, then, other, .. } => {
+                let branch = if self.expr(cond, state)?.truthy() { then } else { other };
+                for s in branch {
+                    self.stmt(s, phase, state)?;
+                    // A `return` inside a branch ends the function, not the
+                    // branch. Without this the rest of the body runs and the
+                    // last `return` wins, which is a silent wrong answer.
+                    if self.returned() {
+                        break;
+                    }
+                }
                 Ok(())
             }
 

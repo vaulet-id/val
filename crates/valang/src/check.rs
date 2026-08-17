@@ -113,8 +113,13 @@ fn is_effect(name: &str) -> bool {
 fn walk_stmts(stmts: &[Stmt], f: &mut impl FnMut(&Stmt)) {
     for s in stmts {
         f(s);
-        if let Stmt::Effect { body, .. } = s {
-            walk_stmts(body, f);
+        match s {
+            Stmt::Effect { body, .. } => walk_stmts(body, f),
+            Stmt::If { then, other, .. } => {
+                walk_stmts(then, f);
+                walk_stmts(other, f);
+            }
+            _ => {}
         }
     }
 }
@@ -562,6 +567,7 @@ fn narrowing_before_use(p: &Program, d: &mut Vec<Diagnostic>) {
                             check_expr(&a.value)
                         }
                     }
+                    Stmt::If { cond, .. } => check_expr(cond),
                     Stmt::Binding { .. } | Stmt::Data { .. } => {}
                 }
             });
@@ -637,6 +643,7 @@ fn for_each_expr(p: &Program, f: &mut impl FnMut(&Expr)) {
                     a.value.walk(f)
                 }
             }
+            Stmt::If { cond, .. } => cond.walk(f),
             Stmt::Binding { .. } | Stmt::Data { .. } => {}
         })
     };
