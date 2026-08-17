@@ -100,6 +100,28 @@ there too.
 Longer examples, including one file of programs that must not compile, are in
 [`examples/`](examples/).
 
+## Interfaces
+
+An application declares its screens; it does not implement them. The host ships
+the components, their behaviour and their state, and VAL says which ones, bound
+to what, and which action a press calls — so a press goes through the same
+phases, consent and record as everything else, and a screen adds no path to an
+effect.
+
+Which tab is open and what is typed but unsubmitted belong to the host, never to
+application state: `state` here is hashed, signed and replayable, and it would
+be diluted by every press. Props are semantic — no colours, no pixels — and
+text comes from the signed manifest, so the compiler can refuse a build with an
+untranslated locale, and the host can be the only thing that ever formats a
+Thai date.
+
+Applications may use the host's screen archetypes or compose their own from the
+same primitives; an archetype *is* a composition the host wrote. Composing
+freely is allowed because otherwise every application looks the same. It is safe
+because the interface is data and the language is total, so every screen is
+rendered at every size, locale and theme at build time, and a layout that breaks
+does not ship.
+
 ## Layout
 
 | | |

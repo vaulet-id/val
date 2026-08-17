@@ -1,0 +1,54 @@
+// A screen, and the two rules that make screens safe to hand to anybody.
+//
+// The app declares which components, arranged how, bound to what, and which
+// action a press calls. It does not implement them, style them, or hold their
+// state — the host ships all three, so accessibility, dark mode and Thai text
+// are earned once instead of broken forty times.
+
+app "th.co.codefin.loyalty"
+version 1
+
+capabilities {
+  credential.read(PurchaseReceipt)
+}
+
+screen Wallet {
+  // Declared, not fetched. The host resolves this before it draws, so there is
+  // no half-empty screen and no prompt arriving mid-scroll — and a reviewer
+  // reads one block to learn what this screen sees of somebody's wallet.
+  //
+  // `verified with` is doing real work: the list cannot show a receipt that
+  // failed the policy, and nobody had to remember to filter.
+  data {
+    receipts: credentials of PurchaseReceipt verified with ReceiptFromMerchant
+      order by purchased_at desc
+      limit 50
+  }
+
+  column {
+    // `text:` is a key into the signed manifest, never a sentence. The compiler
+    // checks the key exists, that `points` is a slot, that its type matches,
+    // and that every locale this app ships to has a translation.
+    card(text: "balance", points: state.member.points)
+
+    tabs {
+      // Which tab is open is the host's business. It is not app state, so it is
+      // not hashed, not committed, and not a line in the execution record.
+      tab("history") {
+        list(receipts) { r ->
+          row(text: "receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at)
+        }
+      }
+
+      tab("rewards") {
+        list(state.rewards) { reward -> row(text: "rewardLine", name: reward.name) }
+      }
+    }
+
+    // A press names an action. There is no other kind of handler, so everything
+    // a screen can start goes through require → verify → compute → update →
+    // execute, with the same consent and the same record. A screen adds no path
+    // to an effect that an action did not already have.
+    button(text: "scan", emphasis: primary, onTap: ScanToEarn)
+  }
+}

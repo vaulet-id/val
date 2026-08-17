@@ -1,7 +1,7 @@
 # VAL — the language
 
 **Status:** draft, 2026-08-17. Nothing here is built. This is the specification
-to argue with; the open questions in §9 are open, and the recommendation under
+to argue with; the open questions in §11 are open, and the recommendation under
 each is what the rest of the document assumes until somebody says otherwise.
 
 VAL is a **domain-specific language, not a general-purpose one**, and it is
@@ -94,6 +94,17 @@ function … { … }          // pure helpers
 action … { … }            // the only executable thing
 ```
 
+**An application is a package, and a package may be several files.** They share
+one scope: there is no per-file namespace and no import statement, because a
+file is how the author organises the work, not a boundary anybody else should
+have to trace. A reviewer still finds everything with one search.
+
+**There are no imports across packages.** The only things worth sharing are pure
+helpers and trust policies — helpers that are genuinely common belong in the
+closed set of builtins, and a shared policy is published in a register and named
+with its hash, the way the claim vocabulary is (ADR 0046). What is not on offer
+is a dependency somebody else can change after you have signed.
+
 The application identifier is a **quoted string**, not a bare dotted name: a
 reverse-DNS identifier and a field access are the same shape, and a lexer should
 not have to tell them apart by context.
@@ -127,6 +138,28 @@ own is not a value**, because no issuer ever signed a claim by that name, and
 the compiler says so instead of handing back a record with half its fields
 empty.
 
+**`if` and `switch` parenthesise their condition**, as TypeScript and Dart do
+and as Rust does not. The reason is not taste: it removes every ambiguity
+between a block and a record literal, which is a special case Rust had to add a
+rule for.
+
+**Numeric literals** are decimal, with `_` permitted between digits — `100_000`,
+never `_1` or `1_`. No hexadecimal, no binary, no exponent: a loyalty scheme has
+no use for them and each is a way to write a number a reviewer cannot read at a
+glance.
+
+`12.50` **lexes as one token and the parser rejects it**, rather than the lexer
+splitting it into `12`, `.`, `50` and producing "expected field name". The whole
+of `rejected.val` stands on this: a rule is only taught by the message it
+produces.
+
+**Identifiers are ASCII.** Strings are full UTF-8 and Thai text belongs in them,
+but a language that decides who somebody is cannot have identifiers where a
+Cyrillic `а` and a Latin `a` are different names that look identical. The
+readability this gives up is recovered where it belongs: what a person reads is
+the consent sheet and the app's own description, which come from the signed
+manifest, not from identifiers anybody can choose.
+
 **Names this program chooses are camelCase** — `lifetimePoints`, `tierFor`.
 **Claim names it does not choose are left alone**: `purchased_at`,
 `document_number` and the rest come from the issuer's vocabulary, and rewriting
@@ -157,8 +190,16 @@ the only deterministic option — wrapping produces a wrong answer that the
 execution record would then faithfully prove, which is worse than failing. A
 trap aborts the action and commits nothing.
 
+**Strings are compared and passed, never built.** No interpolation, no `+`. This
+is not about lexer cost: every sentence a person reads must come from something
+that was signed, and a string assembled at runtime is a sentence nobody
+reviewed — which would make the rule against imitating host chrome unenforceable
+the day UI arrives. Text for people lives in the manifest as a template with
+named slots, and code supplies the values (§9). Composite keys are structured
+arguments, not concatenation: `storage.write(scope: "member", id: memberId, …)`.
+
 **There is no floating point.** Two reasons and either would be enough: NaN bit
-patterns are the main source of nondeterminism under Wasm (§7), and money and
+patterns are the main source of nondeterminism under Wasm (§8), and money and
 points want integers or fixed point regardless. Amounts are minor units.
 
 A `state` field declares its starting value with `default`, not `=`:
@@ -279,22 +320,48 @@ eventually be written as if they could.
 **Policies are nominal.** `Verified<A>` is not `Verified<B>` even if A's
 predicates imply B's. Deciding implication between arbitrary predicates is not
 something a compiler should attempt, and a relationship that matters can be
-declared (§9.2).
+declared (§11.4).
 
 **The subject is bound explicitly.** `receipt.signature.valid`, never a bare
 `signature.valid`: an implicit receiver is unambiguous exactly until a second
 credential is in scope.
 
-### Provenance
+### Provenance travels with the value
 
-A derived value should know what it came from:
+`Verified<P>` covers the credential. It does not cover what is computed from it,
+and without that the paradigm stops at the edge: `amount / 100` is an `int` like
+any other, and the credential this application signs afterwards says nothing
+about where its numbers came from.
+
+So **every value carries the set of trust policies it descends from**, the
+compiler propagates it, and nobody writes it by hand except at two boundaries.
 
 ```
-adult ← age ← AgeCredential ← ReceiptFromMerchant ← { anchor, signature,
-                                                     status, binding }
+credential.issue(LoyaltyMember {
+  points: next.member.points from { ReceiptFromMerchant }
+})
 ```
 
----
+The `from` clause is a requirement, not an annotation: this claim may be
+computed only from data verified under that policy, and mixing in anything
+unverified — or verified under something else — does not compile. The issued
+credential then carries the provenance of each claim, machine-checkable by
+whoever receives it next. They do not have to take our signature's word for how
+the number was reached.
+
+The second boundary is `prove`, where the clause says what is in the witness.
+
+**This stays tractable because the lattice is small.** It is not a hierarchy of
+secrecy levels; it is a set of policy names, and the language is total, with no
+recursion and no loops, so propagation is set union in a single pass.
+
+**It stays usable because it is inferred everywhere else.** An error points at
+the line where an unverified value entered, not at the line where it was finally
+used — the latter is what makes information-flow types notorious.
+
+This is the riskiest piece of the type system, and it has an ordered retreat: do
+it in the execution record first and in the types later. Strengthening a type
+does not break a program that was already correct.
 
 ## 5. Actions
 
@@ -509,7 +576,7 @@ lengths are bounded by the host.
 
 This is a deliberate position, not a missing feature. What it buys:
 
-- **Termination without fuel.** Wasm's fuel limit (§7) becomes a second belt
+- **Termination without fuel.** Wasm's fuel limit (§8) becomes a second belt
   rather than the only one.
 - **A cost bound before running.** Tooling can price an action, and a preview
   cannot hang.
@@ -612,58 +679,191 @@ does not change; only the back end.
 
 ## 9. User interface
 
-**v1 has no `screen`.** An application is actions, trust policies and state; the
-host draws whatever it draws. This is not a placeholder: a language that renders
-is a much larger language, and no application has yet failed to be expressible
-without it.
+An application declares its screens. **It does not implement them.** The host
+ships the components, their behaviour and their state; VAL says which ones,
+arranged how, bound to what, and which action a press calls.
 
-When `screen` arrives, in ascending order of cost: a **host component catalogue**
-with typed props · then **constrained layout primitives** · **never arbitrary
-drawing.**
+```
+screen Wallet {
+  data {
+    receipts: credentials of PurchaseReceipt verified with ReceiptFromMerchant
+  }
 
-Constraints that hold regardless:
+  column {
+    card(text: "balance", points: state.member.points)
+    tabs {
+      tab("history") { list(receipts) { r -> row(text: "receipt", at: r.claims.purchased_at) } }
+      tab("rewards") { … }
+    }
+    button(text: "scan", emphasis: primary, onTap: ScanToEarn)
+  }
+}
+```
 
-- **Consent is host chrome.** The application cannot draw it, cover it, or
-  imitate it.
-- **Branding comes from the signed manifest**, not from free styling.
-- **UI is data, not code**, signed and diffed with the same canonical encoding
-  as the execution record.
-- Host drawing earns accessibility, internationalisation and dark mode once.
+### A press calls an action, and nothing else
+
+`onTap` names a declared action. Every press therefore goes through
+`input → require → verify → compute → update → execute`, the same consent, the
+same execution record. **The interface adds no path to an effect** — there is
+nothing a screen can do that an action could not have done, which is what keeps
+§5 true once there is a screen at all.
+
+### The host owns interaction state, all of it
+
+Which tab is selected, where the list is scrolled, what is typed in a field that
+has not been submitted: none of it is application state. It is not hashed, not
+committed, not in the execution record.
+
+The rule that forces this is not tidiness. `state` in this language is hashed,
+signed and replayable, and if a scroll position enters it then "provable" is
+diluted by every press. An action receives what a form collected **at the moment
+it was submitted**, through `input`, which is the mechanism that already exists.
+
+The cost is that an application cannot drive its own interface — it cannot
+switch tabs, clear a field, or scroll — except through a declared `navigate`.
+That is the same trade as never drawing: control given up in exchange for
+behaviour that is correct everywhere without each application getting it right
+separately.
+
+### Presets and free composition are one system
+
+The host ships **archetypes** — a list screen, a detail screen, a form screen, a
+tabbed screen — and an application may use one, or compose its own from the same
+primitives.
+
+They are not two mechanisms. **An archetype is a composition the host wrote**,
+in the same data, rendered by the same renderer, versioned the same way. One
+semantics, and the host is using the thing it ships.
+
+Composing freely is allowed because otherwise every application looks identical
+and the catalogue's authors become the bottleneck on everybody else's product.
+
+### Freedom in composition, not in geometry
+
+- **Semantic props only** — `text:` (a manifest key), `icon:` (from the
+  catalogue), `emphasis:`, `state:`, `onTap:`. No colours, no fonts, no pixel
+  sizes. Spacing comes from a scale.
+- **No absolute positioning.** A container owns its own overflow.
+- **Text is measured and wrapped by the host**, because it came from the
+  manifest and because Thai runs about a third longer than English.
+
+Free composition is where a design system usually starts breaking on small
+screens, long text and dark mode. The answer is not to forbid it:
+
+### Layout is checked at build time
+
+The interface is data and the language is total, so tooling renders every screen
+at every size, locale and theme **before it ships**, and a build fails on
+anything that overflows or falls below contrast.
+
+An application that composes its own screens and looks unlike the others is
+working as intended. One that composes its own screens and breaks on a small
+phone in Thai does not get published.
+
+### Text comes from the manifest, checked by the compiler
+
+```
+"balance": { th: "คุณมี {points} แต้ม", en: "You have {points} points" }
+
+card(text: "balance", points: state.member.points)
+```
+
+The compiler reads the manifest — they are signed as one package, so checking
+them apart would mean signing a pairing nobody verified — and rejects a missing
+key, a missing slot, a slot of the wrong type, **and a locale that is not
+translated.** A market's language missing is a build failure, not a bug report.
+
+Numbers, dates and currency are formatted by the host per locale. An application
+cannot get Thai numerals or Buddhist-era dates wrong, because it never touches
+them.
+
+### What holds regardless
+
+- **Consent is host chrome.** No application draws it, covers it, or imitates
+  it.
+- **Branding comes from the signed manifest**, never from styling.
+- **UI is data, not code** — signed, diffed and audited with the same canonical
+  encoding as the execution record.
+- **Never arbitrary drawing.** A publisher who needs pixels wants the webview
+  tier, and pays for it with the capabilities that tier cannot have.
 
 ---
 
-## 10. Open questions
+## 10. Proofs
+
+`prove` compiles to a circuit. That is only possible for a fragment of the
+language, and **the compiler must know which fragment**, because the rule in §5
+— that a proof may never quietly degrade into a disclosure — cannot be kept by a
+compiler that finds out at proving time.
+
+So there is a **provable subset**, checked statically, and leaving it is an
+error with a message that says which line and why.
+
+Inside it:
+
+- integers with a declared width — `int<32>` — because range checks are the
+  dominant cost and they scale with bits
+- `date` and `datetime` as integers, compared
+- string equality; no construction, which §3 already forbids everywhere
+- `switch` and `?:`, with the cost of **every** branch, not the taken one — this
+  has to be stated or nobody will understand why a proof is slow
+- list combinators where the length is known at compile time
+
+Outside it: `state`, effects, anything whose size is not statically known.
+
+What the host supplies, and what VAL does not: the circuit proving that the
+claims came from a credential an anchor-resolvable issuer signed. VAL provides
+the predicate over those claims, and the two compose over the witness.
+`disclose` marks a public input; everything else the proof touches is witness.
+Proving randomness never enters the execution record — the statement and the
+verdict do.
+
+---
+
+## 11. Open questions
 
 1. **What exactly must a host provide?** The interface is named throughout this
    document and specified nowhere. Writing it down is the honest test of whether
-   the first host has leaked into the language, and it blocks a second host.
-2. **May one policy be declared to refine another?** `trust A refines B { … }`
-   would let a function accept `Verified<A>` where `Verified<B>` is demanded,
-   with the compiler checking that A's predicates include B's syntactically.
+   the first host has leaked into the language, and it blocks a second host. It
+   now covers three things, not one: capabilities, the text bundle, and the
+   component catalogue.
+2. **How is the component catalogue versioned?** An application signed against
+   catalogue v1 will run on a host shipping v3. *Recommended:* the package
+   records the catalogue version it was built against and the host renders those
+   semantics or refuses — the interface is data, so keeping old semantics is
+   possible in a way that keeping old code is not.
+3. **How does navigation work?** `navigate` is named and unspecified. It decides
+   whether an application has a screen stack, and whether it can send somebody
+   anywhere they did not ask to go.
+4. **May one policy be declared to refine another?** `trust A refines B { … }`
+   would let a function accept `Verified<A>` where `Verified<B>` is demanded.
    *Recommended:* yes, eventually, and syntactic containment only — never
    semantic implication.
-3. **Is there a standard library, and how small?** `duration(days: 30)` is
-   already needed by two example programs. *Recommended:* a fixed, closed set of
-   host-implemented builtins — durations, list combinators, string comparison —
-   with no way for an application to add to it. A DSL with an extensible prelude
-   is a general-purpose language that has not admitted it.
-4. **Are reads effects?** A credential lookup touches host state, can fail and
-   may prompt — but it is not a mutation, and forcing it into `execute` makes
-   ordinary code awkward. *Recommended:* an action declares its data
-   dependencies in a phase of its own rather than calling mid-computation.
-5. **`fold` and totality.** A fold whose accumulator grows is bounded in steps
+5. **Is there a standard library, and how small?** *Recommended:* a fixed, closed
+   set of host-implemented builtins — durations, list combinators, string
+   comparison — with no way for an application to add to it. A DSL with an
+   extensible prelude is a general-purpose language that has not admitted it.
+   Totality is the reason it must be closed: a builtin is the one place a
+   non-terminating operation could enter.
+6. **`fold` and totality.** A fold whose accumulator grows is bounded in steps
    but not in memory. *Recommended:* bound value sizes at the host interface,
    and say so there rather than pretending totality covers it.
+7. **`type` is declared in §2 and specified nowhere.** Plain records exist, and
+   whether they may hold verified and unverified data side by side is a
+   provenance question (§4), not a syntax one.
 
 ---
 
-## 11. Order of work
+## 12. Order of work
 
 1. Parser and typed AST for the shell plus expressions.
 2. Type checker: `Verified<P>`, nullability, exhaustive switching, trapping
    arithmetic, effect placement, acyclic call graph.
 3. Capability and trust analysis over the typed AST.
-4. Tree-walking evaluator, effect requests, execution records.
-5. The host interface (§10.1), and one capability wired end to end.
-6. Everything else — Wasm back end, `screen`, packaging, proofs — after a real
-   application exists and pushes on it.
+4. Tree-walking evaluator, effect requests, execution records — provenance in
+   the record first, in the types after.
+5. The host interface (§11.1), and one capability wired end to end.
+6. Screens: the archetypes that exist as host UI already, then composition, then
+   the build-time layout check.
+7. Everything else — Wasm back end, the provable subset, packaging — after a
+   real application exists and pushes on it.
