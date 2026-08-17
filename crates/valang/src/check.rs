@@ -143,28 +143,52 @@ fn at_most_one_disclosure(p: &Program, d: &mut Vec<Diagnostic>) {
 
 // --------------------------------------------------------------- capabilities
 
+/// A capability is its name *and* its argument. Comparing only the name lets an
+/// application declare `credential.read(LoyaltyMember)`, read a passport, and
+/// pass — which is not least privilege in any sense that matters, and is the
+/// hole parameterised capabilities were added to close.
+fn capability_key(name: &str, arg: Option<&str>) -> String {
+    match arg {
+        Some(a) => format!("{name}({a})"),
+        None => name.to_string(),
+    }
+}
+
 fn capabilities_declared_and_used(p: &Program, d: &mut Vec<Diagnostic>) {
     let mut used: HashSet<String> = HashSet::new();
 
     for a in &p.actions {
         for block in &a.phases {
             walk_stmts(&block.stmts, &mut |s| {
-                if let Stmt::Effect { name, .. } = s {
+                if let Stmt::Effect { name, args, .. } = s {
                     if name == "present" || name == "disclose" || name == "prove" {
                         used.insert("disclosure.present".into());
+                    } else if name == "credential.issue" {
+                        // `credential.issue(LoyaltyMember { … })` — the type is
+                        // the callee, and it is the argument the capability has
+                        // to have named.
+                        let issued = args.first().and_then(|a| match &a.value {
+                            Expr::Call { callee, .. } => callee.path(),
+                            other => other.path(),
+                        });
+                        used.insert(capability_key(name, issued.as_deref()));
                     } else {
                         used.insert(name.clone());
                     }
                 }
                 if let Stmt::Binding { ty, .. } = s {
                     if ty.name == "Credential" {
-                        used.insert("credential.read".into());
+                        used.insert(capability_key("credential.read", ty.args.first().map(|a| a.name.as_str())));
                     }
                 }
                 if let Stmt::Data { source, .. } = s {
                     match source {
-                        DataSource::Credentials { .. } => { used.insert("credential.read".into()); }
-                        DataSource::Query { .. } => { used.insert("api.query".into()); }
+                        DataSource::Credentials { ty, .. } => {
+                            used.insert(capability_key("credential.read", Some(ty)));
+                        }
+                        DataSource::Query { .. } => {
+                            used.insert("api.query".into());
+                        }
                         DataSource::Unknown => {}
                     }
                 }
@@ -174,8 +198,8 @@ fn capabilities_declared_and_used(p: &Program, d: &mut Vec<Diagnostic>) {
     for s in &p.screens {
         for dd in &s.data {
             match &dd.source {
-                DataSource::Credentials { .. } => {
-                    used.insert("credential.read".into());
+                DataSource::Credentials { ty, .. } => {
+                    used.insert(capability_key("credential.read", Some(ty)));
                 }
                 DataSource::Query { .. } => {
                     used.insert("api.query".into());
@@ -185,21 +209,39 @@ fn capabilities_declared_and_used(p: &Program, d: &mut Vec<Diagnostic>) {
         }
     }
 
-    let declared: HashMap<&str, &Capability> = p.capabilities.iter().map(|c| (c.name.as_str(), c)).collect();
+    let declared: HashMap<String, &Capability> = p
+        .capabilities
+        .iter()
+        .map(|c| {
+            let arg = c.args.first().and_then(|a| a.value.path());
+            (capability_key(&c.name, arg.as_deref()), c)
+        })
+        .collect();
 
-    for c in &p.capabilities {
-        if !used.contains(&c.name) {
+    for (key, c) in &declared {
+        if !used.contains(key) {
+            // Named the wrong thing, or nothing? Those are different mistakes.
+            let same_name: Vec<&String> = used.iter().filter(|u| u.starts_with(&format!("{}(", c.name))).collect();
+            if !same_name.is_empty() {
+                d.push(Diagnostic::error(
+                    c.span,
+                    format!(
+                        "`{key}` is declared, and what this application actually does is {}. A capability is its name and its argument: declaring one type and reading another is not least privilege, it is a different permission",
+                        same_name.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")
+                    ),
+                ));
+                continue;
+            }
             d.push(Diagnostic::error(
                 c.span,
                 format!(
-                    "`{}` is declared and never used. Consent asked for something unused is consent spent on nothing, and it trains people to say yes",
-                    c.name
+                    "`{key}` is declared and never used. Consent asked for something unused is consent spent on nothing, and it trains people to say yes"
                 ),
             ));
         }
     }
     for u in &used {
-        if !declared.contains_key(u.as_str()) {
+        if !declared.contains_key(u) && !declared.contains_key(u.split('(').next().unwrap_or(u)) {
             // Point at the effect that needed it.
             let mut at = None;
             for a in &p.actions {

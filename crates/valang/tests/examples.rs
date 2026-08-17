@@ -150,6 +150,29 @@ action Earn {
     assert!(e.contains("self-asserted"), "and it should say what it found instead:\n{e}");
 }
 
+/// A capability is its name and its argument. Comparing only the name let an
+/// application declare one credential type and read another, which is not least
+/// privilege — it is a different permission wearing the right label.
+#[test]
+fn declaring_one_credential_and_reading_another_is_refused() {
+    let src = r#"
+app "example.mismatch"
+version 1
+capabilities { credential.read(LoyaltyMember) }
+credential LoyaltyMember { points: int }
+credential Passport { document_number: string }
+trust Whoever(p: Passport) { anchor: "th.go.dopa" require { p.signature.valid } }
+action Peek {
+  input  { passport: Credential<Passport> }
+  verify { const checked = passport with Whoever }
+  compute { const n = checked.claims.document_number }
+}
+"#;
+    let e = errors(src).join("\n");
+    assert!(e.contains("`credential.read(Passport)` is used and never declared"), "{e}");
+    assert!(e.contains("is not least privilege"), "{e}");
+}
+
 #[test]
 fn a_screen_declares_what_it_sees() {
     let (p, _) = analyse(WALLET);
