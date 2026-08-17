@@ -1,0 +1,145 @@
+// An investment portfolio, displayed.
+//
+// A different shape from the loyalty card on purpose: no state, no issuance,
+// and — apart from one optional proof — no effects at all. The whole app is a
+// trust policy, a screen and some arithmetic. That it is expressible at all is
+// the argument for reading credentials through a declaration rather than a call.
+//
+// It is also where the no-floats rule stops being theoretical: a portfolio is
+// made of fractional shares and percentages, and neither of them is allowed to
+// be a float.
+
+app "th.co.codefin.portfolio"
+version 1
+
+capabilities {
+  credential.read(Holding)
+
+  // Only for the accreditation proof at the bottom. An app that merely displays
+  // a portfolio does not declare this, and the consent sheet says so.
+  disclosure.present
+}
+
+credential Holding {
+  symbol:       string
+  quantity:     int        // micro-shares: 1_000_000 is one share. Fractional
+                           // shares are ordinary now, and the answer is a
+                           // smaller unit, never a float.
+  cost_basis:   int        // satang
+  market_value: int        // satang, as of valued_at
+  valued_at:    datetime
+  account_id:   string
+}
+
+// The policy does real work here, and the last line is the interesting one: a
+// valuation from last week is signed, unrevoked, correctly bound to the holder,
+// and wrong. Freshness is a trust question, not a display question, so it lives
+// here — and a stale holding never reaches the screen rather than reaching it
+// with a warning label somebody has to remember to add.
+trust FromLicensedBroker(h: Holding) {
+  anchor: "th.go.sec.licensed-brokers"
+  require {
+    h.signature.valid
+    h.status.active
+    h.holder.bound
+    h.claims.valued_at > context.time.now - duration(hours: 24)
+  }
+}
+
+// Basis points, not percent, because percent wants a decimal point and this
+// language does not have one. 1_00 is one percent.
+//
+// PROPOSED — and a real gap: `int` traps on overflow, and the spec says nothing
+// about division. A holding gifted at zero cost makes cost_basis zero, and this
+// line decides whether that is a trap or a silent absurdity. It should trap, for
+// the same reason overflow does: a wrong number the execution record would then
+// faithfully prove is worse than a failure.
+function returnBasisPoints(marketValue: int, costBasis: int): int {
+  return costBasis == 0 ? 0 : (marketValue - costBasis) * 10_000 / costBasis
+}
+
+screen Portfolio {
+  // Declared, resolved before the screen is drawn. `verified with` means a
+  // stale or unlicensed holding cannot appear in the list — not "is filtered
+  // out", cannot appear, because the filtering is the host's and not a line of
+  // app code somebody could forget.
+  //
+  // `limit` is not only politeness: it is what makes the total below a bounded
+  // computation, and what makes the proof at the bottom compile to a circuit.
+  data {
+    holdings: credentials of Holding verified with FromLicensedBroker
+      order by market_value desc
+      limit 200
+  }
+
+  // PROPOSED. The spec gives a screen `data` and no way to derive anything from
+  // it, so every screen with a total would have to put the total in `state` —
+  // which is hashed, signed and replayable, and has no business holding a number
+  // that is a function of what is already on screen.
+  //
+  // A pure block, no effects, same rules as an action's `compute`.
+  compute {
+    const totalValue = holdings.fold(0) { sum, h -> sum + h.claims.market_value }
+    const totalCost  = holdings.fold(0) { sum, h -> sum + h.claims.cost_basis }
+    const returnBps  = returnBasisPoints(totalValue, totalCost)
+  }
+
+  column {
+    // The host formats the number. An app that formatted it would get Thai
+    // digits, the thousands separator and the currency position wrong
+    // separately from every other app.
+    card(text: "portfolioTotal", value: totalValue, change: returnBps)
+
+    tabs {
+      tab("holdings") {
+        list(holdings) { h ->
+          row(
+            text:     "holdingLine",
+            symbol:   h.claims.symbol,
+            quantity: h.claims.quantity,
+            value:    h.claims.market_value,
+            change:   returnBasisPoints(h.claims.market_value, h.claims.cost_basis),
+          )
+        }
+      }
+
+      tab("accounts") {
+        // Nothing here yet. A screen that shows an empty state is the host's
+        // job too — the app does not draw "you have no accounts", it declares
+        // the list and the host knows what an empty one looks like.
+        list(holdings) { h -> row(text: "accountLine", account: h.claims.account_id) }
+      }
+    }
+
+    button(text: "proveAccredited", emphasis: secondary, onTap: ProveAccredited)
+  }
+}
+
+// Prove the portfolio clears a threshold without showing a single holding.
+//
+// This is the case the whole language is shaped for: the counterparty learns
+// one bit, the person keeps everything else, and nobody has to trust a summary
+// somebody typed.
+action ProveAccredited {
+  verify {
+    // The data block above is the screen's. An action re-declares what it needs,
+    // because an action can be reached from somewhere other than that screen.
+    const holdings = credentials of Holding verified with FromLicensedBroker
+      limit 200
+  }
+
+  execute {
+    present {
+      // Nothing is disclosed. There is no `disclose` line at all, which is what
+      // an app should look like when it has nothing to be given.
+      //
+      // Inside the provable subset: the fold has a length bound known at compile
+      // time (200), the arithmetic is integer, and the comparison is a
+      // comparison. The cost is 200 additions of range-checked integers whether
+      // the person holds two positions or two hundred — a circuit pays for the
+      // bound, not for the data — and that is the sort of thing the compiler
+      // should be able to tell you before you ship it.
+      prove holdings.fold(0) { sum, h -> sum + h.claims.market_value } >= 5_000_000_00
+    }
+  }
+}

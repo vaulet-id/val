@@ -17,4 +17,5 @@ somebody made; that is the point of keeping them here rather than in a document.
 | [`loyalty.val`](loyalty.val) | the whole action lifecycle — a receipt earns points and reissues a membership |
 | [`door.val`](door.val) | the small end: prove an age, disclose nothing |
 | [`wallet.val`](wallet.val) | a screen — declared data, host-owned interaction state, a press that names an action |
+| [`portfolio.val`](portfolio.val) | an investment portfolio — no state, no issuance, fractional shares without floats, and a proof that discloses nothing |
 | [`rejected.val`](rejected.val) | programs that must not compile, and the error each one is owed |
