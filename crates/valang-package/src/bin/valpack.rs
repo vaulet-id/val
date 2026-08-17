@@ -44,6 +44,7 @@ fn describe(r: &Refusal) -> String {
             "the report understates this app. `{line}` ships as {shipped:?} and the code says {derived:?}"
         ),
         Refusal::Malformed(w) => format!("malformed: {w}"),
+        Refusal::Refused { by } => by.clone(),
     }
 }
 

@@ -17,6 +17,39 @@ use valang_runtime::value::Value;
 
 pub const FORMAT: i64 = 1;
 
+/// What a host will admit.
+///
+/// The package format carries `kind` and a catalogue version and takes no view
+/// about either — that is host policy, and a language repository holding one
+/// would be the first host leaking into the language (§1). A host supplies this
+/// and gets its own ceiling.
+pub trait HostPolicy {
+    /// Whether an application of this kind may hold this capability. The first
+    /// host answers no to `credential.issue` for a webview, not as a preference
+    /// but because it cannot say what ran.
+    fn allows(&self, _kind: &str, _capability: &str) -> bool {
+        true
+    }
+
+    /// Whether this host can render the catalogue the package was built
+    /// against. Refusing is the honest answer: an application signed against v1
+    /// gets v1's semantics or nothing.
+    fn supports_catalogue(&self, _version: &str) -> bool {
+        true
+    }
+
+    /// Whether a package of this kind may carry VAL sources at all.
+    fn expects_sources(&self, kind: &str) -> bool {
+        kind == "val"
+    }
+}
+
+/// Admits everything. The default so that `verify` alone answers the questions
+/// that are the language's, and a host that has no policy yet is not silently
+/// given one.
+pub struct Permissive;
+impl HostPolicy for Permissive {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub app: String,
@@ -58,6 +91,8 @@ pub enum Refusal {
     /// an application does is the one lie a package could otherwise tell.
     ReportMismatch { line: String, shipped: Vec<String>, derived: Vec<String> },
     Malformed(String),
+    /// The host will not admit this, and the reason is the host's.
+    Refused { by: String },
 }
 
 fn hex(b: &[u8]) -> String {
@@ -179,6 +214,10 @@ pub fn build(
 /// What a host does before it admits an application. Every step is one the
 /// publisher could otherwise have been trusted about.
 pub fn verify(p: &Package) -> Result<(), Refusal> {
+    verify_with(p, &Permissive)
+}
+
+pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> {
     // 1. Nothing was modified after it was signed.
     for (path, text) in &p.sources {
         let want = p.integrity.get(path).ok_or_else(|| Refusal::Malformed(format!("{path} has no integrity entry")))?;
@@ -198,6 +237,25 @@ pub fn verify(p: &Package) -> Result<(), Refusal> {
         .map_err(|_| Refusal::Unsigned("malformed key".into()))?;
     let signature = Signature::from_slice(sig).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
     key.verify(&signable(p), &signature).map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
+
+    // A package with no sources is a tier where none of the next two checks can
+    // be made — and that is the reason the tier has a lower ceiling, not a
+    // consequence of it. **The report can only be derived from code the host
+    // compiled.** For anything else it is a declaration, and a declaration is
+    // exactly what a person cannot check.
+    if !policy.expects_sources(&p.manifest.kind) {
+        if !p.sources.is_empty() {
+            return Err(Refusal::Refused {
+                by: format!("a `{}` package carries no VAL sources", p.manifest.kind),
+            });
+        }
+        return ceiling(p, policy).and_then(|()| locales(p));
+    }
+    if p.sources.is_empty() {
+        return Err(Refusal::Refused {
+            by: format!("a `{}` package carries VAL sources, and this one carries none", p.manifest.kind),
+        });
+    }
 
     // 3. It compiles — checked here, not taken on trust from a build we did not
     //    run.
@@ -225,7 +283,46 @@ pub fn verify(p: &Package) -> Result<(), Refusal> {
         }
     }
 
-    // 5. Every locale the manifest promises has every key.
+    // 5. What this host will admit, which is not the language's business.
+    ceiling(p, policy)?;
+
+    // 6. Every locale the manifest promises has every key.
+    locales(p)
+}
+
+fn ceiling(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> {
+    if !policy.supports_catalogue(&p.manifest.catalogue) {
+        return Err(Refusal::Refused {
+            by: format!(
+                "this host does not render catalogue {}. An application signed against a catalogue gets that catalogue's semantics or nothing — a component that means something else on a later version is a screen the person did not consent to",
+                p.manifest.catalogue
+            ),
+        });
+    }
+    for (line, values) in &p.report {
+        if line == "irreversible" || values.is_empty() {
+            continue;
+        }
+        let capability = match line.as_str() {
+            "issues" => "credential.issue",
+            "moves money" => "payment.request",
+            "discloses" | "proves" => "disclosure.present",
+            "talks to" => "api.query",
+            _ => continue,
+        };
+        if !policy.allows(&p.manifest.kind, capability) {
+            return Err(Refusal::Refused {
+                by: format!(
+                    "a `{}` application may not `{capability}`. Capabilities follow verifiability rather than preference: a host that cannot state what ran cannot offer the capabilities whose safety depends on saying it",
+                    p.manifest.kind
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn locales(p: &Package) -> Result<(), Refusal> {
     for (key, per_locale) in &p.text_bundle {
         for locale in &p.manifest.locales {
             if !per_locale.contains_key(locale) {
@@ -235,7 +332,6 @@ pub fn verify(p: &Package) -> Result<(), Refusal> {
             }
         }
     }
-
     Ok(())
 }
 

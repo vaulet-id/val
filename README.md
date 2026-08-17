@@ -155,7 +155,7 @@ Against the pipeline in [§7](docs/spec.md), today:
 | state Merkle root | **done** — `(path, value)` leaves, one per list element, with inclusion proofs |
 | execution record | **done** — code, input, roots, effects, context, outcome, **signed by the host** |
 | manifest, text bundle | **done** — a locale missing a key refuses the package |
-| integrity, signature, `.va` | **done** — written and read back; a strict decoder refuses any non-canonical encoding |
+| integrity, signature, `.va` | **done** — written and read back; a strict decoder refuses any non-canonical encoding; `kind` and the catalogue version go to a host policy the crate does not hold |
 | Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel, and the module carries its own constants; actions stay with the host, since `execute` describes effects rather than performing them |
 
 ```

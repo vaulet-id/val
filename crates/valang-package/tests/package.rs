@@ -121,3 +121,79 @@ fn the_same_package_is_the_same_bytes() {
     assert_eq!(encode(&a), encode(&b));
     assert_eq!(artifact_hash(&a), artifact_hash(&b));
 }
+
+/// The first host's ceiling, written as a test rather than shipped in the crate:
+/// the package format carries `kind` and takes no view about it, and a language
+/// repository holding one host's policy is the leak §1 is about.
+struct Vaulet;
+
+impl HostPolicy for Vaulet {
+    fn allows(&self, kind: &str, capability: &str) -> bool {
+        if kind != "webview" {
+            return true;
+        }
+        // Capabilities follow verifiability, not preference. A webview runs code
+        // the host did not compile and draws screens it did not draw, so the
+        // host cannot state what ran — and every capability below depends on
+        // saying it.
+        !matches!(capability, "credential.issue" | "payment.request")
+    }
+    fn supports_catalogue(&self, version: &str) -> bool {
+        version == "1"
+    }
+}
+
+/// A webview carries no VAL, so its report is a *declaration* — nobody
+/// compiled anything to derive it from. That is not a consequence of the lower
+/// ceiling, it is the reason for it: what a person cannot have checked, a host
+/// can only enforce.
+#[test]
+fn a_webview_may_not_issue_a_credential() {
+    let key = keygen();
+    let mut m = manifest();
+    m.kind = "webview".into();
+
+    let mut pkg = build(m, BTreeMap::new(), text(), Some(&key)).unwrap();
+    pkg.report.insert("issues".into(), vec!["Card".into()]);
+    sign(&mut pkg, &key);
+
+    match verify_with(&pkg, &Vaulet) {
+        Err(Refusal::Refused { by }) => {
+            assert!(by.contains("may not `credential.issue`"), "{by}");
+            assert!(by.contains("follow verifiability rather than preference"), "{by}");
+        }
+        other => panic!("a webview that issues credentials should not be admitted, got {other:?}"),
+    }
+
+    // The same claim from a `val` package is admitted, because there it was
+    // derived from code this host compiled itself.
+    let ok = build(manifest(), sources(), text(), Some(&key)).unwrap();
+    verify_with(&ok, &Vaulet).expect("a val app that issues is admitted");
+}
+
+#[test]
+fn a_webview_carrying_val_sources_is_refused() {
+    let key = keygen();
+    let mut m = manifest();
+    m.kind = "webview".into();
+    let pkg = build(m, sources(), text(), Some(&key)).unwrap();
+    match verify_with(&pkg, &Vaulet) {
+        Err(Refusal::Refused { by }) => assert!(by.contains("carries no VAL sources"), "{by}"),
+        other => panic!("got {other:?}"),
+    }
+}
+
+#[test]
+fn a_catalogue_this_host_cannot_render_is_refused() {
+    let key = keygen();
+    let mut m = manifest();
+    m.catalogue = "3".into();
+    let pkg = build(m, sources(), text(), Some(&key)).unwrap();
+    match verify_with(&pkg, &Vaulet) {
+        Err(Refusal::Refused { by }) => assert!(by.contains("does not render catalogue 3"), "{by}"),
+        other => panic!("a host should refuse a catalogue it cannot render, got {other:?}"),
+    }
+    // And the language's own `verify` still says yes: this is host policy, and
+    // the crate holds none.
+    verify(&pkg).expect("the package itself is well formed");
+}
