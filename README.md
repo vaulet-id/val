@@ -150,17 +150,23 @@ Against the pipeline in [§7](docs/spec.md), today:
 | policy validation | **partial** — one disclosure per action, patch paths, no assignment |
 | capability report | **done** — derived from the code |
 | IR | not started (v1 skips it) |
-| evaluator | not started |
+| evaluator | **done** — phases, effects as requests, traps |
+| canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
+| state Merkle root | **done** — `(path, value)` leaves, one per list element |
+| execution record | **done** — code, input, roots, effects, context, outcome |
 | Wasm back end | not started |
 | manifest, text bundle | the bundle exists as data; nothing checks it yet |
 | integrity, signature, `.va` | not started |
 
 ```
-cargo run --bin valc -- examples/loyalty.val
+cargo run --bin valc   -- examples/loyalty.val
+cargo run --bin valrun -- examples/loyalty.val ScanToEarn
 ```
 
-prints the diagnostics and then the capability report — the whole of what a host
-runs over a package it received.
+`valc` prints the diagnostics and then the capability report — the whole of what
+a host runs over a package it received. `valrun` walks one action and prints the
+execution record: roots before and after, the batch the host was offered, and
+the state's leaves with their hashes. Its wallet is a stub and says so.
 
 All twelve of `rejected.val`'s programs are refused, each with the message its
 own comment says it is owed. The order of work is [§12 of the spec](docs/spec.md).
