@@ -154,19 +154,27 @@ Against the pipeline in [§7](docs/spec.md), today:
 | canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
 | state Merkle root | **done** — `(path, value)` leaves, one per list element |
 | execution record | **done** — code, input, roots, effects, context, outcome |
-| Wasm back end | not started |
-| manifest, text bundle | the bundle exists as data; nothing checks it yet |
-| integrity, signature, `.va` | not started |
+| manifest, text bundle | **done** — a locale missing a key refuses the package |
+| integrity, signature, `.va` | **done** — Ed25519 over a deterministic encoding, reproducible |
+| Wasm back end | not started, and not needed until untrusted code needs fuel limits |
 
 ```
 cargo run --bin valc   -- examples/loyalty.val
 cargo run --bin valrun -- examples/loyalty.val ScanToEarn
 ```
 
+```
+cargo run --bin valpack -- build  <dir> -o app.va
+cargo run --bin valpack -- verify <dir>
+```
+
 `valc` prints the diagnostics and then the capability report — the whole of what
 a host runs over a package it received. `valrun` walks one action and prints the
 execution record: roots before and after, the batch the host was offered, and
-the state's leaves with their hashes. Its wallet is a stub and says so.
+the state's leaves with their hashes; its wallet is a stub and says so.
+`valpack` builds a `.va` and verifies one the way a host would — every source
+hashed, the signature over those bytes, the program compiled here rather than
+taken on trust, and the shipped report recomputed and compared.
 
 All twelve of `rejected.val`'s programs are refused, each with the message its
 own comment says it is owed. The order of work is [§12 of the spec](docs/spec.md).

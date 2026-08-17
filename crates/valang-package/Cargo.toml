@@ -1,0 +1,16 @@
+[package]
+name = "valang-package"
+description = "The .va package: sources, manifest, derived report, integrity and signature"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+valang.workspace = true
+valang-runtime = { path = "../valang-runtime" }
+sha2 = "0.10"
+# Signing is a specification and a security boundary. Both are reasons not to
+# write one here.
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"

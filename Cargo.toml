@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/valang", "crates/valang-runtime"]
+members = ["crates/valang", "crates/valang-runtime", "crates/valang-package"]
 
 [workspace.package]
 version = "0.1.0"
