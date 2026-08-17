@@ -113,12 +113,12 @@ class Incoming {
   final String locale;
   final bool dark;
 
-  static const empty = Incoming(screens: [], text: {}, locale: 'th', dark: true);
+  static const empty = Incoming(screens: [], text: {}, locale: 'en', dark: true);
 
   factory Incoming.fromJson(Map<String, dynamic> j) => Incoming(
         screens: (j['screens'] as List?) ?? const [],
         text: (j['text'] as Map?)?.cast<String, dynamic>() ?? const {},
-        locale: (j['locale'] as String?) ?? 'th',
+        locale: (j['locale'] as String?) ?? 'en',
         dark: (j['dark'] as bool?) ?? true,
       );
 }

@@ -20,7 +20,10 @@ import { registerVal } from '@/val/monaco-lang'
 export default function App() {
   const [mode, setMode] = React.useState<Mode>('playground')
   const [dark, setDark] = React.useState(true)
-  const [locale, setLocale] = React.useState<'th' | 'en'>('th')
+  // English is the base: this is a public repository and a reader arrives from
+  // anywhere. Thai is one click away, which is what the switch is for — and
+  // switching is how you see that a missing translation fails the build.
+  const [locale, setLocale] = React.useState<'th' | 'en'>('en')
   const [active, setActive] = React.useState(files[0].path)
   const [sources, setSources] = React.useState<Record<string, string>>(
     Object.fromEntries(files.map((f) => [f.path, f.source])),

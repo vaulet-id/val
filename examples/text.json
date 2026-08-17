@@ -1,61 +1,61 @@
 {
-  "_comment": "The text bundle, signed with the package. Code names a key and supplies slot values; it never assembles a sentence. A locale missing a key is a failed build, not a bug report — spec §9.",
+  "_comment": "The text bundle, signed with the package. Code names a key and supplies slot values; it never assembles a sentence. A locale missing a key is a failed build, not a bug report — spec §9. English is listed first because it is the base a reader arrives in; the order carries no meaning to the compiler, which requires every locale the manifest promises.",
   "locales": [
-    "th",
-    "en"
+    "en",
+    "th"
   ],
   "keys": {
     "balance": {
-      "th": "คุณมี {points} แต้ม",
-      "en": "You have {points} points"
+      "en": "You have {points} points",
+      "th": "คุณมี {points} แต้ม"
     },
     "scan": {
-      "th": "สแกนใบเสร็จ",
-      "en": "Scan a receipt"
+      "en": "Scan a receipt",
+      "th": "สแกนใบเสร็จ"
     },
     "history": {
-      "th": "ประวัติ",
-      "en": "History"
+      "en": "History",
+      "th": "ประวัติ"
     },
     "rewards": {
-      "th": "ของรางวัล",
-      "en": "Rewards"
+      "en": "Rewards",
+      "th": "ของรางวัล"
     },
     "receiptLine": {
-      "th": "{merchant} · {at}",
-      "en": "{merchant} · {at}"
+      "en": "{merchant} · {at}",
+      "th": "{merchant} · {at}"
     },
     "rewardLine": {
-      "th": "{name}",
-      "en": "{name}"
+      "en": "{name}",
+      "th": "{name}"
     },
     "accountLine": {
-      "th": "บัญชี {account}",
-      "en": "Account {account}"
+      "en": "Account {account}",
+      "th": "บัญชี {account}"
     },
     "portfolioTotal": {
-      "th": "มูลค่ารวม {value} ({change})",
-      "en": "Total value {value} ({change})"
+      "en": "Total value {value} ({change})",
+      "th": "มูลค่ารวม {value} ({change})"
     },
     "holdings": {
-      "th": "ถือครอง",
-      "en": "Holdings"
+      "en": "Holdings",
+      "th": "ถือครอง"
     },
     "accounts": {
-      "th": "บัญชี",
-      "en": "Accounts"
+      "en": "Accounts",
+      "th": "บัญชี"
     },
     "holdingLine": {
-      "th": "{symbol} · {quantity} · {value}",
-      "en": "{symbol} · {quantity} · {value}"
+      "en": "{symbol} · {quantity} · {value}",
+      "th": "{symbol} · {quantity} · {value}"
     },
     "proveAccredited": {
-      "th": "พิสูจน์คุณสมบัติผู้ลงทุน",
-      "en": "Prove accreditation"
+      "en": "Prove accreditation",
+      "th": "พิสูจน์คุณสมบัติผู้ลงทุน"
     },
     "tooSmallToEarn": {
-      "th": "ยอดต่ำกว่า 20 บาท ยังไม่ได้แต้ม",
-      "en": "Purchases under ฿20 do not earn points"
+      "en": "Purchases under ฿20 do not earn points",
+      "th": "ยอดต่ำกว่า 20 บาท ยังไม่ได้แต้ม"
     }
   }
 }
