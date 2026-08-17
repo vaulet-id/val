@@ -42,6 +42,7 @@ class Vaulet {
   static const sm = 8.0;
   static const md = 12.0;
   static const lg = 16.0;
+  static const xxl = 24.0;
 
   /// Buttons and cards share 14; sheets use 20.
   static const radiusCard = 14.0;
@@ -50,8 +51,11 @@ class Vaulet {
   static const buttonHeight = 52.0;
 
   static const cardTitle = TextStyle(fontSize: 16, fontWeight: FontWeight.w700);
-  static const sectionLabel =
-      TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.6);
+  static const sectionLabel = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.6,
+  );
 
   /// A dark accent has to be set, not seeded: `fromSeed` rebuilds a seed's hue
   /// at a fixed lightness, so asking it for near-black hands back the mid-tone
@@ -113,14 +117,14 @@ class Incoming {
   final String locale;
   final bool dark;
 
-  static const empty = Incoming(screens: [], text: {}, locale: 'en', dark: true);
+  static const empty = Incoming(screens: [], text: {}, locale: 'en', dark: false);
 
   factory Incoming.fromJson(Map<String, dynamic> j) => Incoming(
-        screens: (j['screens'] as List?) ?? const [],
-        text: (j['text'] as Map?)?.cast<String, dynamic>() ?? const {},
-        locale: (j['locale'] as String?) ?? 'en',
-        dark: (j['dark'] as bool?) ?? true,
-      );
+    screens: (j['screens'] as List?) ?? const [],
+    text: (j['text'] as Map?)?.cast<String, dynamic>() ?? const {},
+    locale: (j['locale'] as String?) ?? 'en',
+    dark: (j['dark'] as bool?) ?? true,
+  );
 }
 
 class PreviewApp extends StatefulWidget {
@@ -163,9 +167,14 @@ class _PreviewAppState extends State<PreviewApp> {
         body: _in.screens.isEmpty
             ? const _NoScreen()
             : ListView(
-                padding: const EdgeInsets.all(Vaulet.lg),
+                // Room around the device so it reads as an object on a surface
+                // rather than as a panel that ran out of room — and enough of
+                // it above that the phone is not touching the tab bar it sits
+                // under.
+                padding: const EdgeInsets.symmetric(horizontal: Vaulet.xxl, vertical: 40),
                 children: [
-                  for (final s in _in.screens) _Phone(screen: s as Map<String, dynamic>, incoming: _in),
+                  for (final s in _in.screens)
+                    _Phone(screen: s as Map<String, dynamic>, incoming: _in),
                 ],
               ),
       ),
@@ -178,17 +187,17 @@ class _NoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'This program declares no screen.\n'
-            'An application can be actions, trust policies and state — '
-            'the loyalty card was, before it had one.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-      );
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Text(
+        'This program declares no screen.\n'
+        'An application can be actions, trust policies and state — '
+        'the loyalty card was, before it had one.',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ),
+  );
 }
 
 /// The frame is the host's, and so is everything inside it.
@@ -216,70 +225,60 @@ class _Phone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = (screen['data'] as List?) ?? const [];
     final scheme = Theme.of(context).colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(screen['name'] as String? ?? '',
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w600)),
-            const SizedBox(width: Vaulet.xs),
-            Text('screen · 393 × 852', style: Theme.of(context).textTheme.labelSmall),
-          ],
-        ),
-        const SizedBox(height: Vaulet.sm),
-        if (data.isNotEmpty) _WhatThisScreenSees(data: data),
-        const SizedBox(height: Vaulet.md),
-        // Scaled to whatever the panel gives it, never stretched: a preview
-        // that changed the aspect ratio to fit would be answering a question
-        // nobody asked.
-        Center(
-          child: FittedBox(
-            child: Container(
-              width: width + bezel * 2,
-              height: height + bezel * 2,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(screenRadius + bezel),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8)),
-                ],
+    // Only the phone. What this screen sees — which credentials, under which
+    // policy, and which of them anybody signed — is in the report, where it is
+    // derived from the code rather than drawn beside it. A preview that carried
+    // its own copy would be a second answer to a question that has one.
+    //
+    // Scaled to whatever the panel gives it, never stretched: a preview that
+    // changed the aspect ratio to fit would be answering a question nobody
+    // asked.
+    return Center(
+      child: FittedBox(
+        child: Container(
+          width: width + bezel * 2,
+          height: height + bezel * 2,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(screenRadius + bezel),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
-              padding: const EdgeInsets.all(bezel),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(screenRadius),
-                child: Container(
-                  width: width,
-                  height: height,
-                  color: scheme.surface,
-                  child: Column(
-                    children: [
-                      const _StatusBar(),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, 0),
-                          child: ListView(
-                            children: [
-                              for (final node in (screen['tree'] as List?) ?? const [])
-                                _Node(node: node as Map<String, dynamic>, incoming: incoming),
-                            ],
-                          ),
-                        ),
+            ],
+          ),
+          padding: const EdgeInsets.all(bezel),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(screenRadius),
+            child: Container(
+              width: width,
+              height: height,
+              color: scheme.surface,
+              child: Column(
+                children: [
+                  const _StatusBar(),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, 0),
+                      child: ListView(
+                        children: [
+                          for (final node in (screen['tree'] as List?) ?? const [])
+                            _Node(node: node as Map<String, dynamic>, incoming: incoming),
+                        ],
                       ),
-                      const _HomeIndicator(),
-                    ],
+                    ),
                   ),
-                ),
+                  const _HomeIndicator(),
+                ],
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -307,7 +306,10 @@ class _StatusBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('9:41', style: TextStyle(color: on, fontSize: 15, fontWeight: FontWeight.w600)),
+                Text(
+                  '9:41',
+                  style: TextStyle(color: on, fontSize: 15, fontWeight: FontWeight.w600),
+                ),
                 Row(
                   children: [
                     Icon(Icons.signal_cellular_alt, size: 15, color: on),
@@ -325,7 +327,10 @@ class _StatusBar extends StatelessWidget {
             child: Container(
               width: 125,
               height: 36,
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(18)),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(18),
+              ),
             ),
           ),
         ],
@@ -339,86 +344,18 @@ class _HomeIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 34,
-        child: Center(
-          child: Container(
-            width: 139,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
+    height: 34,
+    child: Center(
+      child: Container(
+        width: 139,
+        height: 5,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(3),
         ),
-      );
-}
-
-/// Three grades of data, drawn differently — by the host, because an
-/// application that could make a fetched figure look issuer-backed would break
-/// the only promise the wallet makes.
-class _WhatThisScreenSees extends StatelessWidget {
-  const _WhatThisScreenSees({required this.data});
-
-  final List<dynamic> data;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Vaulet.sm),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(Vaulet.radiusCard),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('WHAT THIS SCREEN SEES', style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 4),
-          for (final d in data.cast<Map<String, dynamic>>())
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                children: [
-                  _Grade(source: d['source'] as String?, policy: d['policy'] as String?),
-                  const SizedBox(width: 6),
-                  Text(d['name'] as String? ?? '', style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      [d['type'], d['policy'], d['audience']].where((x) => x != null).join(' · '),
-                      style: Theme.of(context).textTheme.labelSmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Grade extends StatelessWidget {
-  const _Grade({this.source, this.policy});
-
-  final String? source;
-  final String? policy;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, colour) = switch ((source, policy)) {
-      ('credentials', final p?) when p.isNotEmpty => ('issuer', Vaulet.verified),
-      ('credentials', _) => ('unverified', Theme.of(context).colorScheme.error),
-      ('query', _) => ('origin', const Color(0xFF2563EB)),
-      _ => ('?', Theme.of(context).disabledColor),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(border: Border.all(color: colour), borderRadius: BorderRadius.circular(3)),
-      child: Text(label, style: TextStyle(color: colour, fontSize: 9, fontWeight: FontWeight.w600)),
-    );
-  }
+    ),
+  );
 }
 
 class _Node extends StatefulWidget {
@@ -451,12 +388,17 @@ class _NodeState extends State<_Node> {
     if (key == null) return const SizedBox.shrink();
     final entry = (widget.incoming.text[key] as Map?)?.cast<String, dynamic>();
     if (entry == null) {
-      return Text('missing key “$key”', style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12));
+      return Text(
+        'missing key “$key”',
+        style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
+      );
     }
     final template = entry[widget.incoming.locale] as String?;
     if (template == null) {
-      return Text('“$key” has no ${widget.incoming.locale}',
-          style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12));
+      return Text(
+        '“$key” has no ${widget.incoming.locale}',
+        style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
+      );
     }
 
     final spans = <InlineSpan>[];
@@ -465,20 +407,25 @@ class _NodeState extends State<_Node> {
     for (final m in pattern.allMatches(template)) {
       if (m.start > at) spans.add(TextSpan(text: template.substring(at, m.start)));
       final slot = args[m.group(1)] as String?;
-      spans.add(WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
-          decoration: BoxDecoration(
-            color: slot == null
-                ? Theme.of(context).colorScheme.errorContainer
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(3),
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(
+              color: slot == null
+                  ? Theme.of(context).colorScheme.errorContainer
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              slot ?? '${m.group(1)}?',
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+            ),
           ),
-          child: Text(slot ?? '${m.group(1)}?', style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
         ),
-      ));
+      );
       at = m.end;
     }
     if (at < template.length) spans.add(TextSpan(text: template.substring(at)));
@@ -493,7 +440,10 @@ class _NodeState extends State<_Node> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final c in children)
-              Padding(padding: const EdgeInsets.only(bottom: 8), child: _Node(node: c, incoming: widget.incoming)),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _Node(node: c, incoming: widget.incoming),
+              ),
           ],
         );
 
@@ -507,7 +457,10 @@ class _NodeState extends State<_Node> {
 
       case 'card':
         return Card(
-          child: Padding(padding: const EdgeInsets.all(Vaulet.lg), child: _text(style: Vaulet.cardTitle)),
+          child: Padding(
+            padding: const EdgeInsets.all(Vaulet.lg),
+            child: _text(style: Vaulet.cardTitle),
+          ),
         );
 
       case 'tabs':
@@ -522,10 +475,7 @@ class _NodeState extends State<_Node> {
                 for (var i = 0; i < tabs.length; i++)
                   ButtonSegment(
                     value: i,
-                    label: Text(
-                      _label(tabs[i]),
-                      style: const TextStyle(fontSize: 11),
-                    ),
+                    label: Text(_label(tabs[i]), style: const TextStyle(fontSize: 11)),
                   ),
               ],
               selected: {_tab.clamp(0, tabs.isEmpty ? 0 : tabs.length - 1)},
@@ -533,9 +483,13 @@ class _NodeState extends State<_Node> {
             ),
             const SizedBox(height: 8),
             if (tabs.isNotEmpty)
-              for (final c in ((tabs[_tab.clamp(0, tabs.length - 1)]['children'] as List?) ?? const [])
-                  .cast<Map<String, dynamic>>())
-                Padding(padding: const EdgeInsets.only(bottom: 6), child: _Node(node: c, incoming: widget.incoming)),
+              for (final c
+                  in ((tabs[_tab.clamp(0, tabs.length - 1)]['children'] as List?) ?? const [])
+                      .cast<Map<String, dynamic>>())
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _Node(node: c, incoming: widget.incoming),
+                ),
           ],
         );
 
@@ -554,7 +508,10 @@ class _NodeState extends State<_Node> {
                       : _Node(node: row, incoming: widget.incoming),
                 ),
               ),
-            Text('the host draws the empty state too', style: Theme.of(context).textTheme.labelSmall),
+            Text(
+              'the host draws the empty state too',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
           ],
         );
 
@@ -566,9 +523,9 @@ class _NodeState extends State<_Node> {
         // everything a screen can start goes through the same phases, the same
         // consent and the same record.
         void tap() => web.window.parent?.postMessage(
-              jsonEncode({'type': 'tap', 'action': action}).toJS,
-              '*'.toJS,
-            );
+          jsonEncode({'type': 'tap', 'action': action}).toJS,
+          '*'.toJS,
+        );
         return Tooltip(
           message: action == null
               ? ''

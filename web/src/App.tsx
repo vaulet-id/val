@@ -19,7 +19,10 @@ import { registerVal } from '@/val/monaco-lang'
 
 export default function App() {
   const [mode, setMode] = React.useState<Mode>('playground')
-  const [dark, setDark] = React.useState(true)
+  // Light by default, like the phone in somebody's hand on the first morning
+  // they open it. Dark is a preference; a default is what you are shown before
+  // you have expressed one.
+  const [dark, setDark] = React.useState(false)
   // English is the base: this is a public repository and a reader arrives from
   // anywhere. Thai is one click away, which is what the switch is for — and
   // switching is how you see that a missing translation fails the build.
