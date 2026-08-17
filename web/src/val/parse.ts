@@ -45,7 +45,13 @@ export type Program = { decls: Decl[]; diagnostics: Diagnostic[] }
 
 type Tok = { v: string; k: 'id' | 'str' | 'num' | 'punct'; line: number; col: number }
 
-const PUNCT = new Set(['{', '}', '(', ')', '[', ']', ',', ':', '.', '-', '>', '=', '<', '?', ';'])
+const PUNCT = new Set([
+  '{', '}', '(', ')', '[', ']', ',', ':', '.', ';', '?',
+  // Operators. Arithmetic included: `amount / satangPerBaht` is ordinary VAL,
+  // and leaving `/` out made the lexer call it an unexpected character and then
+  // blame Thai for it — a wrong message is worse than no message.
+  '+', '-', '*', '/', '%', '<', '>', '=', '!', '&', '|',
+])
 
 export function lex(src: string): { toks: Tok[]; diagnostics: Diagnostic[] } {
   const toks: Tok[] = []
@@ -94,8 +100,15 @@ export function lex(src: string): { toks: Tok[]; diagnostics: Diagnostic[] } {
 
     if (PUNCT.has(ch)) { push(ch, 'punct'); i++; col++; continue }
 
-    // Identifiers are ASCII (spec §2), so anything else is worth saying so about.
-    diagnostics.push({ line, column: col, message: `unexpected character \`${ch}\`. Identifiers are ASCII; Thai belongs in the manifest's text bundle.` })
+    // Two different mistakes deserve two different sentences.
+    diagnostics.push({
+      line,
+      column: col,
+      message:
+        ch.codePointAt(0)! > 127
+          ? `identifiers are ASCII, and \`${ch}\` is not. Thai belongs in strings and in the manifest's text bundle — spec §2.`
+          : `unexpected character \`${ch}\``,
+    })
     i++; col++
   }
   return { toks, diagnostics }
