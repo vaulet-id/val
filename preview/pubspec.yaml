@@ -69,6 +69,17 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
+  # Thai, which CanvasKit does not have.
+  #
+  # The web build carries its own font manager and falls back to Roboto, whose
+  # Thai coverage is none — every Thai sentence in the preview drew as boxes
+  # while the same string on the phone was fine, because iOS has a system font
+  # and this does not. Noto Sans Thai is OFL; the licence travels with it.
+  fonts:
+    - family: NotoSansThai
+      fonts:
+        - asset: fonts/NotoSansThai.ttf
+
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a
   # "family" key with the font family name, and a "fonts" key with a

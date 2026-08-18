@@ -119,20 +119,33 @@ class Vaulet {
       scheme = scheme.copyWith(primary: seed, onPrimary: Colors.white);
     }
     final buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusCard));
+    // A button declares its own text style, which replaces the theme's rather
+    // than adding to it — so the Thai fallback has to be repeated here or every
+    // button label goes back to being boxes. This is the same edge the wallet's
+    // own theme documents.
+    const buttonText = TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      fontFamilyFallback: ['NotoSansThai'],
+    );
     return ThemeData(
+      // Latin from the default font, Thai from the one bundled beside it. A
+      // fallback rather than a family, so the preview keeps looking like the
+      // wallet in English and stops drawing boxes in Thai.
+      fontFamilyFallback: const ['NotoSansThai'],
       useMaterial3: true,
       colorScheme: scheme,
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(buttonHeight),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          textStyle: buttonText,
           shape: buttonShape,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(buttonHeight),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          textStyle: buttonText,
           shape: buttonShape,
         ),
       ),
