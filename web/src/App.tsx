@@ -333,7 +333,7 @@ export default function App() {
       />
 
       {mode === 'docs' ? (
-        <DocsView dark={dark} />
+        <DocsView dark={dark} locale={locale} />
       ) : (
         <ResizablePanelGroup direction="horizontal" autoSaveId="val-playground" className="min-h-0 flex-1">
           <ResizablePanel defaultSize={15} minSize={9} maxSize={30}>

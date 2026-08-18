@@ -3,7 +3,7 @@ import { useMonaco } from '@monaco-editor/react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronRight } from 'lucide-react'
-import { docs, groups, render } from '@/docs'
+import { groupsFor, type Locale, pagesFor, render } from '@/docs'
 import { registerVal } from '@/val/monaco-lang'
 
 // Documentation, laid out the way documentation is laid out: pages down the
@@ -13,13 +13,24 @@ import { registerVal } from '@/val/monaco-lang'
 // long paragraphs, and a line of prose that runs the width of a monitor is one
 // the eye loses on the way back.
 
-export function DocsView({ dark }: { dark: boolean }) {
+export function DocsView({ dark, locale }: { dark: boolean; locale: Locale }) {
+  const docs = React.useMemo(() => pagesFor(locale), [locale])
+  const groups = React.useMemo(() => groupsFor(locale), [locale])
   const [active, setActive] = React.useState(docs[0].id)
   const [seen, setSeen] = React.useState<string | null>(null)
   const body = React.useRef<HTMLDivElement>(null)
   const monaco = useMonaco()
 
-  const page = docs.find((d) => d.id === active) ?? docs[0]
+  // The pages are the same pages in either language, so switching language
+  // keeps the reader's place by position — the ids are translated titles and
+  // would otherwise send them back to page one.
+  const at = React.useRef(0)
+  const found = docs.findIndex((d) => d.id === active)
+  if (found >= 0) at.current = found
+  const page = docs[found >= 0 ? found : at.current] ?? docs[0]
+  React.useEffect(() => {
+    if (page.id !== active) setActive(page.id)
+  }, [page, active])
   const html = React.useMemo(() => render(page.markdown), [page])
 
   // The same highlighter as the editor, over the same grammar. A second one

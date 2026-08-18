@@ -16,6 +16,20 @@ import g08 from '../../docs/guide/08-state-and-versions.md?raw'
 import g09 from '../../docs/guide/09-publishing.md?raw'
 import g10 from '../../docs/guide/10-reference.md?raw'
 
+// The same guide in Thai. A translation and not a second document: when the
+// English page changes, this one is wrong until it changes too, which is a
+// smaller problem than two guides that disagree about the language.
+import t01 from '../../docs/guide/th/01-what-you-are-building.md?raw'
+import t02 from '../../docs/guide/th/02-your-first-application.md?raw'
+import t03 from '../../docs/guide/th/03-capabilities.md?raw'
+import t04 from '../../docs/guide/th/04-credentials-and-trust.md?raw'
+import t05 from '../../docs/guide/th/05-actions.md?raw'
+import t06 from '../../docs/guide/th/06-screens.md?raw'
+import t07 from '../../docs/guide/th/07-disclosing-and-proving.md?raw'
+import t08 from '../../docs/guide/th/08-state-and-versions.md?raw'
+import t09 from '../../docs/guide/th/09-publishing.md?raw'
+import t10 from '../../docs/guide/th/10-reference.md?raw'
+
 // The documents, cut into pages at their `##` headings.
 //
 // One file scrolled for two thousand lines is a file nobody finishes. The
@@ -143,29 +157,43 @@ function grouped(markdown: string, fallback: string): Page[] {
   })
 }
 
-export const docs: Page[] = [
-  page(g01, 'Getting started'),
-  page(g02, 'Getting started'),
-  page(g03, 'Building an app'),
-  page(g04, 'Building an app'),
-  page(g05, 'Building an app'),
-  page(g06, 'Building an app'),
-  page(g07, 'Building an app'),
-  page(g08, 'Building an app'),
-  page(g09, 'Shipping it'),
-  page(g10, 'Shipping it'),
-  ...grouped(spec, 'The specification'),
-]
+/// The groups, in each language. Nav headings a person cannot read are a
+/// translation that stopped halfway down the page.
+const GROUPS = {
+  en: { start: 'Getting started', build: 'Building an app', ship: 'Shipping it', spec: 'The specification' },
+  th: { start: 'เริ่มต้น', build: 'สร้างแอป', ship: 'ปล่อยของ', spec: 'ข้อกำหนดภาษา (อังกฤษ)' },
+} as const
 
-/// In the order the groups are written above, then anything else — a group that
-/// arrives later should appear where it belongs rather than where it was added.
-/// The order somebody meets them in: what this is, how to write one, how to
-/// ship it — and the exact rules underneath, for when the guide is not enough.
-const ORDER = ['Getting started', 'Building an app', 'Shipping it', 'The specification']
-export const groups = [
-  ...ORDER.filter((g) => docs.some((d) => d.group === g)),
-  ...[...new Set(docs.map((d) => d.group))].filter((g) => !ORDER.includes(g)),
-]
+export type Locale = keyof typeof GROUPS
+
+/// The specification stays in English in both. It is the normative text — the
+/// document a disagreement is settled against — and a normative document that
+/// exists in two languages has two answers the day the translation drifts.
+export function pagesFor(locale: Locale): Page[] {
+  const g = GROUPS[locale]
+  const guide = locale === 'th'
+    ? [t01, t02, t03, t04, t05, t06, t07, t08, t09, t10]
+    : [g01, g02, g03, g04, g05, g06, g07, g08, g09, g10]
+  const where = [g.start, g.start, g.build, g.build, g.build, g.build, g.build, g.build, g.ship, g.ship]
+  return [
+    ...guide.map((md, i) => page(md, where[i])),
+    ...grouped(spec, g.spec).map((p) => ({ ...p, group: g.spec, section: g.spec })),
+  ]
+}
+
+export function groupsFor(locale: Locale): string[] {
+  const g = GROUPS[locale]
+  const order = [g.start, g.build, g.ship, g.spec]
+  const all = pagesFor(locale)
+  return [
+    ...order.filter((name) => all.some((d) => d.group === name)),
+    ...[...new Set(all.map((d) => d.group))].filter((name) => !order.includes(name as never)),
+  ]
+}
+
+export const docs: Page[] = pagesFor('en')
+
+export const groups = groupsFor('en')
 
 marked.use({
   renderer: {
