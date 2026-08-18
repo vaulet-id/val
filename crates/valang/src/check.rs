@@ -26,7 +26,69 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     refusals_come_before_effects(p, &mut d);
     policies_name_an_anchor(p, &mut d);
     navigation_goes_somewhere(p, &mut d);
+    every_action_is_reachable(p, &mut d);
     d
+}
+
+/// An action is reached by a press. Declaring one binds nothing — if no screen
+/// names it, it sits there, and the only trigger this language defines has
+/// nothing to do with it.
+///
+/// A warning rather than an error. A file may be a library — actions declared in
+/// one file and pressed by a screen in another — which this already allows,
+/// because a package is one scope and this looks at all of it. And a host may
+/// one day define a second way in.
+///
+/// What it must not be is silence: **the capabilities that action needs are
+/// still on the consent sheet**, and a person agreed to something that cannot
+/// happen.
+///
+/// A package with no screens at all is skipped entirely: that is a fragment
+/// waiting for the rest of its package, not an unreachable action.
+fn every_action_is_reachable(p: &Program, d: &mut Vec<Diagnostic>) {
+    if p.screens.is_empty() {
+        return;
+    }
+
+    let mut pressed: HashSet<String> = HashSet::new();
+    for s in &p.screens {
+        for n in &s.tree {
+            walk_ui(n, &mut |node| {
+                for a in &node.args {
+                    if a.name.as_deref() == Some("onTap") {
+                        if let Some(target) = a.value.path() {
+                            pressed.insert(target);
+                        }
+                    }
+                }
+            });
+        }
+    }
+    for a in &p.actions {
+        for block in &a.phases {
+            walk_stmts(&block.stmts, &mut |s| {
+                if let Stmt::Effect { name, args, .. } = s {
+                    if name == "navigate" {
+                        if let Some(t) = args.first().and_then(|x| x.value.path()) {
+                            pressed.insert(t);
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    for a in &p.actions {
+        if !pressed.contains(&a.name) {
+            d.push(Diagnostic::warning(
+                a.span,
+                format!(
+                    "no screen names `{}`, so nothing can reach it — and the capabilities it needs are still on the consent sheet a person agreed to",
+                    a.name
+                ),
+            ));
+        }
+    }
 }
 
 /// An application declines before it asks, never after. By `execute` the batch

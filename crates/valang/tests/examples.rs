@@ -258,6 +258,35 @@ fn a_package_says_what_it_may_do_once() {
     assert!(renamed.contains("already calls itself"), "{renamed}");
 }
 
+/// Declaring an action binds nothing. If no screen names it, nothing can reach
+/// it — and the capabilities it needs are still on the consent sheet, which is
+/// the part that matters.
+#[test]
+fn an_action_no_screen_names_is_reported() {
+    let src = r#"
+app "x"
+version 1
+capabilities { }
+action Reachable { compute { const a = 1 } }
+action Orphan    { compute { const b = 2 } }
+screen S { column { button(text: "go", onTap: Reachable) } }
+"#;
+    let (_, d) = analyse(src);
+    let said: Vec<&str> = d.iter().map(|d| d.message.as_str()).collect();
+    assert!(said.iter().any(|m| m.contains("no screen names `Orphan`")), "{said:?}");
+    assert!(!said.iter().any(|m| m.contains("Reachable")), "{said:?}");
+
+    // A file may be a library: `wallet.val` presses an action `loyalty.val`
+    // declares, and a package is one scope.
+    let package = format!("{LOYALTY}\n{WALLET}");
+    let (_, d) = analyse(&package);
+    assert!(!d.iter().any(|d| d.message.contains("no screen names")), "{d:?}");
+
+    // And a package with no screens is a fragment, not an unreachable action.
+    let (_, d) = analyse(LOYALTY);
+    assert!(!d.iter().any(|d| d.message.contains("no screen names")), "{d:?}");
+}
+
 #[test]
 fn a_screen_declares_what_it_sees() {
     let (p, _) = analyse(&format!("{LOYALTY}\n{WALLET}"));

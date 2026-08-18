@@ -31,6 +31,16 @@ most common mistake in a first application.
 A business rule in `require` gets you a crash where you wanted a message. A bug
 in `refuse` gets somebody a polite sentence about a mistake you made.
 
+## Declaring one binds nothing
+
+An action happens because somebody pressed something. If no screen in the package
+names it in an `onTap`, nothing can reach it — and the compiler says so, because
+**the capabilities it needs are still on the consent sheet a person agreed to**.
+
+Actions may live in one file and be pressed from a screen in another: a package
+is one scope. A package with no screens at all is a fragment waiting for the rest
+of itself, and is left alone.
+
 ## `input`
 
 ```val
