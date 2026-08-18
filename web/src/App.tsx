@@ -15,7 +15,7 @@ import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
 import { Button } from '@/components/ui/button'
-import { Hammer, RotateCw, Loader2 } from 'lucide-react'
+import { Play, Loader2 } from 'lucide-react'
 
 const LOCALES = ['en', 'th']
 
@@ -32,11 +32,7 @@ export default function App() {
   const [log, setLog] = React.useState<Entry[]>([])
   const [debug, setDebug] = React.useState(false)
   const [running, setRunning] = React.useState(false)
-  /// The last press, so it can be repeated. Not a chosen action: VAL has no
-  /// entry point and being declared is not being called — an action happens
-  /// because somebody pressed something, and a button that picked one off a
-  /// list would be inventing a trigger the platform does not have.
-  const [lastPress, setLastPress] = React.useState<string | null>(null)
+
   const monaco = useMonaco()
 
   React.useEffect(() => {
@@ -128,18 +124,22 @@ export default function App() {
         )
       }
       setLog((l) => [...l, { at: Date.now(), run, decision }])
-      setLastPress(action)
       setRunning(false)
     },
     [ready, packageSource, wallet, monaco, sources],
   )
 
-  /// What a host does before admitting a package, and the only thing that is
-  /// meaningful to press on a program nobody has touched yet: check it, and say
-  /// what it would be allowed to do.
+  /// Build the package, then show it running.
+  ///
+  /// **Running an app is not running an action.** The checks are what a host
+  /// does before admitting a package, and the report is what a person is shown;
+  /// after that the application is up, on screen, waiting. An action happens
+  /// because somebody presses something — declaring one binds nothing.
   const build = React.useCallback(() => {
     if (!analysis) return
     setDebug(true)
+    // On screen when it built, on the problems when it did not.
+    setTab(analysis.diagnostics.some((d) => d.severity === 'error') ? 'report' : 'screen')
     setLog((l) => [
       ...l,
       {
@@ -276,25 +276,16 @@ export default function App() {
                 {!ready ? (
                   <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">loading the compiler…</span>
                 ) : (
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <Button size="sm" variant="outline" onClick={build} disabled={!analysis}>
-                      <Hammer className="size-3" />
-                      Build
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => lastPress && void dispatch(lastPress)}
-                      disabled={running || !lastPress}
-                      title={
-                        lastPress
-                          ? `presses ${lastPress} again, on the wallet as it is now`
-                          : 'nothing has been pressed yet — a run happens because somebody presses something'
-                      }
-                    >
-                      {running ? <Loader2 className="size-3 animate-spin" /> : <RotateCw className="size-3" />}
-                      {lastPress ? `Re-run ${lastPress}` : 'Re-run'}
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    className="ml-auto"
+                    onClick={build}
+                    disabled={!analysis || running}
+                    title="checks the package, then shows it running — pressing something is what runs an action"
+                  >
+                    {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                    Build &amp; Run
+                  </Button>
                 )}
               </div>
 
