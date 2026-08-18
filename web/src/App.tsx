@@ -10,7 +10,7 @@ import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { files, hostFiles, serverFiles, text as bundle } from '@/examples'
+import { files, hostFiles, projects, text as bundle } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
@@ -25,12 +25,17 @@ export default function App() {
   const [locale, setLocale] = React.useState<'th' | 'en'>('en')
   const [active, setActive] = React.useState(files[0].path)
   const [sources, setSources] = React.useState<Record<string, string>>(
-    Object.fromEntries([...files, ...hostFiles, ...serverFiles].map((f) => [f.path, f.source])),
+    Object.fromEntries(
+      [...files, ...hostFiles, ...projects.map((p) => p.server)].map((f) => [f.path, f.source]),
+    ),
   )
   const [ready, setReady] = React.useState(false)
   const [tab, setTab] = React.useState('screen')
   const [log, setLog] = React.useState<Entry[]>([])
   const [debug, setDebug] = React.useState(false)
+  /// One project at a time, which is how anybody actually works. A project is a
+  /// package, the wallet it looks at, and the publisher's own server.
+  const [project, setProject] = React.useState(projects[0].id)
   const [running, setRunning] = React.useState(false)
 
   const monaco = useMonaco()
@@ -49,17 +54,23 @@ export default function App() {
     val.load().then(() => setReady(true))
   }, [])
 
-  const all = [...files, ...hostFiles, ...serverFiles]
-  const current = all.find((f) => f.path === active) ?? files[0]
+  const here = projects.find((p) => p.id === project) ?? projects[0]
+  const packageFiles = files.filter((f) => f.pkg === here.id)
+  const serverFiles = [here.server]
+  const all = [...packageFiles, ...hostFiles, ...serverFiles]
+  const current = all.find((f) => f.path === active) ?? packageFiles[0]
+
+  // Opening a project opens its first file, or the editor shows one that is no
+  // longer in the tree.
+  React.useEffect(() => {
+    if (!all.some((f) => f.path === active)) setActive(packageFiles[0]?.path ?? active)
+  }, [project])
 
   // Editing the host's wallet must not empty the preview. It belongs to no
   // package, so the package under inspection is the last `.val` one chosen —
   // which is also what somebody means by it: they are changing the data behind
   // the screen they were just looking at.
-  const [pkg, setPkg] = React.useState(files[0].pkg)
-  React.useEffect(() => {
-    if (current.path.endsWith('.val')) setPkg(current.pkg)
-  }, [current])
+  const pkg = here.id
   const source = sources[active] ?? ''
   const isVal = active.endsWith('.val')
 
@@ -117,7 +128,7 @@ export default function App() {
       if (monaco && run.token && run.deviceKey) {
         decision = await runHandler(
           monaco,
-          sources['server/handler.ts'] ?? '',
+          sources[here.server.path] ?? '',
           run.token,
           packageSource,
           run.deviceKey,
@@ -126,7 +137,7 @@ export default function App() {
       setLog((l) => [...l, { at: Date.now(), run, decision }])
       setRunning(false)
     },
-    [ready, packageSource, wallet, monaco, sources],
+    [ready, packageSource, wallet, monaco, sources, here],
   )
 
   /// Build the package, then show it running.
@@ -204,7 +215,10 @@ export default function App() {
         <ResizablePanelGroup direction="horizontal" autoSaveId="val-playground" className="min-h-0 flex-1">
           <ResizablePanel defaultSize={15} minSize={9} maxSize={30}>
             <FileTree
-              files={files}
+              projects={projects}
+              project={project}
+              onProject={setProject}
+              files={packageFiles}
               hostFiles={hostFiles}
               serverFiles={serverFiles}
               active={active}

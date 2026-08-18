@@ -10,3 +10,15 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# The CLI reads a text bundle, and JSON is a specification — hand-rolling one
+# here produced a parser that consumed the object it was standing on. The
+# library itself has no dependencies; this is behind the feature the binary
+# requires.
+serde_json = { version = "1", optional = true }
+
+[features]
+cli = ["dep:serde_json"]
+
+[[bin]]
+name = "valc"
+required-features = ["cli"]

@@ -168,7 +168,7 @@ bug report. So is a key your code names and the bundle does not have.
 ## Check it
 
 ```bash
-valc loyalty.val
+valc loyalty.val        # reads text.json beside it
 ```
 
 Diagnostics first, then the capability report — which is what a person will be

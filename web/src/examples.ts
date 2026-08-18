@@ -34,11 +34,52 @@ export const hostFiles: SourceFile[] = [
   { path: 'fixtures/wallet.json', pkg: 'host', name: 'wallet.json', source: walletFixture, note: 'state, credentials, what a query answers' },
 ]
 
-/// The publisher's own side. Not part of the package either, and for a different
-/// reason: this runs on their server, holds their issuer key, and never goes
-/// near the phone.
-export const serverFiles: SourceFile[] = [
-  { path: 'server/handler.ts', pkg: 'server', name: 'handler.ts', source: DEFAULT_HANDLER, note: 'verify the record, then issue or refuse' },
+/// A project: one package, the host it talks to, and the publisher's own server.
+///
+/// The wallet is deliberately **not** per project. A person has one wallet, and
+/// every application they install looks at the same one — which is the whole
+/// shape of this platform, and worth showing rather than saying. The handler is
+/// per project, because a publisher's server and issuer key are theirs alone.
+export type Project = {
+  id: string
+  name: string
+  note: string
+  server: SourceFile
+}
+
+const handler = (id: string): SourceFile => ({
+  path: `server/${id}/handler.ts`,
+  pkg: 'server',
+  name: 'handler.ts',
+  source: DEFAULT_HANDLER,
+  note: 'verify the record, then issue or refuse',
+})
+
+export const projects: Project[] = [
+  {
+    id: 'loyalty',
+    name: 'Loyalty card',
+    note: 'every phase, a screen, and a credential issued at the end',
+    server: handler('loyalty'),
+  },
+  {
+    id: 'portfolio',
+    name: 'Portfolio',
+    note: 'no state, no issuance, a proof that discloses nothing',
+    server: handler('portfolio'),
+  },
+  {
+    id: 'door',
+    name: 'Door',
+    note: 'prove an age, disclose nothing else',
+    server: handler('door'),
+  },
+  {
+    id: 'rejected',
+    name: 'Refused programs',
+    note: 'twelve programs and the error each one is owed',
+    server: handler('rejected'),
+  },
 ]
 
 export const docs = [

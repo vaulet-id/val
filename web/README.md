@@ -1,6 +1,12 @@
 # The VAL playground
 
-An editor, a preview and the capability report, in a browser, with no backend.
+A place to try the language and the protocol, in a browser, with no backend.
+
+Four example projects, each one a package, the wallet it looks at, and the
+publisher's own server. Nothing here is a place to keep work — it is a place to
+find out what this is by pressing things, and everything it shows is the real
+thing rather than a picture of it: the real compiler, a real signed record, and
+the same verifier a publisher's server will run.
 
 **It runs the real compiler.** `valang` and `valang-runtime` are built to Wasm
 and loaded into the page, so what a reader is told here is what a host would

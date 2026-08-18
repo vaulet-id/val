@@ -98,26 +98,20 @@ screen Portfolio {
     // separately from every other app.
     card(text: "portfolioTotal", value: totalValue, change: returnBps)
 
-    tabs {
-      tab("holdings") {
-        list(holdings) { h ->
-          row(
-            text:     "holdingLine",
-            symbol:   h.claims.symbol,
-            quantity: h.claims.quantity,
-            value:    h.claims.market_value,
-            change:   returnBasisPoints(marketValue: h.claims.market_value,
-                                       costBasis:   h.claims.cost_basis),
-          )
-        }
-      }
+    // A section subhead, which is how this host groups a list. There are no
+    // tabs in the catalogue: the wallet has never had one, and a screen cannot
+    // ask for a component the host does not draw.
+    section(text: "holdings")
 
-      tab("accounts") {
-        // Nothing here yet. A screen that shows an empty state is the host's
-        // job too — the app does not draw "you have no accounts", it declares
-        // the list and the host knows what an empty one looks like.
-        list(holdings) { h -> row(text: "accountLine", account: h.claims.account_id) }
-      }
+    list(holdings) { h ->
+      row(
+        text:     "holdingLine",
+        symbol:   h.claims.symbol,
+        quantity: h.claims.quantity,
+        value:    h.claims.market_value,
+        change:   returnBasisPoints(marketValue: h.claims.market_value,
+                                    costBasis:   h.claims.cost_basis),
+      )
     }
 
     button(text: "proveAccredited", emphasis: secondary, onTap: ProveAccredited)

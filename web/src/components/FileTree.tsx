@@ -6,36 +6,48 @@ import type { SourceFile } from '@/examples'
 type Item = { path: string; name: string; note?: string; pkg?: string }
 
 export function FileTree({
-  files, hostFiles, serverFiles, active, onSelect,
+  projects, project, onProject, files, hostFiles, serverFiles, active, onSelect,
 }: {
+  projects: { id: string; name: string; note: string }[]
+  project: string
+  onProject: (id: string) => void
   files: Item[]
   hostFiles?: Item[]
   serverFiles?: Item[]
   active: string
   onSelect: (path: string) => void
 }) {
-  // One heading per package, not one heading called "package".
-  //
-  // They were listed together, which said these six files were one application
-  // — so the preview showing a screen declared in a file you were not looking
-  // at had no explanation on screen. They are four packages, and saying so is
-  // the explanation.
-  const packages = [...new Set(files.map((f) => f.pkg ?? ''))]
+  const here = projects.find((p) => p.id === project)
 
   return (
     <aside className="flex h-full min-w-0 flex-col">
-      {packages.map((pkg) => (
-        <Group
-          key={pkg}
-          label={pkg}
-          files={files.filter((f) => (f.pkg ?? '') === pkg)}
-          active={active}
-          onSelect={onSelect}
-        />
-      ))}
+      {/* One project at a time. Four applications listed together read as one,
+          which is how a screen declared in a file you were not looking at ended
+          up with no explanation in front of you. */}
+      <div className="border-b border-[var(--color-border)] px-2 py-2">
+        <select
+          value={project}
+          onChange={(e) => onProject(e.target.value)}
+          className="w-full rounded border border-[var(--color-border)] bg-transparent px-1.5 py-1 text-[12px] font-medium"
+          aria-label="project"
+        >
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        {here && (
+          <p className="px-0.5 pt-1 text-[10px] leading-snug text-[var(--color-muted-foreground)]">{here.note}</p>
+        )}
+      </div>
+
+      <Group label="package" files={files} active={active} onSelect={onSelect} />
       {/* The host's own data, in its own group. A `.va` never carries somebody's
           wallet, and putting it under the same heading as the package would be
           the one line of this interface that lied. */}
+      {/* The same wallet in every project, because a person has one and every
+          application they install looks at that one. */}
       {hostFiles?.length ? <Group label="host" files={hostFiles} active={active} onSelect={onSelect} /> : null}
       {/* And the publisher's own side, which holds their issuer key and never
           goes near the phone. */}
