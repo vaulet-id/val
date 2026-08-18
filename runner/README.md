@@ -57,7 +57,37 @@ and there is a wall-clock limit.
 Node strips the types rather than compiling them, so what runs is the file the
 author wrote.
 
+## Where the boundary is
+
+**A handler runs as a process inside the runner's own machine.** Around it: a
+cleared environment, a fresh directory removed afterwards, no module downloads,
+and a wall-clock limit. Around that: the machine.
+
+So the machine is the boundary, and handlers from different publishers share
+one. That is the honest description, and it is why the machine is a Firecracker
+microVM rather than a container on a shared kernel.
+
+Per-run isolation — one microVM created and destroyed around a single handler —
+is a different design, and it costs a VM start per request rather than a process
+start. Nothing above `sandbox.rs` would change: the contract there is a process
+with stdin and stdout.
+
 ## Deploying
+
+Fly, which is where everything else runs, and whose machines are Firecracker:
+
+```bash
+fly deploy -c runner/fly.toml
+fly volumes create runner_cache --app val-runner --region sin --size 3
+```
+
+The volume holds the Go and Rust build caches. Without it a handler compiles
+from cold on every request, which is most of what those two languages cost:
+1.9s against 0.55s for Go, 1.8s against 0.40s for Rust.
+
+Google Cloud Run is provisioned in `terraform/` for the day this needs to be
+somewhere else. It sandboxes with gVisor rather than a VM, which is a weaker
+boundary for the same job.
 
 ```bash
 docker build -f runner/Dockerfile -t $REPO/runner:$TAG .
@@ -67,10 +97,3 @@ cd runner/terraform
 terraform init
 terraform apply -var project=… -var image=$REPO/runner:$TAG
 ```
-
-Cloud Run runs each revision in a gVisor sandbox with no ambient credentials,
-which is the boundary this service relies on. One request per instance, because
-compiling Go or Rust is what the CPU is for and it is bursty.
-
-The service account it runs as is granted nothing. The runner reads no bucket
-and calls no API — it is handed a record and answers with a decision.

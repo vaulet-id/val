@@ -1,0 +1,54 @@
+# valang-runner on Fly.io.
+#
+# Fly machines are Firecracker microVMs, which is the isolation this service
+# wanted in the first place: a handler is somebody else's code, and the boundary
+# around it should be a virtual machine rather than a syscall filter. It is also
+# the same provider everything else already runs on.
+#
+# The runner does not scale to zero. A cold start here is an image pull of a few
+# hundred megabytes of toolchains, and the first Go or Rust handler after one
+# pays for a build cache that is empty as well.
+
+app = "val-runner"
+primary_region = "sin" # Singapore — closest Fly region to Thailand
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8787"
+  RUNNER_CACHE = "/cache"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # Compiling Go or Rust is what the CPU is for, and it is bursty. A handler in
+  # TypeScript or Python returns in tens of milliseconds and would be starved by
+  # a neighbour's build if the limits were set for it.
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 8
+    soft_limit = 4
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "POST"
+    path = "/v1/languages"
+
+[[vm]]
+  size = "shared-cpu-4x"
+  memory = "2gb"
+
+# The build caches live here rather than in each request's directory, so a Go
+# handler compiles in 0.55s instead of 1.9s and a Rust one in 0.40s instead of
+# 1.8s. A cache is keyed by the hash of what went into it, so sharing it between
+# tenants hands nobody anything they did not ask for.
+[[mounts]]
+  source = "runner_cache"
+  destination = "/cache"

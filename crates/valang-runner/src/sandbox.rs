@@ -55,7 +55,11 @@ fn passthrough() -> Vec<(String, String)> {
     // tenants compiling the same dependency get the same object and neither can
     // put anything in it the other did not ask for — while compiling from cold
     // every time is most of what a Go or Rust handler costs.
-    let cache = std::env::temp_dir().join("valang-runner-cache");
+    // A volume where one is mounted, and the temp directory otherwise. Losing
+    // the cache costs a slower first build, never a wrong answer.
+    let cache = std::env::var("RUNNER_CACHE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("valang-runner-cache"));
     let mut out = vec![
         ("GOCACHE".into(), cache.join("go-build").display().to_string()),
         ("GOPATH".into(), cache.join("go").display().to_string()),
