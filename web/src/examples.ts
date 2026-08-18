@@ -10,7 +10,7 @@ import walletFixture from '../../fixtures/wallet.json?raw'
 /// The one wallet. Every project previews against the same phone, because a
 /// person has one.
 export const HOST = 'fixtures/wallet.json'
-import { DEFAULT_HANDLER, STARTER_HANDLER } from './server'
+import { DEFAULT_HANDLER, serverStarter, STARTER_HANDLER } from './server'
 
 import spec from '../../docs/spec.md?raw'
 import readme from '../../README.md?raw'
@@ -198,10 +198,8 @@ export function blankFile(group: Group, id: string, name: string): SourceFile {
       path: `server/${id}/${name}`,
       pkg: 'server',
       name,
-      // A module, because the other server files can import it — `handler.ts`
-      // is the one that runs and the rest are its library.
-      source: `export function help() {\n  return 'help'\n}\n`,
-      note: 'imported by handler.ts',
+      source: serverStarter(name),
+      note: name.startsWith('handler.') ? 'verify the record, then issue or refuse' : 'a module beside the handler',
       added: true,
     }
   }
@@ -223,5 +221,5 @@ export function blankFile(group: Group, id: string, name: string): SourceFile {
 export const ALLOWED: Record<Group, string[]> = {
   package: ['.val', '.json'],
   host: ['.json'],
-  server: ['.ts'],
+  server: ['.ts', '.go', '.rs', '.py'],
 }

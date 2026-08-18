@@ -11,6 +11,9 @@ import * as val from './wasm'
 export type Decision =
   | { kind: 'issue'; credential: string; claims: Record<string, unknown> }
   | { kind: 'accept'; note: string }
+  /// A handler in a language this tab cannot execute. The record was produced
+  /// and signed either way — what is missing is somewhere to run the handler.
+  | { kind: 'runner'; language: string; entry: string }
   | { kind: 'refuse'; refusal: { kind: string; why: string } }
   | { kind: 'threw'; error: string }
 
@@ -76,9 +79,24 @@ async function transpile(monaco: typeof Monaco, name: string, code: string): Pro
 /// One server file, keyed by the name `handler.ts` would import it as.
 export type ServerFile = { name: string; source: string }
 
-/// The entry point. Everything else in the group is a library it may import,
-/// which is the only reason adding a second server file is worth anything.
-const ENTRY = 'handler.ts'
+/// The entry point, in whichever language the server is written in. A server
+/// has one: `handler.ts`, `handler.go`, `handler.rs` or `handler.py`.
+const ENTRY = /^handler\.(ts|go|rs|py)$/
+
+/// Where a language runs.
+///
+/// TypeScript is transpiled and executed in this tab. The other three are
+/// compiled languages or need an interpreter, so they run in the sandbox the
+/// hosted runner provides — the same one that will run them in production.
+const IN_BROWSER = 'ts'
+
+function entryOf(files: ServerFile[]): ServerFile | undefined {
+  return files.find((f) => ENTRY.test(f.name))
+}
+
+function languageOf(name: string): string {
+  return name.split('.').pop() ?? 'ts'
+}
 
 /// A module id as written in an import, resolved to a file name: `./sign`,
 /// `./sign.ts` and `sign.ts` are the same file.
@@ -124,16 +142,24 @@ export async function runHandler(
   deviceKey: string,
 ): Promise<Decision> {
   try {
-    if (!files.some((f) => f.name === ENTRY)) {
-      return { kind: 'threw', error: `this server has no ${ENTRY}` }
+    const entry = entryOf(files)
+    if (!entry) {
+      return { kind: 'threw', error: 'this server has no handler.ts, .go, .rs or .py' }
+    }
+
+    const language = languageOf(entry.name)
+    if (language !== IN_BROWSER) {
+      return { kind: 'runner', language, entry: entry.name }
     }
 
     const compiled = new Map<string, string>()
-    for (const f of files) compiled.set(f.name, await transpile(monaco, f.name, f.source))
+    for (const f of files) {
+      if (languageOf(f.name) === IN_BROWSER) compiled.set(f.name, await transpile(monaco, f.name, f.source))
+    }
 
-    const exports = loader(compiled, files)(ENTRY)
+    const exports = loader(compiled, files)(entry.name)
     const handler = exports.default as ((t: string, v: unknown) => Promise<Decision>) | undefined
-    if (!handler) return { kind: 'threw', error: `${ENTRY} has no default export` }
+    if (!handler) return { kind: 'threw', error: `${entry.name} has no default export` }
 
     const decision = await handler(token, sdk(source, deviceKey))
     return decision ?? { kind: 'threw', error: 'the handler returned nothing' }

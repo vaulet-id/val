@@ -55,3 +55,91 @@ export default async function handler(token, val) {
   return val.issue('LoyaltyMember', claims)
 }
 `
+
+/// The same handler, in each language the server group accepts.
+///
+/// The contract does not change between them: you are handed the execution
+/// record as a JWT, you verify it, and you return one decision. What differs is
+/// only the syntax, because the record is a signed JWT with a published `vct`
+/// and every language has a JOSE library.
+export const HANDLERS: Record<string, string> = {
+  ts: `// Runs on your server, not on the phone.
+
+export default async function handler(token, val) {
+  const checked = await val.verify(token)
+  if (!checked.ok) return val.refuse(checked.refusal)
+
+  const claims = val.issuance(checked, 'LoyaltyMember')
+  if (!claims) return val.accept('nothing to issue')
+
+  return val.issue('LoyaltyMember', claims)
+}
+`,
+
+  go: `// Runs on your server, not on the phone.
+
+package handler
+
+import "val"
+
+func Handle(token string, v val.SDK) val.Decision {
+	checked, err := v.Verify(token)
+	if err != nil {
+		return v.Refuse(err)
+	}
+
+	claims, ok := v.Issuance(checked, "LoyaltyMember")
+	if !ok {
+		return v.Accept("nothing to issue")
+	}
+
+	return v.Issue("LoyaltyMember", claims)
+}
+`,
+
+  rs: `// Runs on your server, not on the phone.
+
+use val::{Decision, Sdk};
+
+pub fn handle(token: &str, val: &Sdk) -> Decision {
+    let checked = match val.verify(token) {
+        Ok(c) => c,
+        Err(refusal) => return val.refuse(refusal),
+    };
+
+    match val.issuance(&checked, "LoyaltyMember") {
+        Some(claims) => val.issue("LoyaltyMember", claims),
+        None => val.accept("nothing to issue"),
+    }
+}
+`,
+
+  py: `# Runs on your server, not on the phone.
+
+def handle(token, val):
+    checked = val.verify(token)
+    if not checked.ok:
+        return val.refuse(checked.refusal)
+
+    claims = val.issuance(checked, "LoyaltyMember")
+    if claims is None:
+        return val.accept("nothing to issue")
+
+    return val.issue("LoyaltyMember", claims)
+`,
+}
+
+/// What a new server file starts as, by extension. A file that is not the
+/// entry point starts as a module, since the entry point is what imports it.
+export function serverStarter(name: string): string {
+  const ext = name.split('.').pop() ?? 'ts'
+  if (name.startsWith('handler.')) return HANDLERS[ext] ?? HANDLERS.ts
+
+  const modules: Record<string, string> = {
+    ts: `export function help() {\n  return 'help'\n}\n`,
+    go: `package handler\n\nfunc Help() string {\n\treturn "help"\n}\n`,
+    rs: `pub fn help() -> &'static str {\n    "help"\n}\n`,
+    py: `def help():\n    return "help"\n`,
+  }
+  return modules[ext] ?? modules.ts
+}

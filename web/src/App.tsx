@@ -19,6 +19,20 @@ import { Play, Loader2 } from 'lucide-react'
 
 const LOCALES = ['en', 'th']
 
+/// Which grammar Monaco highlights a file with. A server may be written in any
+/// of the four languages the runner accepts, and a Go file highlighted as
+/// TypeScript is underlined red from its first line.
+const GRAMMAR: Record<string, string> = {
+  val: 'val',
+  ts: 'typescript',
+  go: 'go',
+  rs: 'rust',
+  py: 'python',
+  json: 'json',
+}
+
+const languageOf = (path: string) => GRAMMAR[path.split('.').pop() ?? ''] ?? 'plaintext'
+
 export default function App() {
   const [mode, setMode] = React.useState<Mode>('playground')
   const [dark, setDark] = React.useState(false)
@@ -194,6 +208,13 @@ export default function App() {
         return
       }
 
+      // A server has one entry point. Two would leave the runner choosing a
+      // language for you, which is not a choice it can make correctly.
+      if (group === 'server' && name.startsWith('handler.') && serverFiles.some((f) => f.name.startsWith('handler.'))) {
+        window.alert('this server already has a handler — remove it first to change language')
+        return
+      }
+
       setSources((all) => ({ ...all, [made.path]: made.source }))
       if (group === 'host') setHosts((all) => [...all, made])
       else {
@@ -362,7 +383,7 @@ export default function App() {
             <Editor
               height="100%"
               path={active}
-              language={isVal ? 'val' : active.endsWith('.ts') ? 'typescript' : 'json'}
+              language={languageOf(active)}
               theme={dark ? 'val-dark' : 'val-light'}
               value={source}
               onChange={(v) => setSources((s) => ({ ...s, [active]: v ?? '' }))}
