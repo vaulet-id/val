@@ -49,15 +49,21 @@ pub async fn execute(
 /// The few variables a toolchain needs, and nothing else. A handler is given
 /// its record; inheriting the service's environment would hand it whatever
 /// credentials that process is holding.
-fn passthrough(dir: &std::path::Path) -> Vec<(String, String)> {
+fn passthrough() -> Vec<(String, String)> {
+    // The build caches are shared across requests and the working directories
+    // are not. A cache is keyed by the hash of what went into it, so two
+    // tenants compiling the same dependency get the same object and neither can
+    // put anything in it the other did not ask for — while compiling from cold
+    // every time is most of what a Go or Rust handler costs.
+    let cache = std::env::temp_dir().join("valang-runner-cache");
     let mut out = vec![
-        ("GOCACHE".into(), dir.join("go-build").display().to_string()),
-        ("GOPATH".into(), dir.join("go").display().to_string()),
+        ("GOCACHE".into(), cache.join("go-build").display().to_string()),
+        ("GOPATH".into(), cache.join("go").display().to_string()),
         ("GOFLAGS".into(), "-mod=mod".into()),
         // No module downloads: a handler's dependencies are the SDK beside it.
         ("GOPROXY".into(), "off".into()),
         // Cargo writes its build here rather than beside the author's files.
-        ("CARGO_TARGET_DIR".into(), dir.join("target").display().to_string()),
+        ("CARGO_TARGET_DIR".into(), cache.join("target").display().to_string()),
     ];
     for k in ["RUSTUP_TOOLCHAIN", "GOROOT"] {
         if let Ok(v) = std::env::var(k) {
@@ -96,7 +102,7 @@ async fn run(argv: &[&str], dir: &std::path::Path, payload: &str) -> Result<Stri
         // A toolchain has to be able to find itself. rustc here is a rustup
         // shim, which without these picks no toolchain and says so instead of
         // compiling; go wants a cache it can write to.
-        .envs(passthrough(dir))
+        .envs(passthrough())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
