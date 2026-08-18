@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use serde_json::{json, Map, Value as Json};
 use valang::ast::{DataSource, Program};
 use valang_runtime::fixture::Fixture;
+use valang_runtime::render::{render as resolve_screen, Component};
 use valang_runtime::merkle::hex;
 use valang_runtime::value::Value;
 use valang_runtime::{encode_record, run_action, Outcome};
@@ -158,6 +159,57 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
         })
         .to_string(),
     )
+}
+
+/// A screen, resolved against the wallet: the data the host answered with, the
+/// values the derived block computed, and a tree whose slots are values rather
+/// than the expressions that produced them.
+///
+/// The renderer used to resolve these itself, in Dart, which put `limit`,
+/// `order by` and `verified with` in a second language — and then in whatever
+/// the next renderer is written in. What is left over there is drawing and
+/// formatting, which is what a toolkit is for.
+#[no_mangle]
+pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let source = input["source"].as_str().unwrap_or("");
+    let wallet = input["wallet"].to_string();
+
+    let (program, _) = valang::analyse(source);
+    let Ok(host) = Fixture::parse(&wallet) else {
+        return write(json!({ "screens": [] }).to_string());
+    };
+    let state = host.state();
+
+    let screens: Vec<Json> = program
+        .screens
+        .iter()
+        .filter_map(|s| resolve_screen(&program, &s.name, &state, &host).ok())
+        .map(|s| {
+            json!({
+                "name": s.name,
+                "data": s.data.iter().map(|d| json!({
+                    "name": d.name,
+                    "grade": d.grade,
+                    "of": d.of,
+                    "policy": d.policy,
+                    "rows": d.rows,
+                })).collect::<Vec<_>>(),
+                "derived": Json::Object(s.derived.iter().map(|(k, v)| (k.clone(), value_json(v))).collect::<Map<_, _>>()),
+                "tree": s.tree.iter().map(component_json).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+
+    write(json!({ "screens": screens }).to_string())
+}
+
+fn component_json(c: &Component) -> Json {
+    json!({
+        "kind": c.kind,
+        "args": Json::Object(c.args.iter().map(|(k, v)| (k.clone(), value_json(v))).collect::<Map<_, _>>()),
+        "children": c.children.iter().map(component_json).collect::<Vec<_>>(),
+    })
 }
 
 // -------------------------------------------------------------------- shapes

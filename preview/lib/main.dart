@@ -18,112 +18,47 @@ import 'package:web/web.dart' as web;
 
 void main() => runApp(const PreviewApp());
 
-/// A wallet with nothing in it that anybody signed.
-///
-/// The preview is a host, so the wallet belongs here rather than in the
-/// playground: resolving what a screen declared is the host's half of the
-/// division, and putting it on the other side would have been a second
-/// evaluator to keep faithful to the first.
-///
-/// Everything below is invented. It is shaped like the declarations in the
-/// examples and stands in for a phone that has a membership and a few receipts
-/// on it. **No issuer is behind any of it**, which the panel says out loud —
-/// a preview that let mock data look issuer-backed would be teaching the one
-/// habit this whole system exists to break.
-class MockHost {
-  MockHost._();
+/// Formatting, which is the half of "the host does it" that belongs to a
+/// toolkit. Resolving — which credentials, in what order, how many — happens in
+/// the compiler, because that is where `limit`, `order by` and `verified with`
+/// are defined and a second implementation of them is a second set of rules.
+class Format {
+  Format._();
 
-  /// The fallback, for a frame nobody has posted into yet. The real wallet
-  /// arrives with the screen — `fixtures/wallet.json`, which somebody can edit.
-  static const state = <String, Object?>{
-    'lifetimePoints': 1365,
-    'member': <String, Object?>{
-      'member_id': 'M-2891',
-      'points': 1365,
-      'tier': 'bronze',
-    },
-  };
-
-  /// What `credentials of PurchaseReceipt verified with ReceiptFromMerchant`
-  /// resolves to. A real host would have checked the policy before handing
-  /// these over; this one pretends it did.
-  static const receipts = <Map<String, Object?>>[
-    {'merchant': 'Codefin Coffee', 'amount': 12500, 'purchased_at': '2026-08-16T09:12:00Z'},
-    {'merchant': 'Siam Bookshop', 'amount': 48000, 'purchased_at': '2026-08-14T18:40:00Z'},
-    {'merchant': 'Ari Market', 'amount': 6900, 'purchased_at': '2026-08-11T07:05:00Z'},
-  ];
-
-  /// How many rows a `list` draws. The declaration's `limit` bounds it; this
-  /// host simply has three.
-  static int get rows => receipts.length;
-
-  /// Resolve one slot expression — `state.member.points`, `r.claims.merchant`.
-  ///
-  /// Deliberately not an evaluator. It walks a path and nothing else: an
-  /// expression this cannot follow comes back as itself, because a preview that
-  /// guessed at arithmetic would be a third implementation of the language and
-  /// the first one nobody tests.
-  static Object? slot(
-    String expr, {
-    required Incoming wallet,
-    String? bind,
-    Map<String, Object?>? item,
-  }) {
-    final parts = expr.split('.');
-    if (parts.isEmpty) return null;
-
-    Object? cursor;
-    var rest = parts;
-    if (parts.first == 'state' || parts.first == 'next') {
-      cursor = wallet.state;
-      rest = parts.sublist(1);
-    } else if (bind != null && parts.first == bind) {
-      cursor = item;
-      // `r.claims.merchant` — a credential's claims are one hop the host knows
-      // about, because the host is what handed the credential over.
-      rest = parts.sublist(1);
-      if (rest.isNotEmpty && rest.first == 'claims') rest = rest.sublist(1);
-    } else {
-      return null;
+  /// A number a person reads. The application never touches one: it would get
+  /// the thousands separator, the era and the currency position wrong
+  /// separately from every other application.
+  static String value(Object? v, String locale) {
+    if (v == null) return '—';
+    if (v is bool) return v ? 'yes' : 'no';
+    if (v is int) {
+      // A time, or a number. Milliseconds since the epoch is the only thing in
+      // this range, and a points balance is never within a century of it.
+      if (v > 1500000000000) return _date(DateTime.fromMillisecondsSinceEpoch(v, isUtc: true), locale);
+      return _thousands(v);
     }
-
-    for (final key in rest) {
-      if (cursor is Map<String, Object?>) {
-        cursor = cursor[key];
-      } else {
-        return null;
-      }
-    }
-    return cursor;
+    if (v is Map && v['credential'] != null) return v['credential'] as String;
+    return v.toString();
   }
 
-  /// The host formats. An application that formatted a number would get the
-  /// thousands separator, the era and the currency position wrong separately
-  /// from every other application — so it never touches one.
-  static String format(Object? value, String locale) {
-    if (value == null) return '—';
-    if (value is int) {
-      final digits = value.abs().toString();
-      final out = StringBuffer(value < 0 ? '-' : '');
-      for (var i = 0; i < digits.length; i++) {
-        if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
-        out.write(digits[i]);
-      }
-      return out.toString();
+  static String _thousands(int n) {
+    final digits = n.abs().toString();
+    final out = StringBuffer(n < 0 ? '-' : '');
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+      out.write(digits[i]);
     }
-    if (value is String) {
-      final at = DateTime.tryParse(value);
-      if (at == null) return value;
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const thai = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-      // Buddhist era in Thai, which is the sort of thing that is wrong in forty
-      // applications the moment forty applications are allowed to do it.
-      return locale == 'th'
-          ? '${at.day} ${thai[at.month - 1]} ${at.year + 543}'
-          : '${at.day} ${months[at.month - 1]} ${at.year}';
-    }
-    return value.toString();
+    return out.toString();
   }
+
+  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  static const _thai = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+  /// Buddhist era in Thai — the sort of thing that is wrong in forty
+  /// applications the moment forty applications are allowed to do it.
+  static String _date(DateTime at, String locale) => locale == 'th'
+      ? '${at.day} ${_thai[at.month - 1]} ${at.year + 543}'
+      : '${at.day} ${_months[at.month - 1]} ${at.year}';
 }
 
 /// The first host's tokens, copied from `vaulet-app/lib/core/theme/theme.dart`.
@@ -229,56 +164,25 @@ class Incoming {
   const Incoming({
     required this.screens,
     required this.text,
-    required this.wallet,
     required this.locale,
     required this.dark,
   });
 
   final List<dynamic> screens;
   final Map<String, dynamic> text;
-
-  /// The host's own data. Editing it in the playground changes what this draws
-  /// without changing a line of the application — which is what "the data is
-  /// the host's" means, shown rather than argued.
-  final Map<String, dynamic> wallet;
   final String locale;
   final bool dark;
 
-  static const empty = Incoming(
-    screens: [],
-    text: {},
-    wallet: {},
-    locale: 'en',
-    dark: false,
-  );
+  static const empty = Incoming(screens: [], text: {}, locale: 'en', dark: false);
 
   factory Incoming.fromJson(Map<String, dynamic> j) => Incoming(
     screens: (j['screens'] as List?) ?? const [],
     text: (j['text'] as Map?)?.cast<String, dynamic>() ?? const {},
-    wallet: (j['wallet'] as Map?)?.cast<String, dynamic>() ?? const {},
     locale: (j['locale'] as String?) ?? 'en',
     dark: (j['dark'] as bool?) ?? false,
   );
 
-  Map<String, Object?> get state =>
-      (wallet['state'] as Map?)?.cast<String, Object?>() ?? MockHost.state;
 
-  List<Map<String, Object?>> rowsOf(String type) {
-    final rows = (wallet['credentials'] as Map?)?[type]?['rows'] as List?;
-    return rows?.cast<Map<String, Object?>>() ?? const [];
-  }
-
-  /// `list(receipts)` names a binding; the screen's `data` block says what that
-  /// binding resolves to. The host looks it up, because the host is what
-  /// resolved it in the first place.
-  String typeFor(String binding) {
-    for (final s in screens) {
-      for (final d in ((s as Map)['data'] as List? ?? const [])) {
-        if ((d as Map)['name'] == binding) return (d['type'] as String?) ?? '';
-      }
-    }
-    return '';
-  }
 }
 
 class PreviewApp extends StatefulWidget {
@@ -320,16 +224,26 @@ class _PreviewAppState extends State<PreviewApp> {
         backgroundColor: Colors.transparent,
         body: _in.screens.isEmpty
             ? const _NoScreen()
-            : ListView(
+            : Padding(
                 // Room around the device so it reads as an object on a surface
-                // rather than as a panel that ran out of room — and enough of
-                // it above that the phone is not touching the tab bar it sits
-                // under.
-                padding: const EdgeInsets.symmetric(horizontal: Vaulet.xxl, vertical: 40),
-                children: [
-                  for (final s in _in.screens)
-                    _Phone(screen: s as Map<String, dynamic>, incoming: _in),
-                ],
+                // rather than a panel that ran out of space.
+                padding: const EdgeInsets.symmetric(horizontal: Vaulet.xxl, vertical: 24),
+                child: Center(
+                  // Contained, not stretched, and fitted to the *height* as
+                  // well: a device preview that runs off the bottom of its
+                  // panel is one you have to scroll to find the docked action,
+                  // which is the one thing its position was supposed to prove.
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final s in _in.screens)
+                          _Phone(screen: s as Map<String, dynamic>, incoming: _in),
+                      ],
+                    ),
+                  ),
+                ),
               ),
       ),
     );
@@ -577,14 +491,10 @@ class _HomeIndicator extends StatelessWidget {
 }
 
 class _Node extends StatefulWidget {
-  const _Node({required this.node, required this.incoming, this.bind, this.item});
+  const _Node({required this.node, required this.incoming});
 
   final Map<String, dynamic> node;
   final Incoming incoming;
-
-  /// `list(receipts) { r -> … }` — what `r` is, and which row this is.
-  final String? bind;
-  final Map<String, Object?>? item;
 
   @override
   State<_Node> createState() => _NodeState();
@@ -625,36 +535,15 @@ class _NodeState extends State<_Node> {
     var at = 0;
     for (final m in pattern.allMatches(template)) {
       if (m.start > at) spans.add(TextSpan(text: template.substring(at, m.start)));
-      final expr = args[m.group(1)] as String?;
-      // The host resolves the slot against its own wallet and formats it. An
-      // application that formatted a number would get the thousands separator,
-      // the era and the currency position wrong separately from every other
-      // application — so it never touches one.
-      final value = expr == null
-          ? null
-          : MockHost.slot(
-              expr,
-              wallet: widget.incoming,
-              bind: widget.bind,
-              item: widget.item,
-            );
+      // A value, resolved by the compiler against the wallet. This side
+      // formats it and does not look anything up.
+      final value = args[m.group(1)];
       spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: Tooltip(
-            message: expr ?? '',
-            child: Text(
-              value == null
-                  ? '${m.group(1)}?'
-                  : MockHost.format(value, widget.incoming.locale),
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: value == null
-                    ? Theme.of(context).colorScheme.error
-                    : null,
-              ),
-            ),
+        TextSpan(
+          text: value == null ? '${m.group(1)}?' : Format.value(value, widget.incoming.locale),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: value == null ? Theme.of(context).colorScheme.error : null,
           ),
         ),
       );
@@ -717,11 +606,10 @@ class _NodeState extends State<_Node> {
         );
 
       case 'list':
-        final row = children.isEmpty ? null : children.first;
-        // The rows the host handed back, not three copies of one. An empty list
-        // is the host's empty state — the application never draws one.
-        final type = widget.incoming.typeFor((args['0'] as String?) ?? '');
-        final rows = widget.incoming.rowsOf(type);
+        // Already expanded: one child per row, each with its slots resolved.
+        // An empty list is the host's empty state — the application never
+        // draws one, and there is nothing here for it to draw with.
+        final rows = children;
         if (rows.isEmpty) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: Vaulet.xxl),
@@ -734,17 +622,10 @@ class _NodeState extends State<_Node> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final item in rows)
+            for (final row in rows)
               Padding(
                 padding: const EdgeInsets.only(bottom: Vaulet.sm),
-                child: row == null
-                    ? const Card(child: ListTile(dense: true, title: Text('row')))
-                    : _Node(
-                        node: row,
-                        incoming: widget.incoming,
-                        bind: n['lambda'] as String?,
-                        item: item,
-                      ),
+                child: _Node(node: row, incoming: widget.incoming),
               ),
           ],
         );

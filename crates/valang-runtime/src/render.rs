@@ -29,8 +29,10 @@ pub struct Resolved {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Component {
     pub kind: String,
-    /// Argument names to the values they evaluated to. A slot the host will
-    /// format: the application never touches a rendered number.
+    /// Argument names to the values they evaluated to. A slot the renderer will
+    /// format — the application never touches a rendered number, and neither
+    /// does anything upstream of the toolkit that knows what a date looks like
+    /// in a locale.
     pub args: BTreeMap<String, Value>,
     pub children: Vec<Component>,
 }
@@ -113,7 +115,11 @@ pub fn render(
         }
     }
 
-    let tree = screen.tree.iter().map(|n| component(&mut ev, n, state)).collect::<Result<Vec<_>, _>>()?;
+    let tree = screen
+        .tree
+        .iter()
+        .map(|n| component(&mut ev, n, state))
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(Screen { name: screen.name.clone(), data: resolved, derived, tree })
 }
 
@@ -121,14 +127,43 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
     let mut args = BTreeMap::new();
     for (i, a) in n.args.iter().enumerate() {
         let key = a.name.clone().unwrap_or_else(|| i.to_string());
-        // `onTap: ScanToEarn` names an action; evaluating it would look for a
-        // value that is not one. The name is the payload.
-        let value = match (&key[..], a.value.path()) {
-            ("onTap", Some(action)) => Value::Str(action),
-            _ => ev.expr(&a.value, state).unwrap_or(Value::Null),
+        // Some arguments are names rather than expressions. `onTap: ScanToEarn`
+        // names an action; `emphasis: primary` names a word in the catalogue's
+        // own vocabulary, which the language does not define and cannot
+        // evaluate. A bare identifier that resolves to nothing is one of those,
+        // and handing back null instead would silently demote every primary
+        // button on every screen.
+        let evaluated = ev.expr(&a.value, state).unwrap_or(Value::Null);
+        let value = match (&key[..], a.value.path(), &evaluated) {
+            ("onTap", Some(name), _) => Value::Str(name),
+            (_, Some(name), Value::Null) if !name.contains('.') => Value::Str(name),
+            _ => evaluated,
         };
         args.insert(key, value);
     }
+
+    // `list(receipts) { r -> row(…) }` is expanded here, with `r` bound, so what
+    // comes out is the rows themselves rather than a template and a promise.
+    // Doing it in the renderer instead would put `limit`, `order by` and
+    // `verified with` in whatever language the renderer happens to be written
+    // in — and then in the next one too.
+    if n.kind == "list" {
+        let items = match args.get("0") {
+            Some(Value::List(items)) => items.clone(),
+            _ => Vec::new(),
+        };
+        let mut rows = Vec::new();
+        for item in items {
+            if let Some(bind) = &n.lambda {
+                ev.bind(bind, item.clone());
+            }
+            for child in &n.children {
+                rows.push(component(ev, child, state)?);
+            }
+        }
+        return Ok(Component { kind: n.kind.clone(), args, children: rows });
+    }
+
     Ok(Component {
         kind: n.kind.clone(),
         args,

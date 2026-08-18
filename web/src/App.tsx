@@ -85,6 +85,17 @@ export default function App() {
     }
   }, [sources])
 
+  // Resolved by the compiler, against the wallet somebody edited. The renderer
+  // is handed values and draws them; it does not look anything up.
+  const resolved = React.useMemo(() => {
+    if (!ready || !analysis) return []
+    try {
+      return val.resolve(packageSource, wallet).screens
+    } catch {
+      return []
+    }
+  }, [ready, analysis, packageSource, wallet])
+
   const dispatch = React.useCallback(
     (action: string) => {
       if (!ready) return
@@ -176,13 +187,7 @@ export default function App() {
               </div>
 
               <TabsContent value="screen" className="min-h-0 flex-1">
-                <PreviewScreen
-                  screens={analysis?.screens ?? []}
-                  wallet={wallet}
-                  locale={locale}
-                  dark={dark}
-                  onTap={dispatch}
-                />
+                <PreviewScreen screens={resolved} locale={locale} dark={dark} onTap={dispatch} />
               </TabsContent>
 
               <TabsContent value="report" className="min-h-0 flex-1">

@@ -31,6 +31,17 @@ export type UiNode = {
   children: UiNode[]
 }
 
+/// A screen resolved against the wallet: values in the slots rather than the
+/// expressions that produced them, and the rows a `list` actually has. The
+/// renderer draws and formats; it does not resolve, because resolving is where
+/// `limit`, `order by` and `verified with` live.
+export type Resolved = {
+  name: string
+  data: { name: string; grade: string; of: string; policy: string | null; rows: number }[]
+  derived: Record<string, unknown>
+  tree: { kind: string; args: Record<string, unknown>; children: unknown[] }[]
+}
+
 export type Screen = {
   name: string
   data: { name: string; source: string; type?: string; policy?: string; audience?: string }[]
@@ -72,6 +83,7 @@ type Exports = {
   val_alloc: (len: number) => number
   val_free: (ptr: number, len: number) => void
   val_analyse: (ptr: number, len: number) => number
+  val_render: (ptr: number, len: number) => number
   val_run: (ptr: number, len: number) => number
 }
 
@@ -83,7 +95,7 @@ export async function load(): Promise<void> {
   wasm = instance.exports as unknown as Exports
 }
 
-function call(fn: 'val_analyse' | 'val_run', input: unknown): unknown {
+function call(fn: 'val_analyse' | 'val_render' | 'val_run', input: unknown): unknown {
   if (!wasm) throw new Error('the compiler is not loaded')
   const bytes = new TextEncoder().encode(JSON.stringify(input))
   const inPtr = wasm.val_alloc(bytes.length)
@@ -106,6 +118,10 @@ export function analyse(
   locales?: string[],
 ): Analysis {
   return call('val_analyse', { source, text, locales }) as Analysis
+}
+
+export function resolve(source: string, wallet: unknown): { screens: Resolved[] } {
+  return call('val_render', { source, wallet }) as { screens: Resolved[] }
 }
 
 /// One action, against the wallet the caller supplies — which is the file
