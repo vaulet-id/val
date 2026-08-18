@@ -10,7 +10,8 @@ use std::collections::BTreeMap;
 use valang_runtime::fixture::Fixture;
 use valang_runtime::host::Host;
 use valang_runtime::value::Value;
-use valang_runtime::{encode_record, run_action};
+use valang_runtime::attestation::jwt;
+use valang_runtime::run_action;
 use valang_verify::*;
 
 const LOYALTY: &str = include_str!("../../../examples/loyalty.val");
@@ -20,17 +21,14 @@ fn host() -> Fixture {
     Fixture::parse(WALLET).expect("the fixture parses")
 }
 
-fn a_run() -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+/// The token, the device key, and the code hash — which is all a publisher's
+/// server is handed.
+fn a_run() -> (String, Vec<u8>, Vec<u8>) {
     let (program, diagnostics) = valang::analyse(LOYALTY);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let h = host();
     let run = run_action(&program, LOYALTY, "ScanToEarn", &h.state(), &BTreeMap::new(), &h);
-    (
-        encode_record(&run.record),
-        run.record.signature.clone(),
-        run.record.device_key.clone(),
-        run.record.code_hash.to_vec(),
-    )
+    (jwt(&run.record), run.record.device_key.clone(), run.record.code_hash.to_vec())
 }
 
 fn never_spent(_: &str) -> bool {
@@ -39,15 +37,14 @@ fn never_spent(_: &str) -> bool {
 
 #[test]
 fn a_good_record_yields_the_claims_the_server_will_sign() {
-    let (bytes, sig, key, code) = a_run();
-    let expect = Expectation {
-        code_hash: &code,
-        device_key: &key,
-        last_root: None,
-        spent: &never_spent,
-    };
+    let (token, key, code) = a_run();
+    let expect = Expectation { code_hash: &code, device_key: &key, last_root: None, spent: &never_spent };
 
-    let v = verify(&bytes, &sig, &expect).expect("verifies");
+    // Three parts and a dot between them: a publisher with an ordinary JWT
+    // library gets this far without any of our code.
+    assert_eq!(token.split('.').count(), 3);
+
+    let v = verify(&token, &expect).expect("verifies");
     assert_eq!(v.record.action, "ScanToEarn");
     assert_eq!(v.record.outcome, "committed");
 
@@ -61,18 +58,18 @@ fn a_good_record_yields_the_claims_the_server_will_sign() {
 
 #[test]
 fn a_record_signed_by_another_device_is_refused() {
-    let (bytes, sig, _, code) = a_run();
+    let (token, _, code) = a_run();
     let somebody_else = [7u8; 32];
     let expect = Expectation { code_hash: &code, device_key: &somebody_else, last_root: None, spent: &never_spent };
-    assert!(matches!(verify(&bytes, &sig, &expect), Err(Refusal::Unsigned(_))));
+    assert!(matches!(verify(&token, &expect), Err(Refusal::Unsigned(_))));
 }
 
 #[test]
 fn a_record_from_code_this_publisher_did_not_publish_is_refused() {
-    let (bytes, sig, key, _) = a_run();
+    let (token, key, _) = a_run();
     let other = code_hash("app \"somebody.else\"\nversion 1\n");
     let expect = Expectation { code_hash: &other, device_key: &key, last_root: None, spent: &never_spent };
-    match verify(&bytes, &sig, &expect) {
+    match verify(&token, &expect) {
         Err(Refusal::UnknownCode { .. }) => {}
         other => panic!("expected an unknown-code refusal, got {other:?}"),
     }
@@ -83,11 +80,13 @@ fn a_record_from_code_this_publisher_did_not_publish_is_refused() {
 /// first would be making decisions about a record it had not authenticated.
 #[test]
 fn a_record_changed_after_signing_is_refused() {
-    let (mut bytes, sig, key, code) = a_run();
-    let at = bytes.len() / 2;
-    bytes[at] ^= 0xff;
+    let (token, key, code) = a_run();
+    // Change one character of the payload and re-assemble.
+    let mut parts: Vec<String> = token.split('.').map(str::to_string).collect();
+    parts[1] = parts[1].replacen('a', "b", 1);
+    let tampered = parts.join(".");
     let expect = Expectation { code_hash: &code, device_key: &key, last_root: None, spent: &never_spent };
-    assert!(matches!(verify(&bytes, &sig, &expect), Err(Refusal::Unsigned(_))));
+    assert!(matches!(verify(&tampered, &expect), Err(Refusal::Unsigned(_))));
 }
 
 /// A run the host refused earned nothing, and the record says so. A server that
@@ -98,14 +97,13 @@ fn a_run_that_did_not_commit_is_refused() {
     let h = host().refusing();
     let run = run_action(&program, LOYALTY, "ScanToEarn", &h.state(), &BTreeMap::new(), &h);
 
-    let bytes = encode_record(&run.record);
     let expect = Expectation {
         code_hash: &run.record.code_hash.to_vec(),
         device_key: &run.record.device_key,
         last_root: None,
         spent: &never_spent,
     };
-    match verify(&bytes, &run.record.signature, &expect) {
+    match verify(&jwt(&run.record), &expect) {
         Err(Refusal::DidNotCommit(why)) => assert!(why.starts_with("refused")),
         other => panic!("expected a did-not-commit refusal, got {other:?}"),
     }
@@ -116,10 +114,10 @@ fn a_run_that_did_not_commit_is_refused() {
 /// to remember — nobody else saw both records.
 #[test]
 fn a_record_reaching_behind_one_already_seen_is_refused() {
-    let (bytes, sig, key, code) = a_run();
+    let (token, key, code) = a_run();
     let seen = [9u8; 32];
     let expect = Expectation { code_hash: &code, device_key: &key, last_root: Some(&seen), spent: &never_spent };
-    match verify(&bytes, &sig, &expect) {
+    match verify(&token, &expect) {
         Err(Refusal::RolledBack { .. }) => {}
         other => panic!("expected a rollback refusal, got {other:?}"),
     }

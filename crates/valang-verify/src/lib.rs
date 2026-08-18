@@ -17,21 +17,23 @@ use std::collections::BTreeMap;
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
-use valang_runtime::canonical::{Canonical, DeterministicCbor};
-use valang_runtime::decode::decode;
+use valang_runtime::attestation::{b64_decode, VCT};
 use valang_runtime::value::Value;
 
 /// A record, as it arrived. Decoded rather than trusted: every field below is
 /// read out of the bytes the device signed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
+    pub vct: String,
     pub app: String,
     pub version: String,
     pub action: String,
-    pub code_hash: Vec<u8>,
-    pub input_hash: Vec<u8>,
-    pub previous_root: Vec<u8>,
-    pub next_root: Vec<u8>,
+    /// Hex, as the token carries them. A verifier compares strings rather than
+    /// re-encoding, because the token is the thing that was signed.
+    pub code_hash: String,
+    pub input_hash: String,
+    pub previous_root: String,
+    pub next_root: String,
     pub policies: Vec<String>,
     pub capabilities: Vec<String>,
     pub effects: Vec<Effect>,
@@ -91,28 +93,45 @@ pub struct Verified {
     pub effects: Vec<Effect>,
 }
 
-/// Decode, check, and hand back what is true. The order matters: nothing is read
-/// out of a record before the signature over it has been checked.
-pub fn verify(bytes: &[u8], signature: &[u8], expect: &Expectation) -> Result<Verified, Refusal> {
-    // 1. The signature, first, over the bytes as they arrived.
+/// Verify a record token and hand back what is true.
+///
+/// The token is a JWT and the first half of this is ordinary JWS verification —
+/// which is the point of having made it one. What is left is the part no
+/// standard covers, because nobody has needed it before: whether the code that
+/// ran is the code somebody published, and whether the state went backwards.
+pub fn verify(token: &str, expect: &Expectation) -> Result<Verified, Refusal> {
+    let mut parts = token.split('.');
+    let (h, p, sig) = match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(h), Some(p), Some(s), None) => (h, p, s),
+        _ => return Err(Refusal::Malformed("a record is a three-part JWT".into())),
+    };
+
+    // 1. The signature over the signing input, before anything is read out of
+    //    the payload. A verifier that parsed first would be deciding about a
+    //    record it had not authenticated.
     let key: [u8; 32] = expect
         .device_key
         .try_into()
         .map_err(|_| Refusal::Unsigned("the device key is not a key".into()))?;
     let key = VerifyingKey::from_bytes(&key).map_err(|_| Refusal::Unsigned("malformed device key".into()))?;
-    let sig = Signature::from_slice(signature).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
-    key.verify(bytes, &sig)
+    let raw = b64_decode(sig).ok_or_else(|| Refusal::Unsigned("the signature is not base64url".into()))?;
+    let signature =
+        Signature::from_slice(&raw).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
+    key.verify(format!("{h}.{p}").as_bytes(), &signature)
         .map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
 
-    // 2. Only now is it worth reading.
-    let record = parse(bytes)?;
+    // 2. Now it is worth reading.
+    let claims = b64_decode(p).ok_or_else(|| Refusal::Malformed("the payload is not base64url".into()))?;
+    let claims = String::from_utf8(claims).map_err(|_| Refusal::Malformed("the payload is not UTF-8".into()))?;
+    let record = parse(&claims)?;
+
+    if record.vct != VCT {
+        return Err(Refusal::Malformed(format!("this is a `{}`, not an execution record", record.vct)));
+    }
 
     // 3. The code that ran is the code this publisher published.
-    if record.code_hash != expect.code_hash {
-        return Err(Refusal::UnknownCode {
-            expected: hex(expect.code_hash),
-            found: hex(&record.code_hash),
-        });
+    if record.code_hash != hex(expect.code_hash) {
+        return Err(Refusal::UnknownCode { expected: hex(expect.code_hash), found: record.code_hash });
     }
 
     // 4. It committed. A refused or failed run earned nothing.
@@ -122,8 +141,9 @@ pub fn verify(bytes: &[u8], signature: &[u8], expect: &Expectation) -> Result<Ve
 
     // 5. The state did not go backwards.
     if let Some(seen) = expect.last_root {
+        let seen = hex(seen);
         if record.previous_root != seen && record.next_root != seen {
-            return Err(Refusal::RolledBack { seen: hex(seen), offered: hex(&record.previous_root) });
+            return Err(Refusal::RolledBack { seen, offered: record.previous_root.clone() });
         }
     }
 
@@ -167,75 +187,136 @@ pub fn code_hash(source: &str) -> Vec<u8> {
     Sha256::digest(source.as_bytes()).to_vec()
 }
 
-fn parse(bytes: &[u8]) -> Result<Record, Refusal> {
-    let Value::Map(m) = decode(bytes).map_err(|e| Refusal::Malformed(format!("{e:?}")))? else {
-        return Err(Refusal::Malformed("a record is a map".into()));
+/// A JSON reader for a payload whose shape is fixed and known.
+///
+/// Deliberately small and deliberately strict about nothing: the signature has
+/// already been checked, so this is reading bytes that are known to be the ones
+/// that were signed. A field that is missing reads as empty and the checks above
+/// then refuse it, which is the same answer with a better sentence.
+fn parse(json: &str) -> Result<Record, Refusal> {
+    let str_at = |key: &str| -> String {
+        let needle = format!("\"{key}\":\"");
+        let Some(at) = json.find(&needle) else { return String::new() };
+        let rest = &json[at + needle.len()..];
+        let end = rest.find('"').unwrap_or(0);
+        rest[..end].to_string()
     };
-    let s = |k: &str| match m.get(k) {
-        Some(Value::Str(v)) => v.clone(),
-        _ => String::new(),
-    };
-    let b = |k: &str| match m.get(k) {
-        Some(Value::Bytes(v)) => v.clone(),
-        _ => Vec::new(),
-    };
-    let i = |k: &str| match m.get(k) {
-        Some(Value::Int(v)) => *v,
-        _ => 0,
-    };
-    let list = |k: &str| match m.get(k) {
-        Some(Value::List(v)) => v
-            .iter()
-            .filter_map(|x| match x {
-                Value::Str(s) => Some(s.clone()),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
+    let int_at = |key: &str| -> i64 {
+        let needle = format!("\"{key}\":");
+        let Some(at) = json.find(&needle) else { return 0 };
+        let rest = &json[at + needle.len()..];
+        let end = rest.find(|c: char| !c.is_ascii_digit() && c != '-').unwrap_or(rest.len());
+        rest[..end].parse().unwrap_or(0)
     };
 
-    let effects = match m.get("effects") {
-        Some(Value::List(items)) => items
-            .iter()
-            .filter_map(|e| {
-                let Value::Map(e) = e else { return None };
-                Some(Effect {
-                    capability: match e.get("capability") {
-                        Some(Value::Str(c)) => c.clone(),
-                        _ => String::new(),
-                    },
-                    payload: e.get("payload").cloned().unwrap_or(Value::Null),
-                    reversible: matches!(e.get("reversible"), Some(Value::Bool(true))),
-                })
-            })
-            .collect(),
-        _ => Vec::new(),
-    };
+    // The effects, read as the objects they are. A publisher signs over these,
+    // so they are the one part worth reading carefully.
+    let mut effects = Vec::new();
+    if let Some(at) = json.find("\"effects\":[") {
+        let rest = &json[at + 11..];
+        let mut depth = 0;
+        let mut start = 0;
+        for (i, c) in rest.char_indices() {
+            match c {
+                '{' => {
+                    if depth == 0 {
+                        start = i;
+                    }
+                    depth += 1;
+                }
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        effects.push(effect(&rest[start..=i]));
+                    }
+                }
+                ']' if depth == 0 => break,
+                _ => {}
+            }
+        }
+    }
 
     Ok(Record {
-        app: s("app"),
-        version: s("version"),
-        action: s("action"),
-        code_hash: b("code"),
-        input_hash: b("input"),
-        previous_root: b("previous_root"),
-        next_root: b("next_root"),
-        policies: list("policies"),
-        capabilities: list("capabilities"),
+        vct: str_at("vct"),
+        app: str_at("app"),
+        version: str_at("version"),
+        action: str_at("action"),
+        code_hash: str_at("code_hash"),
+        input_hash: str_at("input_hash"),
+        previous_root: str_at("previous_root"),
+        next_root: str_at("next_root"),
+        policies: Vec::new(),
+        capabilities: Vec::new(),
         effects,
-        executed: i("executed"),
-        time: i("time"),
-        uuid: s("uuid"),
-        outcome: s("outcome"),
+        executed: int_at("executed"),
+        time: int_at("time"),
+        uuid: str_at("uuid"),
+        outcome: str_at("outcome"),
     })
 }
 
-/// Re-encoding, for a caller that wants to check the bytes it was handed are the
-/// canonical encoding of what it parsed. The decoder is strict, so this can only
-/// differ if something upstream is not using this encoding at all.
-pub fn reencode(r: &Record) -> Vec<u8> {
-    let mut m = BTreeMap::new();
-    m.insert("action".to_string(), Value::Str(r.action.clone()));
-    m.insert("app".to_string(), Value::Str(r.app.clone()));
-    DeterministicCbor.encode(&Value::Map(m))
+fn effect(json: &str) -> Effect {
+    let capability = {
+        let needle = "\"capability\":\"";
+        json.find(needle)
+            .map(|at| {
+                let rest = &json[at + needle.len()..];
+                rest[..rest.find('"').unwrap_or(0)].to_string()
+            })
+            .unwrap_or_default()
+    };
+    let credential = {
+        let needle = "\"credential\":\"";
+        json.find(needle).map(|at| {
+            let rest = &json[at + needle.len()..];
+            rest[..rest.find('"').unwrap_or(0)].to_string()
+        })
+    };
+    let claims = credential.as_ref().and_then(|_| {
+        let at = json.find("\"claims\":")?;
+        Some(json[at + 9..].trim_end_matches('}').to_string())
+    });
+
+    Effect {
+        capability,
+        payload: match (credential, claims) {
+            (Some(ty), Some(claims)) => Value::Credential {
+                ty,
+                claims: parse_claims(&claims),
+                verified: None,
+            },
+            _ => Value::Null,
+        },
+        reversible: json.contains("\"reversible\":true"),
+    }
+}
+
+/// The claims of an issuance: a flat object of strings and numbers, which is
+/// what a credential's claims are.
+fn parse_claims(json: &str) -> BTreeMap<String, Value> {
+    let mut out = BTreeMap::new();
+    let body = json.trim().trim_start_matches('{').trim_end_matches('}');
+    let mut rest = body;
+    while let Some(at) = rest.find('"') {
+        let after = &rest[at + 1..];
+        let Some(end) = after.find('"') else { break };
+        let key = &after[..end];
+        let Some(colon) = after[end..].find(':') else { break };
+        let value_at = end + colon + 1;
+        let value = after[value_at..].trim_start();
+        if let Some(stripped) = value.strip_prefix('"') {
+            let end = stripped.find('"').unwrap_or(0);
+            out.insert(key.to_string(), Value::Str(stripped[..end].to_string()));
+            rest = &stripped[end + 1..];
+        } else {
+            let end = value.find(|c: char| c == ',' || c == '}').unwrap_or(value.len());
+            let text = value[..end].trim();
+            out.insert(
+                key.to_string(),
+                text.parse::<i64>().map(Value::Int).unwrap_or_else(|_| Value::Str(text.to_string())),
+            );
+            rest = &value[end..];
+        }
+    }
+    out
 }

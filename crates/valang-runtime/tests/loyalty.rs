@@ -268,8 +268,6 @@ fn one_field_can_be_proved_without_opening_the_others() {
 /// it claims to be.
 #[test]
 fn the_record_is_signed_whichever_way_the_run_went() {
-    use valang_runtime::encode_record;
-
     let (program, _) = valang::analyse(LOYALTY);
     for approve in [true, false] {
         let run = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve });
@@ -277,11 +275,11 @@ fn the_record_is_signed_whichever_way_the_run_went() {
         assert_eq!(run.record.device_key, b"test-device".to_vec());
 
         // The outcome is inside the signed bytes, so the two runs cannot be
-        // swapped for one another.
-        let bytes = encode_record(&run.record);
-        assert!(!bytes.is_empty());
-        let sig = Wallet { approve }.sign(&bytes);
-        assert_eq!(sig, run.record.signature, "the signature is over these bytes");
+        // swapped for one another — and what is signed is the JWS signing input,
+        // so a publisher checks it with an ordinary JWT library.
+        let input = valang_runtime::attestation::signing_input(&run.record, &run.record.device_key);
+        assert_eq!(Wallet { approve }.sign(input.as_bytes()), run.record.signature);
+        assert_eq!(valang_runtime::attestation::jwt(&run.record).split('.').count(), 3);
     }
 
     let a = run_action(&program, LOYALTY, "ScanToEarn", &start(), &BTreeMap::new(), &Wallet { approve: true });

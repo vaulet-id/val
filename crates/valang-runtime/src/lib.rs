@@ -4,6 +4,7 @@
 //! performs an effect: it describes one and hands it to the host, which is the
 //! only reason an execution record can be trusted.
 
+pub mod attestation;
 pub mod canonical;
 pub mod decode;
 pub mod eval;
@@ -67,10 +68,13 @@ pub struct ExecutionRecord {
     pub device_key: Vec<u8>,
 }
 
-/// The record's bytes, canonically. This is what the device signs and what a
-/// verifier re-encodes and checks — so it carries the outcome too: "refused" is
-/// part of what happened, and a record that only attested to successes would be
-/// evidence of a different thing than it claims.
+/// The record's bytes, canonically. Kept because a host may want to hash a
+/// record the same way twice, and because the state roots inside it are computed
+/// over this encoding.
+///
+/// It is **not** what the device signs. That is the JWS signing input in
+/// `attestation`, so that a publisher with an ordinary JWT library can check the
+/// record without any of this project's code.
 fn within(state: &State, enc: &DeterministicCbor, limits: Limits) -> Result<(), String> {
     fn walk(v: &Value, limits: Limits, path: &str) -> Result<(), String> {
         match v {
@@ -105,6 +109,14 @@ fn within(state: &State, enc: &DeterministicCbor, limits: Limits) -> Result<(), 
         ));
     }
     Ok(())
+}
+
+/// Signed over the JWS signing input, so the token in `attestation::jwt` is a
+/// JWT that any library verifies. The host holds the key; this only decides
+/// which bytes it is asked about.
+fn sign_record(record: &mut ExecutionRecord, host: &dyn Host) {
+    let input = attestation::signing_input(record, &record.device_key);
+    record.signature = host.sign(input.as_bytes());
 }
 
 pub fn encode_record(r: &ExecutionRecord) -> Vec<u8> {
@@ -194,7 +206,7 @@ pub fn run_action(
     };
 
     let Some(action) = action else {
-        record.signature = host.sign(&encode_record(&record));
+        sign_record(&mut record, host);
         return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: Vec::new(), record, leaves: previous };
     };
 
@@ -242,7 +254,7 @@ pub fn run_action(
                     Trap::Unsupported(m) => Outcome::Defect(m),
                 };
                 record.effects_requested = ev.effects.clone();
-                record.signature = host.sign(&encode_record(&record));
+                sign_record(&mut record, host);
                 return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: ev.effects, record, leaves: previous };
             }
         }
@@ -258,7 +270,7 @@ pub fn run_action(
     match host.decide(&effects) {
         Verdict::Refused(why) => {
             record.outcome = Outcome::Refused(why.clone());
-            record.signature = host.sign(&encode_record(&record));
+            sign_record(&mut record, host);
             Run { outcome: Outcome::Refused(why), next_state: state.clone(), effects, record, leaves: previous }
         }
         Verdict::Approved => {
@@ -267,14 +279,14 @@ pub fn run_action(
             // that no phase produced.
             if let Err(why) = within(&next, &enc, host.limits()) {
                 record.outcome = Outcome::Defect(why.clone());
-                record.signature = host.sign(&encode_record(&record));
+                sign_record(&mut record, host);
                 return Run { outcome: Outcome::Defect(why), next_state: state.clone(), effects, record, leaves: previous };
             }
             let leaves = merkle::leaves(&next, &enc);
             record.next_root = merkle::root(&leaves);
             record.effects_executed = effects.len();
             record.outcome = Outcome::Committed;
-            record.signature = host.sign(&encode_record(&record));
+            sign_record(&mut record, host);
             Run { outcome: Outcome::Committed, next_state: next, effects, record, leaves }
         }
     }
