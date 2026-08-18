@@ -104,7 +104,7 @@ screen Portfolio {
     section(text: "holdings")
 
     list(holdings) { h ->
-      row(
+      tile(
         text: sentence(
           "holdingLine",
           symbol:   h.claims.symbol,

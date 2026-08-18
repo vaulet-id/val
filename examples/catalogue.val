@@ -72,14 +72,14 @@ screen Catalogue {
 
     // `row` — a line with a leading icon. With `onTap` it gains a chevron and
     // becomes pressable; without one it is a line of text.
-    row(text: "plainRow")
-    row(text: "pressableRow", onTap: Press)
+    tile(text: "plainRow")
+    tile(text: "pressableRow", onTap: Press)
 
     // `list` — one row per element, with each element's slots resolved. An
     // empty list draws the wallet's own empty state, never yours.
     section(text: "fromTheWallet")
     list(receipts) { r ->
-      row(text: sentence("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at))
+      tile(text: sentence("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
 
     // `button` — `emphasis: primary` is the one that docks to the bottom of the

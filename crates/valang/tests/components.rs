@@ -68,8 +68,8 @@ fn a_screen_holds_only_catalogue_nodes_after_expansion() {
 
     for node in &column.children {
         assert!(
-            valang::expand::CATALOGUE.contains(&node.kind.as_str()),
-            "`{}` is not something the host ships",
+            valang::expand::is_catalogue_name(&node.kind),
+            "`{}` is not a catalogue name",
             node.kind
         );
     }
@@ -88,12 +88,14 @@ fn a_parameter_is_replaced_by_what_the_call_site_handed_it() {
     }
 }
 
+/// A lowercase name is a catalogue's name, whatever catalogue the host
+/// published, so the collision cannot happen rather than being caught per host.
 #[test]
-fn a_component_may_not_take_a_name_the_host_ships() {
+fn a_component_may_not_take_a_lowercase_name() {
     let src = SRC.replace("component MoneyCard(", "component card(");
     let msgs = errors(&src);
     assert!(
-        msgs.iter().any(|m| m.contains("the host ships")),
+        msgs.iter().any(|m| m.contains("capitalised")),
         "expected a clash to be reported, got {msgs:?}"
     );
 }

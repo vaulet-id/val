@@ -7,6 +7,7 @@
 
 pub mod ast;
 pub mod check;
+pub mod catalogue;
 pub mod diag;
 pub mod expand;
 pub mod lex;
@@ -31,6 +32,19 @@ pub type TextBundle = std::collections::BTreeMap<String, std::collections::BTree
 /// (§9) — and every sentence a person reads is in there rather than in the
 /// program.
 pub fn analyse_with(src: &str, bundle: Option<(&TextBundle, &[String])>) -> (ast::Program, Vec<Diagnostic>) {
+    analyse_against(src, bundle, &catalogue::Catalogues::default())
+}
+
+/// Analyse against the host's catalogues as well.
+///
+/// A screen is checked against what the host published rather than against a
+/// list inside this crate: the language does not define a catalogue, and a front
+/// end that carried one would carry the first host's.
+pub fn analyse_against(
+    src: &str,
+    bundle: Option<(&TextBundle, &[String])>,
+    catalogues: &catalogue::Catalogues,
+) -> (ast::Program, Vec<Diagnostic>) {
     let (mut program, mut diagnostics) = parse::parse(src);
     // A package's own components become the host's catalogue before anything
     // else looks at a screen, so every later pass — the checks, the capability
@@ -41,6 +55,7 @@ pub fn analyse_with(src: &str, bundle: Option<(&TextBundle, &[String])>) -> (ast
     if let Some((bundle, locales)) = bundle {
         diagnostics.extend(check::check_bundle(&program, bundle, locales));
     }
+    diagnostics.extend(catalogue::check_screens(&program, catalogues));
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
     // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:

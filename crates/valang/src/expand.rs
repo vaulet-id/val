@@ -14,10 +14,16 @@ use std::collections::BTreeMap;
 use crate::ast::{Arg, ComponentDecl, CredentialDecl, Expr, Program, UiNode};
 use crate::diag::{Diagnostic, Span};
 
-/// What the host ships. A component may not take one of these names — that
-/// would be a package overriding the catalogue rather than composing it.
-pub const CATALOGUE: &[&str] =
-    &["column", "row", "card", "section", "list", "button", "tab", "tabs"];
+/// A component this package declares may not take a name the catalogue uses —
+/// that would be overriding the host rather than composing it.
+///
+/// The catalogue itself is a document the host publishes; what is left here is
+/// only the shape of the name. A component is capitalised and a catalogue's
+/// components are not, so the two cannot collide in the first place, and this
+/// check is what makes that rule enforceable rather than conventional.
+pub fn is_catalogue_name(name: &str) -> bool {
+    name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+}
 
 /// The call that turns a signed key and its values into one sentence.
 ///
@@ -35,16 +41,10 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
         program.components.iter().map(|c| (c.name.clone(), c.clone())).collect();
 
     for c in &program.components {
-        if CATALOGUE.contains(&c.name.as_str()) {
+        if is_catalogue_name(&c.name) {
             d.push(Diagnostic::error(
                 c.span,
-                format!("`{}` is a component the host ships — a package composes the catalogue rather than replacing it", c.name),
-            ));
-        }
-        if !c.name.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) {
-            d.push(Diagnostic::error(
-                c.span,
-                format!("`{}` is a component this package declares, so it is capitalised — the lowercase names are the host's", c.name),
+                format!("`{}` is a component this package declares, so it is capitalised — the lowercase names belong to the host's catalogue", c.name),
             ));
         }
     }

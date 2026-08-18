@@ -58,8 +58,10 @@ fn main() -> ExitCode {
         let bundle = bundle.as_deref().and_then(parse_bundle);
 
         let (program, diagnostics) = match &bundle {
-            Some((keys, locales)) => valang::analyse_with(&src, Some((keys, locales))),
-            None => valang::analyse(&src),
+            Some((keys, locales)) => {
+                valang::analyse_against(&src, Some((keys, locales)), &catalogues())
+            }
+            None => valang::analyse_against(&src, None, &catalogues()),
         };
 
         println!("── {path}");
@@ -79,4 +81,23 @@ fn main() -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// The catalogues to check against.
+///
+/// A real host publishes its own and hands it to the compiler; what a command
+/// line has is whatever is on disk beside the language. The core profile is
+/// built in because a package that names nothing else is checked against it.
+fn catalogues() -> valang::catalogue::Catalogues {
+    const CORE: &str = include_str!("../../../../catalogues/core.json");
+    const VAULET: &str = include_str!("../../../../catalogues/vaulet.json");
+
+    let mut loaded = Vec::new();
+    for source in [CORE, VAULET] {
+        match valang::catalogue::Catalogue::parse(source) {
+            Ok(c) => loaded.push(c),
+            Err(e) => eprintln!("a catalogue did not parse: {e}"),
+        }
+    }
+    valang::catalogue::Catalogues::of(loaded)
 }

@@ -1,0 +1,65 @@
+{
+  "_comment": "The profile every conforming host implements. A package that names only this runs on any of them. Adding a component here needs two hosts that can already draw it — one host is an extension, not a profile.",
+  "catalogue": "org.val.core",
+  "version": 1,
+
+  "components": {
+    "column":  { "props": { "gap": "Gap?", "align": "Align?" }, "children": true },
+    "row":     { "props": { "gap": "Gap?", "align": "Align?" }, "children": true },
+    "divider": { "props": { "style": "DividerStyle?" }, "children": false },
+
+    "section": { "props": { "text": "Text", "style": "SectionStyle?" }, "children": false },
+    "card":    { "props": { "text": "Text", "onTap": "Action?" }, "children": false },
+    "tile": {
+      "props": {
+        "text": "Text",
+        "detail": "Text?",
+        "icon": "Icon?",
+        "trailing": "Trailing?",
+        "onTap": "Action?"
+      },
+      "children": false
+    },
+    "list":  { "props": { "of": "List<T>", "onRemove": "Action?" }, "children": true },
+    "image": { "props": { "asset": "Asset" }, "children": false },
+
+    "button": {
+      "props": {
+        "text": "Text",
+        "emphasis": "Emphasis?",
+        "icon": "Icon?",
+        "state": "State?",
+        "onTap": "Action"
+      },
+      "children": false
+    },
+
+    "field":  { "props": { "text": "Text", "kind": "FieldKind?", "icon": "Icon?", "into": "Name" }, "children": false },
+    "pick":   { "props": { "text": "Text", "of": "List<T>?", "kind": "PickKind?", "into": "Name" }, "children": false },
+    "toggle": { "props": { "text": "Text", "into": "Name" }, "children": false },
+
+    "progress": { "props": { "text": "Text?", "value": "int", "of": "int" }, "children": false },
+
+    "credentialCard": { "props": { "of": "Verified" }, "children": false },
+    "claim":          { "props": { "text": "Text", "of": "Claim" }, "children": false },
+    "qr":             { "props": { "of": "Presentation" }, "children": false },
+    "notice":         { "props": { "text": "Text", "tone": "Tone?" }, "children": false }
+  },
+
+  "vocabularies": {
+    "gap": ["tight", "normal", "loose"],
+    "align": ["start", "center", "end"],
+    "dividerStyle": ["section", "row"],
+    "sectionStyle": ["label", "title"],
+    "trailing": ["chevron", "badge", "none"],
+    "emphasis": ["primary", "secondary", "quiet"],
+    "state": ["enabled", "disabled", "busy"],
+    "tone": ["info", "warning", "danger"],
+    "fieldKind": ["text", "number", "email", "phone"],
+    "pickKind": ["date", "choice"],
+    "icon": [
+      "receipt", "wallet", "shield", "person", "card", "calendar", "location",
+      "money", "check", "warning", "document", "key"
+    ]
+  }
+}

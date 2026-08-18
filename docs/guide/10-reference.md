@@ -102,7 +102,7 @@ What the host ships, not what the language defines. On Vaulet today:
 column { … }
 section(text: "key")
 card(text: sentence("key", name: value))
-row(text: sentence("key", name: value), onTap: Action)
+tile(text: sentence("key", name: value), onTap: Action)
 list(binding) { item -> … }
 button(text: "key", emphasis: primary, onTap: Action)
 ```

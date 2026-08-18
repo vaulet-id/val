@@ -1,0 +1,13 @@
+{
+  "_comment": "Vaulet's own additions, on top of the core profile. Everything here is written under `vaulet.` in a screen, so a reader sees from the line that the screen has stopped being portable.",
+  "catalogue": "id.vaulet.wallet",
+  "version": 1,
+
+  "components": {
+    "avatar":    { "props": { "of": "Claim" }, "children": false },
+    "idCard":    { "props": { "of": "Verified" }, "children": false },
+    "swipeAway": { "props": { "text": "Text", "onRemove": "Action" }, "children": true }
+  },
+
+  "vocabularies": {}
+}

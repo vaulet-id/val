@@ -35,7 +35,7 @@ screen Wallet {
     section(text: "history")
 
     list(receipts) { r ->
-      row(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
+      tile(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
 
     // Primary, so the host docks it. A call to action that scrolls with the

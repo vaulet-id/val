@@ -70,10 +70,11 @@ pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
         .map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
         .unwrap_or_default();
 
+    let cats = catalogues(&input["catalogues"]);
     let (program, diagnostics) = if bundle.is_empty() {
-        valang::analyse(source)
+        valang::analyse_against(source, None, &cats)
     } else {
-        valang::analyse_with(source, Some((&bundle, &locales)))
+        valang::analyse_against(source, Some((&bundle, &locales)), &cats)
     };
 
     write(
@@ -290,6 +291,24 @@ fn hex_bytes_of(s: &str) -> Vec<u8> {
 
 fn hex_bytes(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// The catalogues the caller published. A host hands these in; the language does
+/// not carry a list of what any host can draw.
+fn catalogues(j: &Json) -> valang::catalogue::Catalogues {
+    let mut loaded = Vec::new();
+    if let Some(list) = j.as_array() {
+        for entry in list {
+            let source = match entry {
+                Json::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            if let Ok(c) = valang::catalogue::Catalogue::parse(&source) {
+                loaded.push(c);
+            }
+        }
+    }
+    valang::catalogue::Catalogues::of(loaded)
 }
 
 fn text_bundle(j: &Json) -> valang::TextBundle {

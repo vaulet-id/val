@@ -113,6 +113,14 @@ class Vaulet {
   /// it started from. On a light ground the accent *is* the colour that was
   /// chosen; dark keeps Material's derivation, because near-black on a
   /// near-black ground is not an accent.
+  /// The spacing scale, by the word a screen used. A screen names a step and
+  /// never a number, so one phone's idea of `loose` is the same everywhere on it.
+  static double gapOf(Object? word) => switch (word) {
+        'tight' => sm,
+        'loose' => xxl,
+        _ => md,
+      };
+
   static ThemeData theme(Brightness brightness) {
     var scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
     if (brightness == Brightness.light) {
@@ -592,11 +600,26 @@ class _NodeState extends State<_Node> {
           ),
         );
 
+      // A layout row. `tile` below is the one that carries a sentence — two
+      // different things that shared a name until the catalogue was written
+      // down and the collision had somewhere to show up.
+      case 'row':
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: Vaulet.gapOf(args['gap'])),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (final child in children)
+                Expanded(child: _Node(node: child, incoming: widget.incoming)),
+            ],
+          ),
+        );
+
       // `AppCard` + `ListTile`: the leading icon, the title, a subtitle capped
       // at two lines, and a chevron when a press goes somewhere. A bare row of
       // text would put the title in a different place from every other row on
       // the phone.
-      case 'row':
+      case 'tile':
         final action = (args['onTap'] as String?)?.trim();
         return Card(
           child: ListTile(

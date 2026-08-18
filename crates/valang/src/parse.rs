@@ -165,6 +165,20 @@ impl Parser {
                 "action" => p.actions.push(self.action_decl()),
                 "screen" => p.screens.push(self.screen_decl()),
                 "component" => p.components.push(self.component_decl()),
+                "catalogue" => {
+                    self.bump();
+                    self.skip_newlines();
+                    if self.peek().kind == Kind::Str {
+                        p.catalogues.push(self.bump().text);
+                    } else {
+                        let at = self.peek().span;
+                        self.diagnostics.push(Diagnostic::error(
+                            at,
+                            "a catalogue is named and versioned: `catalogue \"org.val.core/1\"`"
+                                .to_string(),
+                        ));
+                    }
+                }
                 _ => {
                     let bad = self.bump();
                     if bad.kind != Kind::Eof {
@@ -777,7 +791,15 @@ impl Parser {
             return None;
         }
         let span = self.peek().span;
-        let kind = self.bump().text;
+        // `wallet.avatar` — a host's own component, written under the host's
+        // name. One token would have made it two nodes, the second of which is
+        // not a component anybody declared.
+        let mut kind = self.bump().text;
+        while self.at(".") && self.peek_at(1).kind == Kind::Ident {
+            self.bump();
+            kind.push('.');
+            kind.push_str(&self.bump().text);
+        }
         let args = if self.at("(") { self.args() } else { Vec::new() };
         let mut children = Vec::new();
         let mut lambda = None;

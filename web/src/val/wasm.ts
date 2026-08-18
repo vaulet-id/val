@@ -1,3 +1,11 @@
+import core from '../../../catalogues/core.json?raw'
+import vaulet from '../../../catalogues/vaulet.json?raw'
+
+/// The catalogues this host publishes. A wallet hands its own to the compiler —
+/// the language carries no list of what anybody can draw, so the playground
+/// supplies Vaulet's the way a real host would.
+export const CATALOGUES = [core, vaulet]
+
 // The compiler and the runtime, loaded into the page.
 //
 // Two exported functions and a length-prefixed string. No binding generator:
@@ -120,7 +128,7 @@ export function analyse(
   text?: Record<string, Record<string, string>>,
   locales?: string[],
 ): Analysis {
-  return call('val_analyse', { source, text, locales }) as Analysis
+  return call('val_analyse', { source, text, locales, catalogues: CATALOGUES }) as Analysis
 }
 
 export function resolve(source: string, wallet: unknown): { screens: Resolved[] } {
