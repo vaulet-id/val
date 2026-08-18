@@ -52,7 +52,7 @@ fn every_action_is_reachable(p: &Program, d: &mut Vec<Diagnostic>) {
 
     let mut pressed: HashSet<String> = HashSet::new();
     for s in &p.screens {
-        for n in &s.tree {
+        for n in s.title.iter().chain(s.tree.iter()) {
             walk_ui(n, &mut |node| {
                 for a in &node.args {
                     if a.name.as_deref() == Some("onTap") {
@@ -174,7 +174,7 @@ fn navigation_goes_somewhere(p: &Program, d: &mut Vec<Diagnostic>) {
         }
     }
     for s in &p.screens {
-        for n in &s.tree {
+        for n in s.title.iter().chain(s.tree.iter()) {
             walk_ui(n, &mut |node| {
                 for a in &node.args {
                     if a.name.as_deref() == Some("onTap") {
@@ -364,7 +364,7 @@ pub fn check_bundle(
     // Key to the slots the node fills it with, so the two can be compared.
     let mut filled: Vec<(String, crate::diag::Span, Vec<String>)> = Vec::new();
     for s in &p.screens {
-        for n in &s.tree {
+        for n in s.title.iter().chain(s.tree.iter()) {
             walk_ui(n, &mut |node| {
                 for a in &node.args {
                     let is_text = a.name.as_deref() == Some("text") || (a.name.is_none() && node.kind == "tab");

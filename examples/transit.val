@@ -68,6 +68,8 @@ action Tap {
 }
 
 screen Pass {
+  title: sentence("passTitle")
+
   column {
     card(text: sentence("ridesSoFar", rides: state.rides))
     section(text: "howToRide")

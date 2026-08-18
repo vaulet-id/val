@@ -40,6 +40,10 @@ pub struct Component {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screen {
     pub name: String,
+    /// What the person reads at the top, resolved like any other sentence. The
+    /// identifier is what the code calls this screen; it is not what anybody
+    /// reads, and it could not be Thai if it were.
+    pub title: Option<Component>,
     pub data: Vec<Resolved>,
     pub derived: BTreeMap<String, Value>,
     pub tree: Vec<Component>,
@@ -120,7 +124,8 @@ pub fn render(
         .iter()
         .map(|n| component(&mut ev, n, state))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Screen { name: screen.name.clone(), data: resolved, derived, tree })
+    let title = screen.title.as_ref().map(|t| component(&mut ev, t, state)).transpose()?;
+    Ok(Screen { name: screen.name.clone(), title, data: resolved, derived, tree })
 }
 
 fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Result<Component, Trap> {

@@ -1,6 +1,9 @@
 {
   "_comment": "The condominium package's own bundle.",
-  "locales": ["en", "th"],
+  "locales": [
+    "en",
+    "th"
+  ],
   "keys": {
     "resolution": {
       "en": "Resolution: the 2027 common-area budget",
@@ -10,7 +13,17 @@
       "en": "Your vote is weighted by your share",
       "th": "คะแนนของคุณถ่วงน้ำหนักตามอัตราส่วนกรรมสิทธิ์"
     },
-    "approve": { "en": "Approve", "th": "เห็นชอบ" },
-    "reject": { "en": "Reject", "th": "ไม่เห็นชอบ" }
+    "approve": {
+      "en": "Approve",
+      "th": "เห็นชอบ"
+    },
+    "reject": {
+      "en": "Reject",
+      "th": "ไม่เห็นชอบ"
+    },
+    "meetingTitle": {
+      "en": "General meeting",
+      "th": "การประชุมใหญ่"
+    }
   }
 }

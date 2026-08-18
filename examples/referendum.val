@@ -107,6 +107,8 @@ action VoteNo {
 }
 
 screen Ballot {
+  title: sentence("ballotTitle")
+
   column {
     card(text: "question")
     section(text: "howToVote")

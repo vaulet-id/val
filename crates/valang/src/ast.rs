@@ -159,6 +159,14 @@ pub struct ActionDecl {
 #[derive(Debug, Clone)]
 pub struct ScreenDecl {
     pub name: String,
+    /// What the person reads at the top. A sentence rather than the screen's
+    /// identifier: identifiers are ASCII, so a title taken from one could never
+    /// be Thai, and every other word on the screen can be.
+    ///
+    /// Held as a node so it goes through the same flattening and the same
+    /// bundle check as every other sentence, rather than being a second path
+    /// that has to be kept faithful to the first.
+    pub title: Option<UiNode>,
     pub data: Vec<DataDecl>,
     pub compute: Vec<Stmt>,
     pub tree: Vec<UiNode>,

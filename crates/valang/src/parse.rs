@@ -653,11 +653,27 @@ impl Parser {
         let mut data = Vec::new();
         let mut compute = Vec::new();
         let mut tree = Vec::new();
+        let mut title = None;
         self.expect("{");
         loop {
             self.skip_newlines();
             if self.eof() || self.eat("}") {
                 break;
+            }
+            if self.at("title") && self.peek_at(1).is(":") {
+                let at = self.peek().span;
+                self.bump();
+                self.bump();
+                let value = self.expr(0);
+                title = Some(UiNode {
+                    kind: "title".to_string(),
+                    args: vec![Arg { name: Some("text".into()), value, spread: false, span: at }],
+                    lambda: None,
+                    children: Vec::new(),
+                    slots: Vec::new(),
+                    span: at,
+                });
+                continue;
             }
             if self.at("data") && self.peek_at(1).is("{") {
                 self.bump();
@@ -677,7 +693,7 @@ impl Parser {
                 self.bump();
             }
         }
-        ScreenDecl { name, data, compute, tree, span }
+        ScreenDecl { name, title, data, compute, tree, span }
     }
 
     /// `component Name(param: type, …) { …catalogue… }`

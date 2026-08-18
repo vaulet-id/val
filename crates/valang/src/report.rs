@@ -20,6 +20,10 @@ pub struct Report {
     pub audiences: BTreeSet<String>,
     pub payments: BTreeSet<String>,
     pub writes: BTreeSet<String>,
+    /// The catalogues this package needs beyond the profile every host
+    /// implements. Empty means it runs on any of them, which is the sentence a
+    /// person deciding to install it is owed as much as the rest.
+    pub catalogues: BTreeSet<String>,
     pub irreversible: bool,
 }
 
@@ -175,6 +179,12 @@ pub fn report(p: &Program) -> Report {
         r.reads = narrowed;
     }
 
+    r.catalogues = p
+        .catalogues
+        .iter()
+        .filter(|c| !c.starts_with(crate::catalogue::CORE))
+        .cloned()
+        .collect();
     r.irreversible = !r.discloses.is_empty() || !r.proves.is_empty() || !r.payments.is_empty();
     r
 }
@@ -277,6 +287,7 @@ impl fmt::Display for Report {
         row(f, "talks to", &self.audiences)?;
         row(f, "moves money", &self.payments)?;
         row(f, "writes state", &self.writes)?;
+        row(f, "runs only on", &self.catalogues)?;
         writeln!(f, "{:<14} {}", "irreversible", if self.irreversible { "yes" } else { "none" })
     }
 }

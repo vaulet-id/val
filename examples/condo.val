@@ -125,6 +125,8 @@ action VoteAgainst {
 }
 
 screen Meeting {
+  title: sentence("meetingTitle")
+
   column {
     card(text: "resolution")
     section(text: "yourWeight")

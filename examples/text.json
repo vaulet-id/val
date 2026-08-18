@@ -40,6 +40,10 @@
     "tooSmallToEarn": {
       "en": "Purchases under ฿20 do not earn points",
       "th": "ยอดต่ำกว่า 20 บาท ยังไม่ได้แต้ม"
+    },
+    "walletTitle": {
+      "en": "Wallet",
+      "th": "กระเป๋า"
     }
   }
 }

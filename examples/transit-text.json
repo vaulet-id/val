@@ -1,12 +1,25 @@
 {
   "_comment": "The transit package's own bundle.",
-  "locales": ["en", "th"],
+  "locales": [
+    "en",
+    "th"
+  ],
   "keys": {
     "ridesSoFar": {
       "en": "{rides} rides on this pass",
       "th": "เดินทางแล้ว {rides} เที่ยว"
     },
-    "howToRide": { "en": "At the gate", "th": "ที่ประตูทางเข้า" },
-    "tap": { "en": "Tap to ride", "th": "แตะเพื่อเข้า" }
+    "howToRide": {
+      "en": "At the gate",
+      "th": "ที่ประตูทางเข้า"
+    },
+    "tap": {
+      "en": "Tap to ride",
+      "th": "แตะเพื่อเข้า"
+    },
+    "passTitle": {
+      "en": "Transit pass",
+      "th": "บัตรโดยสาร"
+    }
   }
 }

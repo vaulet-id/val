@@ -74,6 +74,7 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
             out.extend(expand_node(node, &by_name, &types, &mut d));
         }
         s.tree = out.into_iter().map(|n| open_sentences(n, &mut d)).collect();
+        s.title = s.title.take().map(|t| open_sentences(t, &mut d));
     }
     program.screens = screens;
     d

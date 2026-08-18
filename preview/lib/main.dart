@@ -409,10 +409,18 @@ class _Screen extends StatelessWidget {
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         toolbarHeight: 52,
-        title: Text(
-          screen['name'] as String? ?? '',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-        ),
+        // The screen's own sentence where it has one. The identifier behind it
+        // is ASCII, so a title taken from it could never be Thai — which is
+        // what it was doing until screens could carry a title.
+        title: screen['title'] == null
+            ? Text(
+                screen['name'] as String? ?? '',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              )
+            : _Node(
+                node: screen['title'] as Map<String, dynamic>,
+                incoming: incoming,
+              ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, Vaulet.lg),
@@ -632,6 +640,10 @@ class _NodeState extends State<_Node> {
             onTap: action == null ? null : () => _tap(action),
           ),
         );
+
+      // A screen's own sentence, drawn as the bar's title.
+      case 'title':
+        return _text(style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700));
 
       case 'card':
         return Card(

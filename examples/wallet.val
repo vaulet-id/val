@@ -11,6 +11,8 @@
 // of lists — a person consented to one.
 
 screen Wallet {
+  title: sentence("walletTitle")
+
   // Declared, not fetched. The host resolves this before it draws, so there is
   // no half-empty screen and no prompt arriving mid-scroll — and a reviewer
   // reads one block to learn what this screen sees of somebody's wallet.
