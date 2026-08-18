@@ -57,6 +57,26 @@ and there is a wall-clock limit.
 Node strips the types rather than compiling them, so what runs is the file the
 author wrote.
 
+## What it will spawn
+
+One process per non-TypeScript handler, inside the machine. TypeScript runs in
+the playground's own tab and never reaches here.
+
+Two numbers bound it, and neither is the number of requests arriving:
+
+| | default | set with |
+| --- | --- | --- |
+| handlers in flight, total | 4 | `RUNNER_SLOTS` |
+| handlers in flight, per caller | 1 | `RUNNER_SLOTS_PER_CALLER` |
+
+Over either, the answer is `429` immediately rather than a wait. Four concurrent
+cargo builds on four shared cores finish sooner than eight do, and a caller told
+to come back knows what happened.
+
+Fly's own limits sit above these: `hard_limit` requests per machine, and as many
+machines as `fly scale count` says exist — Fly starts stopped machines, it does
+not create new ones.
+
 ## Where the boundary is
 
 **A handler runs as a process inside the runner's own machine.** Around it: a

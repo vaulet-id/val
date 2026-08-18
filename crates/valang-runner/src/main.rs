@@ -11,6 +11,11 @@
 mod lang;
 mod sandbox;
 
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+
+use axum::extract::{ConnectInfo, State};
 use axum::{extract::Json as AxJson, http::StatusCode, routing::post, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -47,6 +52,70 @@ enum RunResponse {
     Failed { kind: &'static str, error: String },
 }
 
+/// How many handlers may be running at once, and how many of those one caller
+/// may hold.
+///
+/// The playground is public and a Rust handler costs a compile, so without a
+/// cap a loop in somebody's tab is a free CPU faucet — and a queue of builds
+/// starves the Python handler that would have answered in 30ms.
+#[derive(Clone)]
+struct Limits {
+    /// Total in flight. Sized to the machine rather than to demand: eight
+    /// concurrent cargo builds on four shared cores finish slower than four do.
+    slots: Arc<tokio::sync::Semaphore>,
+    /// In flight per caller. One, because a person presses one button.
+    per_caller: Arc<Mutex<HashMap<String, usize>>>,
+    each: usize,
+}
+
+impl Limits {
+    fn from_env() -> Self {
+        let total = std::env::var("RUNNER_SLOTS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
+        let each =
+            std::env::var("RUNNER_SLOTS_PER_CALLER").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
+        Limits {
+            slots: Arc::new(tokio::sync::Semaphore::new(total)),
+            per_caller: Arc::new(Mutex::new(HashMap::new())),
+            each,
+        }
+    }
+
+    /// A slot, or nothing. Never a wait: a caller told to come back knows what
+    /// happened, where one left hanging behind four cargo builds reads as a
+    /// service that is broken.
+    fn take(&self, caller: &str) -> Option<Slot> {
+        let permit = self.slots.clone().try_acquire_owned().ok()?;
+        {
+            let mut held = self.per_caller.lock().unwrap();
+            let n = held.entry(caller.to_string()).or_insert(0);
+            if *n >= self.each {
+                return None;
+            }
+            *n += 1;
+        }
+        Some(Slot { limits: self.clone(), caller: caller.to_string(), _permit: permit })
+    }
+}
+
+/// Returns the slot when the request ends, however it ends.
+struct Slot {
+    limits: Limits,
+    caller: String,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        let mut held = self.limits.per_caller.lock().unwrap();
+        if let Some(n) = held.get_mut(&self.caller) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                held.remove(&self.caller);
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8787);
@@ -54,6 +123,7 @@ async fn main() {
     let app = Router::new()
         .route("/v1/run", post(run))
         .route("/v1/languages", post(languages))
+        .with_state(Limits::from_env())
         // The playground is served from another origin, and this service holds
         // nothing worth stealing: it is given a record and answers with a
         // decision, both of which the caller already had.
@@ -61,7 +131,9 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("bind");
     eprintln!("valang-runner on :{port}");
-    axum::serve(listener, app).await.expect("serve");
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .await
+        .expect("serve");
 }
 
 async fn languages() -> AxJson<Value> {
@@ -70,7 +142,21 @@ async fn languages() -> AxJson<Value> {
     }))
 }
 
-async fn run(AxJson(req): AxJson<RunRequest>) -> (StatusCode, AxJson<RunResponse>) {
+async fn run(
+    State(limits): State<Limits>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    AxJson(req): AxJson<RunRequest>,
+) -> (StatusCode, AxJson<RunResponse>) {
+    let Some(_slot) = limits.take(&peer.ip().to_string()) else {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            AxJson(RunResponse::Failed {
+                kind: "busy",
+                error: "the runner is at capacity — try again".into(),
+            }),
+        );
+    };
+
     let Some(lang) = lang::lang_of(&req.entry) else {
         return (
             StatusCode::BAD_REQUEST,
