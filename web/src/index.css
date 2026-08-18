@@ -40,17 +40,34 @@ body { background: var(--color-background); color: var(--color-foreground); }
 
 /* The specification is read far more often than it is edited, so it gets
    measure, rhythm and a table that can be scanned — not a default stylesheet. */
-.prose-val { line-height: 1.7; font-size: 14px; }
+.prose-val { line-height: 1.75; font-size: 14.5px; }
 .prose-val h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 1rem; }
-.prose-val h2 { font-size: 1.15rem; font-weight: 650; margin: 2.5rem 0 0.75rem; padding-top: 1.25rem; border-top: 1px solid var(--color-border); }
-.prose-val h3 { font-size: 0.95rem; font-weight: 650; margin: 1.75rem 0 0.5rem; }
+.prose-val h2 { font-size: 1.25rem; font-weight: 650; margin: 2.5rem 0 0.75rem; }
+.prose-val h3 { font-size: 1.05rem; font-weight: 650; margin: 2rem 0 0.6rem; scroll-margin-top: 1rem; }
 .prose-val p, .prose-val li { color: var(--color-foreground); }
 .prose-val p { margin: 0.75rem 0; max-width: 68ch; }
 .prose-val ul, .prose-val ol { margin: 0.75rem 0; padding-left: 1.25rem; }
 .prose-val li { margin: 0.35rem 0; max-width: 66ch; }
 .prose-val code { font-family: var(--font-mono); font-size: 0.85em; background: var(--color-muted); padding: 0.1em 0.35em; border-radius: 3px; }
-.prose-val pre { background: var(--color-muted); padding: 0.9rem 1rem; border-radius: 8px; overflow-x: auto; margin: 1rem 0; }
+.prose-val pre { background: var(--color-muted); padding: 0.9rem 1rem; border-radius: 0 0 8px 8px; overflow-x: auto; margin: 0; }
 .prose-val pre code { background: none; padding: 0; font-size: 12px; line-height: 1.55; }
+
+/* A code block earns exactly one piece of chrome: a chip saying what it is,
+   so a reader knows what they are looking at before they read a line of it. */
+.prose-val figure.code { margin: 1.25rem 0; }
+.prose-val figure.code figcaption {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  background: var(--color-muted);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px 8px 0 0;
+}
+.prose-val figure.code figcaption + pre { border-top-left-radius: 0; }
 .prose-val table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 13px; display: block; overflow-x: auto; }
 .prose-val th, .prose-val td { border-bottom: 1px solid var(--color-border); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
 .prose-val th { font-weight: 600; color: var(--color-muted-foreground); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
