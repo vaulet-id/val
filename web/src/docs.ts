@@ -1,5 +1,6 @@
 import { marked } from 'marked'
 import spec from '../../docs/spec.md?raw'
+import specTh from '../../docs/th/spec.md?raw'
 
 // The guide, which is the documentation somebody arrives for: they want to
 // build a Micro App, not to argue about the language. The specification stays,
@@ -166,14 +167,15 @@ function grouped(markdown: string, fallback: string): Page[] {
 /// translation that stopped halfway down the page.
 const GROUPS = {
   en: { start: 'Getting started', build: 'Building an app', ship: 'Shipping it', spec: 'The specification' },
-  th: { start: 'เริ่มต้น', build: 'สร้างแอป', ship: 'ปล่อยของ', spec: 'ข้อกำหนดภาษา (อังกฤษ)' },
+  th: { start: 'เริ่มต้น', build: 'สร้างแอป', ship: 'ปล่อยของ', spec: 'ข้อกำหนดภาษา' },
 } as const
 
 export type Locale = keyof typeof GROUPS
 
-/// The specification stays in English in both. It is the normative text — the
-/// document a disagreement is settled against — and a normative document that
-/// exists in two languages has two answers the day the translation drifts.
+/// The specification is translated too, and its Thai opens by saying the
+/// English is what a disagreement is settled against. A translation that says
+/// which one is normative has one answer the day it drifts; two documents that
+/// do not have two.
 export function pagesFor(locale: Locale): Page[] {
   const g = GROUPS[locale]
   const guide = locale === 'th'
@@ -182,7 +184,7 @@ export function pagesFor(locale: Locale): Page[] {
   const where = [g.start, g.start, g.build, g.build, g.build, g.build, g.build, g.build, g.ship, g.ship]
   return [
     ...guide.map((md, i) => page(md, where[i])),
-    ...grouped(spec, g.spec).map((p) => ({ ...p, group: g.spec, section: g.spec })),
+    ...grouped(locale === 'th' ? specTh : spec, g.spec).map((p) => ({ ...p, group: g.spec, section: g.spec })),
   ]
 }
 
