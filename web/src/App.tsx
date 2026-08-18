@@ -15,7 +15,7 @@ import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
 import { Button } from '@/components/ui/button'
-import { Play, Loader2 } from 'lucide-react'
+import { Hammer, RotateCw, Loader2 } from 'lucide-react'
 
 const LOCALES = ['en', 'th']
 
@@ -32,6 +32,11 @@ export default function App() {
   const [log, setLog] = React.useState<Entry[]>([])
   const [debug, setDebug] = React.useState(false)
   const [running, setRunning] = React.useState(false)
+  /// The last press, so it can be repeated. Not a chosen action: VAL has no
+  /// entry point and being declared is not being called — an action happens
+  /// because somebody pressed something, and a button that picked one off a
+  /// list would be inventing a trigger the platform does not have.
+  const [lastPress, setLastPress] = React.useState<string | null>(null)
   const monaco = useMonaco()
 
   React.useEffect(() => {
@@ -123,17 +128,32 @@ export default function App() {
         )
       }
       setLog((l) => [...l, { at: Date.now(), run, decision }])
+      setLastPress(action)
       setRunning(false)
     },
     [ready, packageSource, wallet, monaco, sources],
   )
 
-  /// What the button does: run the first action this package declares. A press
-  /// in the preview is the same path, with the action the screen named.
-  const buildAndRun = React.useCallback(() => {
-    const first = analysis?.actions[0]
-    if (first) void dispatch(first)
-  }, [analysis, dispatch])
+  /// What a host does before admitting a package, and the only thing that is
+  /// meaningful to press on a program nobody has touched yet: check it, and say
+  /// what it would be allowed to do.
+  const build = React.useCallback(() => {
+    if (!analysis) return
+    setDebug(true)
+    setLog((l) => [
+      ...l,
+      {
+        at: Date.now(),
+        build: {
+          app: analysis.report.app,
+          version: analysis.report.version,
+          problems: analysis.diagnostics.filter((d) => d.severity === 'error').length,
+          warnings: analysis.diagnostics.filter((d) => d.severity === 'warning').length,
+          report: analysis.report,
+        },
+      },
+    ])
+  }, [analysis])
 
   // Diagnostics land as markers, so a float is underlined where it was written
   // rather than described in a panel somewhere else. Only for the file being
@@ -256,15 +276,25 @@ export default function App() {
                 {!ready ? (
                   <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">loading the compiler…</span>
                 ) : (
-                  <Button
-                    size="sm"
-                    className="ml-auto"
-                    onClick={buildAndRun}
-                    disabled={running || !analysis?.actions.length}
-                  >
-                    {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
-                    Build &amp; Run
-                  </Button>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <Button size="sm" variant="outline" onClick={build} disabled={!analysis}>
+                      <Hammer className="size-3" />
+                      Build
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => lastPress && void dispatch(lastPress)}
+                      disabled={running || !lastPress}
+                      title={
+                        lastPress
+                          ? `presses ${lastPress} again, on the wallet as it is now`
+                          : 'nothing has been pressed yet — a run happens because somebody presses something'
+                      }
+                    >
+                      {running ? <Loader2 className="size-3 animate-spin" /> : <RotateCw className="size-3" />}
+                      {lastPress ? `Re-run ${lastPress}` : 'Re-run'}
+                    </Button>
+                  </div>
                 )}
               </div>
 

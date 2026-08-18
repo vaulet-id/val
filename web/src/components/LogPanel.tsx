@@ -22,7 +22,15 @@ const OUTCOME = {
 
 import type { Decision } from '@/val/server-runtime'
 
-export type Entry = { at: number; run: RunResult; decision?: Decision }
+export type Build = {
+  app: string
+  version: string
+  problems: number
+  warnings: number
+  report: { reads: string[]; discloses: string[]; proves: string[]; issues: string[]; audiences: string[]; writes: string[]; irreversible: boolean }
+}
+
+export type Entry = { at: number; run?: RunResult; decision?: Decision; build?: Build }
 
 export function LogPanel({ entries, onClear }: { entries: Entry[]; onClear: () => void }) {
   if (!entries.length)
@@ -50,7 +58,9 @@ export function LogPanel({ entries, onClear }: { entries: Entry[]; onClear: () =
 }
 
 function LogEntry({ entry }: { entry: Entry }) {
-  const { run } = entry
+  if (entry.build) return <BuildEntry entry={entry} build={entry.build} />
+  const run = entry.run
+  if (!run) return null
 
   if (run.wouldNotBuild)
     return (
@@ -118,6 +128,64 @@ function LogEntry({ entry }: { entry: Entry }) {
           <ArrowRight className="size-2.5 translate-y-0.5 opacity-50" />
           <span>{run.record.nextRoot.slice(0, 8)}</span>
           <span>· {run.record.bytes} bytes, signed {run.record.signature.slice(0, 8)}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/// What a host would say about this package before admitting it — which is the
+/// only thing that is meaningful to press on a program nobody has touched yet.
+/// Running is what a press does.
+function BuildEntry({ entry, build }: { entry: Entry; build: Build }) {
+  const ok = build.problems === 0
+  const lines: [string, string[]][] = [
+    ['reads', build.report.reads],
+    ['discloses', build.report.discloses],
+    ['proves', build.report.proves],
+    ['issues', build.report.issues],
+    ['talks to', build.report.audiences],
+    ['writes state', build.report.writes],
+  ]
+
+  return (
+    <div className="border-b border-[var(--color-border)] px-4 py-2.5">
+      <div className="flex items-baseline gap-2">
+        {ok ? (
+          <CircleCheck className="size-3 shrink-0 translate-y-0.5 text-[var(--color-verified)]" />
+        ) : (
+          <XCircle className="size-3 shrink-0 translate-y-0.5 text-red-500" />
+        )}
+        <span className="font-mono text-[11px] font-medium">
+          {build.app || 'this package'} v{build.version}
+        </span>
+        <span className={cn('text-[10px]', ok ? 'text-[var(--color-verified)]' : 'text-red-500')}>
+          {ok ? 'would build' : `${build.problems} problem${build.problems === 1 ? '' : 's'}`}
+        </span>
+        {build.warnings > 0 && (
+          <span className="text-[10px] text-amber-500">{build.warnings} warning{build.warnings === 1 ? '' : 's'}</span>
+        )}
+        <span className="ml-auto font-mono text-[9px] text-[var(--color-muted-foreground)]">
+          {new Date(entry.at).toLocaleTimeString()}
+        </span>
+      </div>
+
+      {ok && (
+        <div className="mt-1.5 pl-5">
+          {lines
+            .filter(([, v]) => v.length)
+            .map(([label, values]) => (
+              <div key={label} className="flex gap-1.5 font-mono text-[10px]">
+                <span className="w-24 shrink-0 text-[var(--color-muted-foreground)]">{label}</span>
+                <span className="min-w-0 flex-1">{values.join(', ')}</span>
+              </div>
+            ))}
+          <div className="flex gap-1.5 font-mono text-[10px]">
+            <span className="w-24 shrink-0 text-[var(--color-muted-foreground)]">irreversible</span>
+            <span className={build.report.irreversible ? 'text-amber-500' : ''}>
+              {build.report.irreversible ? 'yes' : 'none'}
+            </span>
+          </div>
         </div>
       )}
     </div>
