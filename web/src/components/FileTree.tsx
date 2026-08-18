@@ -30,7 +30,7 @@ export function FileTree({
       <div className="border-b border-[var(--color-border)] px-2 py-2">
         <div className="flex items-center gap-1">
           <Select value={project} onValueChange={onProject}>
-            <SelectTrigger aria-label="project" className="min-w-0 flex-1">
+            <SelectTrigger aria-label="project" className="h-7 min-w-0 flex-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent align="start">
@@ -45,18 +45,18 @@ export function FileTree({
             onClick={onNew}
             title="a project of your own"
             aria-label="new project"
-            className="rounded border border-[var(--color-border)] p-1 hover:bg-[var(--color-accent)]"
+            className="flex size-7 shrink-0 items-center justify-center rounded border border-[var(--color-border)] hover:bg-[var(--color-accent)]"
           >
-            <Plus className="size-3" />
+            <Plus className="size-3.5" />
           </button>
           {here && !here.builtin && (
             <button
               onClick={() => onRemove(here.id)}
               title="remove this project"
               aria-label="remove project"
-              className="rounded border border-[var(--color-border)] p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]"
+              className="flex size-7 shrink-0 items-center justify-center rounded border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]"
             >
-              <Trash2 className="size-3" />
+              <Trash2 className="size-3.5" />
             </button>
           )}
         </div>
