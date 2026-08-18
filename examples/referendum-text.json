@@ -1,0 +1,16 @@
+{
+  "_comment": "The referendum's own bundle. Nothing here says which way to vote — a text bundle is signed with the package, and a ballot whose wording could change after signing is not a ballot.",
+  "locales": ["en", "th"],
+  "keys": {
+    "question": {
+      "en": "Should the city fund the new rail line?",
+      "th": "เห็นชอบให้เมืองลงทุนสร้างรถไฟสายใหม่หรือไม่"
+    },
+    "howToVote": {
+      "en": "One ballot per voter",
+      "th": "หนึ่งคนหนึ่งเสียง"
+    },
+    "yes": { "en": "Yes", "th": "เห็นชอบ" },
+    "no": { "en": "No", "th": "ไม่เห็นชอบ" }
+  }
+}

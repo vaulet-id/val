@@ -5,6 +5,12 @@ import door from '../../examples/door.val?raw'
 import rejected from '../../examples/rejected.val?raw'
 import textBundle from '../../examples/text.json?raw'
 import portfolioText from '../../examples/portfolio-text.json?raw'
+import referendum from '../../examples/referendum.val?raw'
+import referendumText from '../../examples/referendum-text.json?raw'
+import referendumHandler from '../../examples/referendum-handler.rs?raw'
+import transit from '../../examples/transit.val?raw'
+import transitText from '../../examples/transit-text.json?raw'
+import transitHandler from '../../examples/transit-handler.go?raw'
 import walletFixture from '../../fixtures/wallet.json?raw'
 
 /// The one wallet. Every project previews against the same phone, because a
@@ -42,6 +48,10 @@ export const files: SourceFile[] = [
   { path: 'examples/rejected.val', pkg: 'rejected', name: 'rejected.val', source: rejected, note: 'programs that must not compile' },
   { path: 'examples/text.json', pkg: 'loyalty', name: 'text.json', source: textBundle, note: 'the signed text bundle' },
   { path: 'examples/portfolio-text.json', pkg: 'portfolio', name: 'text.json', source: portfolioText, note: 'the signed text bundle' },
+  { path: 'examples/referendum.val', pkg: 'referendum', name: 'referendum.val', source: referendum, note: 'prove you may vote, disclose nothing else' },
+  { path: 'examples/referendum-text.json', pkg: 'referendum', name: 'text.json', source: referendumText, note: 'the signed text bundle' },
+  { path: 'examples/transit.val', pkg: 'transit', name: 'transit.val', source: transit, note: 'a pass that stays in the wallet' },
+  { path: 'examples/transit-text.json', pkg: 'transit', name: 'text.json', source: transitText, note: 'the signed text bundle' },
 ]
 
 /// Not part of any package: a `.va` never carries somebody's wallet. It is the
@@ -69,20 +79,26 @@ export type Project = {
   builtin: boolean
 }
 
-const handler = (id: string, source = DEFAULT_HANDLER): SourceFile => ({
-  path: `server/${id}/handler.ts`,
+const handler = (id: string, source = DEFAULT_HANDLER, name = 'handler.ts'): SourceFile => ({
+  path: `server/${id}/${name}`,
   pkg: 'server',
-  name: 'handler.ts',
+  name,
   source,
   note: 'verify the record, then issue or refuse',
 })
 
-const example = (id: string, name: string, note: string, files: SourceFile[]): Project => ({
+const example = (
+  id: string,
+  name: string,
+  note: string,
+  files: SourceFile[],
+  server?: { name: string; source: string },
+): Project => ({
   id,
   name,
   note,
   files,
-  servers: [handler(id)],
+  servers: [server ? handler(id, server.source, server.name) : handler(id)],
   builtin: true,
 })
 
@@ -95,6 +111,12 @@ export const examples: Project[] = [
     files.filter((f) => f.pkg === 'door')),
   example('rejected', 'Refused programs', 'twelve programs and the error each one is owed',
     files.filter((f) => f.pkg === 'rejected')),
+  example('referendum', 'Referendum', 'one ballot per voter, counted without a list of who voted',
+    files.filter((f) => f.pkg === 'referendum'),
+    { name: 'handler.rs', source: referendumHandler }),
+  example('transit', 'Transit pass', 'tap to ride, with the fare cap on the operator\'s server',
+    files.filter((f) => f.pkg === 'transit'),
+    { name: 'handler.go', source: transitHandler }),
 ]
 
 /// What a new project starts as: the smallest thing that compiles, runs, and

@@ -1,0 +1,76 @@
+// A transit pass. Tap to ride; the pass stays in the wallet and the operator
+// never gets a copy of it.
+//
+// The Go server beside this decides whether a ride is owed a receipt, which is
+// the ordinary shape of a server in this system: it verifies what the device
+// signed and then signs something of its own, or refuses.
+
+app "th.co.transit.pass"
+version 1
+
+capabilities {
+  credential.read(TransitPass)
+  credential.issue(RideReceipt)
+}
+
+credential TransitPass {
+  holder_name: string
+  zone:        string
+  expires_at:  date
+}
+
+credential RideReceipt {
+  zone:      string
+  rode_at:   datetime
+  ride_count: int
+}
+
+trust IssuedByOperator(pass: TransitPass) {
+  anchor: "th.co.transit"
+  require {
+    pass.signature.valid
+    pass.status.active
+    pass.holder.bound
+    // Expiry belongs here, not in the action: a pass that ran out last week is
+    // signed and unrevoked and still not a pass.
+    pass.claims.expires_at > context.time.now
+  }
+}
+
+state {
+  rides: int default 0
+}
+
+action Tap {
+  input {
+    pass: Credential<TransitPass>
+  }
+
+  verify {
+    const checked = pass with IssuedByOperator
+  }
+
+  compute {
+    const next_count = state.rides + 1
+  }
+
+  update {
+    rides: next_count
+  }
+
+  execute {
+    credential.issue(RideReceipt {
+      zone:       checked.claims.zone,
+      rode_at:    context.time.now,
+      ride_count: next.rides,
+    })
+  }
+}
+
+screen Pass {
+  column {
+    card(text: "ridesSoFar", rides: state.rides)
+    section(text: "howToRide")
+    button(text: "tap", emphasis: primary, onTap: Tap)
+  }
+}

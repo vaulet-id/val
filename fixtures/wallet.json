@@ -76,6 +76,16 @@
           "account_id": "A-114"
         }
       ]
+    },
+    "TransitPass": {
+      "verified": "IssuedByOperator",
+      "rows": [
+        {
+          "holder_name": "Somchai Prasert",
+          "zone": "inner",
+          "expires_at": "2026-12-31T00:00:00Z"
+        }
+      ]
     }
   },
   "queries": {

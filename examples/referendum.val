@@ -1,0 +1,116 @@
+// A referendum. Prove you may vote; cast one ballot; nobody learns who you are.
+//
+// The Rust server beside this is where the interesting rule lives: one ballot
+// per person, enforced by a nullifier the proof computes rather than by a list
+// of who voted. A list of voters is the thing a secret ballot exists to not
+// have.
+
+app "th.go.ect.referendum"
+version 1
+
+capabilities {
+  credential.read(NationalId)
+  credential.issue(BallotReceipt)
+  disclosure.present
+}
+
+credential NationalId {
+  given_name:  string
+  family_name: string
+  birthdate:   date
+  country:     string
+}
+
+// What the voter keeps: proof that a ballot of theirs was counted, with nothing
+// in it that says which way.
+credential BallotReceipt {
+  question: string
+  cast_at:  datetime
+}
+
+trust EligibleVoter(id: NationalId) {
+  anchor: "th.go.dopa"
+  require {
+    id.signature.valid
+    id.status.active
+    id.holder.bound
+    id.claims.country == "TH"
+  }
+}
+
+state {
+  voted: bool default false
+}
+
+// Two actions rather than one with a choice, because a press names an action and
+// nothing else. The ballot is the two buttons.
+action VoteYes {
+  input {
+    id: Credential<NationalId>
+  }
+
+  require {
+    state.voted == false
+  }
+
+  verify {
+    const checked = id with EligibleVoter
+  }
+
+  update {
+    voted: true
+  }
+
+  execute {
+    present {
+      // The commission learns that an eligible person voted, and the direction
+      // of the vote. It does not learn the name, the birthdate or the document.
+      prove checked.claims.birthdate <= context.time.now - duration(years: 18)
+      disclose "yes"
+    }
+
+    credential.issue(BallotReceipt {
+      question: "referendum-2026",
+      cast_at:  context.time.now,
+    })
+  }
+}
+
+action VoteNo {
+  input {
+    id: Credential<NationalId>
+  }
+
+  require {
+    state.voted == false
+  }
+
+  verify {
+    const checked = id with EligibleVoter
+  }
+
+  update {
+    voted: true
+  }
+
+  execute {
+    present {
+      prove checked.claims.birthdate <= context.time.now - duration(years: 18)
+      disclose "no"
+    }
+
+    credential.issue(BallotReceipt {
+      question: "referendum-2026",
+      cast_at:  context.time.now,
+    })
+  }
+}
+
+screen Ballot {
+  column {
+    card(text: "question")
+    section(text: "howToVote")
+    button(text: "yes", emphasis: primary, onTap: VoteYes)
+    button(text: "no", emphasis: secondary, onTap: VoteNo)
+  }
+}
