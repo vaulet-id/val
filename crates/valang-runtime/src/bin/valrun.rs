@@ -19,9 +19,11 @@ fn hex_bytes(b: &[u8]) -> String {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let all: Vec<String> = std::env::args().skip(1).collect();
+    let want_token = all.iter().any(|a| a == "--token");
+    let args: Vec<String> = all.into_iter().filter(|a| a != "--token").collect();
     let [path, action] = args.as_slice() else {
-        eprintln!("usage: valrun <file.val> <Action>");
+        eprintln!("usage: valrun <file.val> <Action> [--token]");
         return ExitCode::from(2);
     };
     let Ok(src) = std::fs::read_to_string(path) else {
@@ -78,5 +80,13 @@ fn main() -> ExitCode {
         println!("    {:<22} {:<30} {}", l.path, l.value.to_string(), &hex(&l.hash)[..8]);
     }
     println!("\n  fixtures/wallet.json — credentials signed by nobody, every batch approved");
+
+    // The token, when asked for it. This is what a publisher's server is handed
+    // and all it is handed, so being able to pipe it somewhere is the whole
+    // point of the flag.
+    if want_token {
+        println!("\n{}", valang_runtime::attestation::jwt(r));
+        println!("{}", hex_bytes(&r.device_key));
+    }
     ExitCode::SUCCESS
 }

@@ -90,6 +90,10 @@ const ENTRY = /^handler\.(ts|go|rs|py)$/
 /// hosted runner provides — the same one that will run them in production.
 const IN_BROWSER = 'ts'
 
+/// Where the other three run. A local runner by default; set VITE_RUNNER to
+/// point the playground at a deployed one.
+const RUNNER = import.meta.env.VITE_RUNNER ?? 'http://localhost:8787'
+
 function entryOf(files: ServerFile[]): ServerFile | undefined {
   return files.find((f) => ENTRY.test(f.name))
 }
@@ -134,6 +138,35 @@ function loader(compiled: Map<string, string>, files: ServerFile[]) {
   return load
 }
 
+/// Hand the whole server to the runner and let it choose the toolchain.
+///
+/// The runner verifies the record itself, in Rust, and the SDK it injects
+/// returns that result — so a handler in Go and this tab's TypeScript cannot
+/// disagree about whether a record was good.
+async function onRunner(
+  files: ServerFile[],
+  entry: string,
+  token: string,
+  source: string,
+  deviceKey: string,
+): Promise<Decision> {
+  try {
+    const res = await fetch(`${RUNNER}/v1/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ files, entry, token, source, deviceKey }),
+    })
+    const body = await res.json()
+    if (body.kind === 'threw') return { kind: 'threw', error: body.error }
+    return body as Decision
+  } catch {
+    return {
+      kind: 'threw',
+      error: `no runner at ${RUNNER} — start it with: cargo run -p valang-runner`,
+    }
+  }
+}
+
 export async function runHandler(
   monaco: typeof Monaco,
   files: ServerFile[],
@@ -149,7 +182,7 @@ export async function runHandler(
 
     const language = languageOf(entry.name)
     if (language !== IN_BROWSER) {
-      return { kind: 'runner', language, entry: entry.name }
+      return await onRunner(files, entry.name, token, source, deviceKey)
     }
 
     const compiled = new Map<string, string>()

@@ -80,7 +80,7 @@ export default async function handler(token, val) {
 
 package handler
 
-import "val"
+import "runner/val"
 
 func Handle(token string, v val.SDK) val.Decision {
 	checked, err := v.Verify(token)

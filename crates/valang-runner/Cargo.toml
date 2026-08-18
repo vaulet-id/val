@@ -1,0 +1,17 @@
+[package]
+name = "valang-runner"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "Runs a publisher's handler against an execution record, in the language they wrote it in"
+
+[dependencies]
+valang-verify = { path = "../valang-verify" }
+valang-runtime = { path = "../valang-runtime" }
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "fs", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tower-http = { version = "0.5", features = ["cors"] }

@@ -208,14 +208,19 @@ export default function App() {
         return
       }
 
-      // A server has one entry point. Two would leave the runner choosing a
-      // language for you, which is not a choice it can make correctly.
-      if (group === 'server' && name.startsWith('handler.') && serverFiles.some((f) => f.name.startsWith('handler.'))) {
-        window.alert('this server already has a handler — remove it first to change language')
-        return
-      }
+      // A server has one entry point, so adding a handler in another language
+      // is how you change language: the old one goes. Two would leave the
+      // runner choosing for you, which is not a choice it can make correctly.
+      const replaced = group === 'server' && name.startsWith('handler.')
+        ? serverFiles.find((f) => f.name.startsWith('handler.'))
+        : undefined
+      if (replaced && !window.confirm(`Replace ${replaced.name} with ${name}?`)) return
 
-      setSources((all) => ({ ...all, [made.path]: made.source }))
+      setSources((all) => {
+        const next = { ...all, [made.path]: made.source }
+        if (replaced) delete next[replaced.path]
+        return next
+      })
       if (group === 'host') setHosts((all) => [...all, made])
       else {
         setProjects((all) =>
@@ -224,7 +229,7 @@ export default function App() {
               ? p
               : group === 'package'
                 ? { ...p, files: [...p.files, made] }
-                : { ...p, servers: [...p.servers, made] },
+                : { ...p, servers: [...p.servers.filter((f) => f.path !== replaced?.path), made] },
           ),
         )
       }
