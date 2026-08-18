@@ -1,8 +1,10 @@
 import * as React from 'react'
+import { useMonaco } from '@monaco-editor/react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronRight } from 'lucide-react'
 import { docs, groups, render } from '@/docs'
+import { registerVal } from '@/val/monaco-lang'
 
 // Documentation, laid out the way documentation is laid out: pages down the
 // left, the page in the middle, and where you are inside it down the right.
@@ -11,13 +13,38 @@ import { docs, groups, render } from '@/docs'
 // long paragraphs, and a line of prose that runs the width of a monitor is one
 // the eye loses on the way back.
 
-export function DocsView() {
+export function DocsView({ dark }: { dark: boolean }) {
   const [active, setActive] = React.useState(docs[0].id)
   const [seen, setSeen] = React.useState<string | null>(null)
   const body = React.useRef<HTMLDivElement>(null)
+  const monaco = useMonaco()
 
   const page = docs.find((d) => d.id === active) ?? docs[0]
   const html = React.useMemo(() => render(page.markdown), [page])
+
+  // The same highlighter as the editor, over the same grammar. A second one
+  // would be a second answer to "is this a keyword" — and the two would
+  // eventually disagree in a document that is teaching the language.
+  React.useEffect(() => {
+    const root = body.current
+    if (!monaco || !root) return
+    registerVal(monaco)
+    let cancelled = false
+
+    for (const block of root.querySelectorAll<HTMLElement>('figure.code')) {
+      const code = block.querySelector('code')
+      const language = block.querySelector('figcaption')?.textContent?.trim() ?? 'val'
+      if (!code || code.dataset.lit) continue
+      monaco.editor.colorize(code.textContent ?? '', language, { tabSize: 2 }).then((html: string) => {
+        if (cancelled) return
+        code.innerHTML = html
+        code.dataset.lit = '1'
+      })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [monaco, html, dark])
 
   // Which heading you are under, from the one nearest the top of the viewport.
   React.useEffect(() => {

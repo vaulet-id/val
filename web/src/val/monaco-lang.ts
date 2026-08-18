@@ -12,6 +12,9 @@ const EFFECT = ['disclose', 'prove', 'navigate']
 const TYPES = ['string', 'int', 'bool', 'date', 'datetime', 'bytes', 'List', 'Credential', 'Verified', 'Proof']
 
 export function registerVal(monaco: typeof Monaco) {
+  // Registering twice is harmless and simpler than tracking whether the editor
+  // or the docs got here first.
+  if (monaco.languages.getLanguages().some((l) => l.id === 'val')) return
   monaco.languages.register({ id: 'val' })
 
   monaco.languages.setMonarchTokensProvider('val', {
