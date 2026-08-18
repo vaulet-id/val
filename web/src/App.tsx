@@ -140,9 +140,8 @@ export default function App() {
 
       const run = val.run(packageSource, action, wallet)
       let decision: Decision | undefined
-      if (monaco && run.token && run.deviceKey) {
+      if (run.token && run.deviceKey) {
         decision = await runHandler(
-          monaco,
           here.servers.map((f) => ({ name: f.name, source: sources[f.path] ?? '' })),
           run.token,
           packageSource,

@@ -219,11 +219,6 @@ function ServerSide({ decision }: { decision: Decision }) {
           ))}
         </>
       )}
-      {decision.kind === 'runner' && (
-        <div className="font-mono text-[11px] text-[var(--color-muted-foreground)]">
-          {decision.entry} · {decision.language} runs on the runner, not in this tab
-        </div>
-      )}
       {decision.kind === 'accept' && (
         <div className={cn('font-mono text-[11px]', tone)}>accepted · {decision.note}</div>
       )}

@@ -55,7 +55,12 @@ and there is a wall-clock limit.
 | Rust | `handler.rs` | `cargo run --offline`, as `mod handler` |
 
 Node strips the types rather than compiling them, so what runs is the file the
-author wrote.
+author wrote. One consequence to know: it is ESM, so an import names the file
+with its extension — `import { sign } from './sign.ts'`.
+
+TypeScript goes through here like the others. Running it in the playground's own
+tab would mean executing handlers in a browser while production executes them
+under Node, and calling the two the same thing.
 
 ## What it will spawn
 
