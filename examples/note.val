@@ -31,7 +31,7 @@ action Save {
   }
 }
 
-screen Note {
+screen Note start: true {
   title: sentence("noteTitle")
 
   column {
@@ -42,5 +42,17 @@ screen Note {
     toggle(text: sentence("remind"), into: remind)
 
     button(text: sentence("save"), emphasis: primary, onTap: Save)
+    button(text: sentence("about"), emphasis: secondary, onTap: About)
+  }
+}
+
+// A second screen, reached by a press. `onTap: About` is
+// `navigation.navigate(to: About)` written short, and coming back is the host's
+// — an application never declares a way back.
+screen About present: sheet {
+  title: sentence("aboutTitle")
+
+  column {
+    card(text: sentence("aboutBody"))
   }
 }

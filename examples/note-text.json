@@ -1,12 +1,45 @@
 {
   "_comment": "The note package's own bundle.",
-  "locales": ["en", "th"],
+  "locales": [
+    "en",
+    "th"
+  ],
   "keys": {
-    "noteTitle": { "en": "A note", "th": "บันทึก" },
-    "current": { "en": "Saved: {note}", "th": "บันทึกไว้: {note}" },
-    "write": { "en": "Write one", "th": "เขียนใหม่" },
-    "body": { "en": "Your note", "th": "ข้อความ" },
-    "remind": { "en": "Remind me", "th": "เตือนฉัน" },
-    "save": { "en": "Save", "th": "บันทึก" }
+    "noteTitle": {
+      "en": "A note",
+      "th": "บันทึก"
+    },
+    "current": {
+      "en": "Saved: {note}",
+      "th": "บันทึกไว้: {note}"
+    },
+    "write": {
+      "en": "Write one",
+      "th": "เขียนใหม่"
+    },
+    "body": {
+      "en": "Your note",
+      "th": "ข้อความ"
+    },
+    "remind": {
+      "en": "Remind me",
+      "th": "เตือนฉัน"
+    },
+    "save": {
+      "en": "Save",
+      "th": "บันทึก"
+    },
+    "about": {
+      "en": "About this app",
+      "th": "เกี่ยวกับแอปนี้"
+    },
+    "aboutTitle": {
+      "en": "About",
+      "th": "เกี่ยวกับ"
+    },
+    "aboutBody": {
+      "en": "Nothing you type is application state. The wallet holds it and hands it over when you submit.",
+      "th": "สิ่งที่คุณพิมพ์ไม่ใช่ state ของแอป wallet ถือไว้แล้วส่งให้ตอนคุณกดบันทึก"
+    }
   }
 }

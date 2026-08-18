@@ -196,6 +196,11 @@ class Incoming {
 
   static const empty = Incoming(screens: [], text: {}, locale: 'en', dark: false);
 
+  /// Whether a name is one of this package's screens, which is what decides
+  /// whether a press moves or runs an action.
+  bool hasScreen(String name) =>
+      screens.any((s) => (s as Map<String, dynamic>)['name'] == name);
+
   factory Incoming.fromJson(Map<String, dynamic> j) => Incoming(
     screens: (j['screens'] as List?) ?? const [],
     text: (j['text'] as Map?)?.cast<String, dynamic>() ?? const {},
@@ -237,6 +242,45 @@ class _PreviewAppState extends State<PreviewApp> {
   }
 
   @override
+  /// Which screens have been opened, deepest last. The host owns this: an
+  /// application declares where a press goes and never how the stack behaves,
+  /// which is why there is no push, pop or replace for it to get wrong.
+  final List<String> _stack = [];
+
+  Map<String, dynamic> get _current {
+    final byName = {
+      for (final s in _in.screens) (s as Map<String, dynamic>)['name'] as String: s,
+    };
+    for (final name in _stack.reversed) {
+      final found = byName[name];
+      if (found != null) return found as Map<String, dynamic>;
+    }
+    return _opening;
+  }
+
+  /// Where the package opens: the screen that says so, or the only one there is.
+  Map<String, dynamic> get _opening {
+    final screens = _in.screens.cast<Map<String, dynamic>>();
+    return screens.firstWhere(
+      (s) => s['start'] == true,
+      orElse: () => screens.first,
+    );
+  }
+
+  /// Whether a press names a screen rather than an action. The host knows its
+  /// own screens, so nothing has to be marked on the way out.
+  bool _isScreen(String target) =>
+      _in.screens.any((s) => (s as Map<String, dynamic>)['name'] == target);
+
+  void _navigate(String screen) => setState(() {
+        if (_stack.isEmpty) _stack.add(_opening['name'] as String);
+        _stack.add(screen);
+      });
+
+  void _back() => setState(() {
+        if (_stack.length > 1) _stack.removeLast();
+      });
+
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -256,12 +300,12 @@ class _PreviewAppState extends State<PreviewApp> {
                   // which is the one thing its position was supposed to prove.
                   child: FittedBox(
                     fit: BoxFit.contain,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final s in _in.screens)
-                          _Phone(screen: s as Map<String, dynamic>, incoming: _in),
-                      ],
+                    child: _Phone(
+                      screen: _current,
+                      incoming: _in,
+                      canGoBack: _stack.length > 1,
+                      onNavigate: _navigate,
+                      onBack: _back,
                     ),
                   ),
                 ),
@@ -297,7 +341,17 @@ class _NoScreen extends StatelessWidget {
 /// thing it is for — whether the Thai wraps, whether the row fits, whether the
 /// button is reachable with a thumb.
 class _Phone extends StatelessWidget {
-  const _Phone({required this.screen, required this.incoming});
+  const _Phone({
+    required this.screen,
+    required this.incoming,
+    this.canGoBack = false,
+    this.onNavigate,
+    this.onBack,
+  });
+
+  final bool canGoBack;
+  final void Function(String)? onNavigate;
+  final VoidCallback? onBack;
 
   static const width = 393.0;
   static const height = 852.0;
@@ -350,7 +404,15 @@ class _Phone extends StatelessWidget {
               child: Column(
                 children: [
                   const _StatusBar(),
-                  Expanded(child: _Screen(screen: screen, incoming: incoming)),
+                  Expanded(
+                    child: _Screen(
+                      screen: screen,
+                      incoming: incoming,
+                      canGoBack: canGoBack,
+                      onNavigate: onNavigate,
+                      onBack: onBack,
+                    ),
+                  ),
                   const _HomeIndicator(),
                 ],
               ),
@@ -360,6 +422,23 @@ class _Phone extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Where a press can go, for the nodes deep in a screen.
+///
+/// Moving between screens is the host's: it never reaches the application, so
+/// nothing about it is posted out and nothing about it is in the record.
+class _Nav extends InheritedWidget {
+  const _Nav({required this.go, required super.child});
+
+  /// True when the target was a screen and the move happened.
+  final bool Function(String) go;
+
+  static bool Function(String)? of(BuildContext c) =>
+      c.dependOnInheritedWidgetOfExactType<_Nav>()?.go;
+
+  @override
+  bool updateShouldNotify(_Nav old) => false;
 }
 
 /// What the form holds, until it is submitted.
@@ -393,10 +472,19 @@ class _Form extends InheritedWidget {
 /// screen — so a preview that put the button inline would be showing a layout
 /// the host does not produce.
 class _Screen extends StatefulWidget {
-  const _Screen({required this.screen, required this.incoming});
+  const _Screen({
+    required this.screen,
+    required this.incoming,
+    this.canGoBack = false,
+    this.onNavigate,
+    this.onBack,
+  });
 
   final Map<String, dynamic> screen;
   final Incoming incoming;
+  final bool canGoBack;
+  final void Function(String)? onNavigate;
+  final VoidCallback? onBack;
 
   @override
   State<_Screen> createState() => _ScreenState();
@@ -433,13 +521,30 @@ class _ScreenState extends State<_Screen> {
     final nodes = ((widget.screen['tree'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final docked = _flatten(nodes).where(_isPrimary).toList();
 
-    return _Form(
-      values: _values,
-      onChanged: (name, value) => setState(() => _values[name] = value),
-      child: Scaffold(
+    return _Nav(
+      go: (target) {
+        final onNavigate = widget.onNavigate;
+        if (onNavigate == null || !widget.incoming.hasScreen(target)) return false;
+        onNavigate(target);
+        return true;
+      },
+      child: _Form(
+        values: _values,
+        onChanged: (name, value) => setState(() => _values[name] = value),
+        child: Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         toolbarHeight: 52,
+        // Host chrome. An application declares where a press goes and never how
+        // to come back, so this is drawn here whenever there is somewhere to
+        // come back to.
+        leading: widget.canGoBack
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: widget.onBack,
+              )
+            : null,
+        automaticallyImplyLeading: false,
         // The screen's own sentence where it has one. The identifier behind it
         // is ASCII, so a title taken from it could never be Thai — which is
         // what it was doing until screens could carry a title.
@@ -471,6 +576,7 @@ class _ScreenState extends State<_Screen> {
                 ],
               ),
             ),
+        ),
       ),
     );
   }
@@ -789,10 +895,19 @@ class _NodeState extends State<_Node> {
   /// not application state, it is not hashed and it is not in the record. The
   /// action is given what the form held at the moment it was submitted, which
   /// is what `input` is.
-  void _tap(String? action) => web.window.parent?.postMessage(
-        jsonEncode({'type': 'tap', 'action': action, 'input': _Form.of(context)}).toJS,
-        '*'.toJS,
-      );
+  void _tap(String? target) {
+    if (target == null) return;
+    // `onTap: Detail` is `navigation.navigate(to: Detail)` written short, and
+    // moving between screens is the host's own business — it never reaches the
+    // application, which is why nothing is posted for it.
+    final navigate = _Nav.of(context);
+    if (navigate != null && navigate(target)) return;
+
+    web.window.parent?.postMessage(
+      jsonEncode({'type': 'tap', 'action': target, 'input': _Form.of(context)}).toJS,
+      '*'.toJS,
+    );
+  }
 
 
 }

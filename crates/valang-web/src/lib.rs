@@ -197,6 +197,7 @@ pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
             json!({
                 "name": s.name,
                 "title": s.title.as_ref().map(component_json),
+                "start": s.start,
                 "data": s.data.iter().map(|d| json!({
                     "name": d.name,
                     "grade": d.grade,
