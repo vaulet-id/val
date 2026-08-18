@@ -167,6 +167,13 @@ pub struct ScreenDecl {
     /// bundle check as every other sentence, rather than being a second path
     /// that has to be kept faithful to the first.
     pub title: Option<UiNode>,
+    /// `start: true`, `present: sheet`, `address: "receipt/{id}"` — props a
+    /// capability gives a screen. The parser learns the shape; which props exist
+    /// and what words they take is read from the host's interfaces.
+    pub settings: Vec<Arg>,
+    /// What this screen is handed when something moves to it, declared the way
+    /// a component declares its parameters.
+    pub params: Vec<Field>,
     pub data: Vec<DataDecl>,
     pub compute: Vec<Stmt>,
     pub tree: Vec<UiNode>,

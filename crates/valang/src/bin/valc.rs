@@ -59,9 +59,9 @@ fn main() -> ExitCode {
 
         let (program, diagnostics) = match &bundle {
             Some((keys, locales)) => {
-                valang::analyse_against(&src, Some((keys, locales)), &catalogues())
+                valang::analyse_fully(&src, Some((keys, locales)), &catalogues(), &interfaces())
             }
-            None => valang::analyse_against(&src, None, &catalogues()),
+            None => valang::analyse_fully(&src, None, &catalogues(), &interfaces()),
         };
 
         println!("── {path}");
@@ -81,6 +81,22 @@ fn main() -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// The capabilities to check against. A real host publishes its own; what a
+/// command line has is whatever is on disk beside the language.
+fn interfaces() -> valang::interface::Interfaces {
+    const EFFECTS: &str = include_str!("../../../../interfaces/core-effects.json");
+    const NAVIGATION: &str = include_str!("../../../../interfaces/navigation.json");
+
+    let mut loaded = Vec::new();
+    for source in [EFFECTS, NAVIGATION] {
+        match valang::interface::Interface::parse_many(source) {
+            Ok(mut i) => loaded.append(&mut i),
+            Err(e) => eprintln!("an interface did not parse: {e}"),
+        }
+    }
+    valang::interface::Interfaces::of(loaded)
 }
 
 /// The catalogues to check against.

@@ -650,6 +650,21 @@ impl Parser {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
+        let params = self.param_list();
+
+        // Settings sit between the name and the body: `screen Confirm(x: int)
+        // start: true present: sheet { … }`. The parser knows the shape and
+        // none of the words.
+        let mut settings = Vec::new();
+        while self.peek().kind == Kind::Ident && self.peek_at(1).is(":") && !self.at("title") {
+            let at = self.peek().span;
+            let name = self.bump().text;
+            self.bump();
+            let value = self.expr(0);
+            settings.push(Arg { name: Some(name), value, spread: false, span: at });
+            self.skip_newlines();
+        }
+
         let mut data = Vec::new();
         let mut compute = Vec::new();
         let mut tree = Vec::new();
@@ -693,7 +708,7 @@ impl Parser {
                 self.bump();
             }
         }
-        ScreenDecl { name, title, data, compute, tree, span }
+        ScreenDecl { name, params, settings, title, data, compute, tree, span }
     }
 
     /// `component Name(param: type, …) { …catalogue… }`

@@ -1,0 +1,47 @@
+[
+  {
+    "_comment": "The effects every conforming host offers. What a package may do is checked against these rather than against a list inside the compiler — a second host with an effect of its own publishes its own document instead of patching ours.",
+    "capability": "credential",
+    "version": 1,
+    "operations": {
+      "read":  { "props": { "of": "Type" }, "reversible": true },
+      "issue": { "props": { "of": "Credential" }, "reversible": true }
+    }
+  },
+  {
+    "capability": "payment",
+    "version": 1,
+    "operations": {
+      "request": { "props": { "to": "string", "amount": "int" }, "reversible": false }
+    }
+  },
+  {
+    "capability": "storage",
+    "version": 1,
+    "operations": {
+      "write": { "props": { "scope": "string", "id": "string", "value": "any" }, "reversible": true }
+    }
+  },
+  {
+    "capability": "message",
+    "version": 1,
+    "operations": {
+      "send": { "props": { "to": "string" }, "reversible": false }
+    }
+  },
+  {
+    "capability": "network",
+    "version": 1,
+    "operations": {
+      "request": { "props": { "audience": "string" }, "reversible": true }
+    }
+  },
+  {
+    "_comment": "A disclosure cannot be undone, which is why an action performs at most one and why the compiler orders it last in a batch. That fact is here rather than in the compiler, so a host cannot be given a reversible one by accident.",
+    "capability": "disclosure",
+    "version": 1,
+    "operations": {
+      "present": { "props": {}, "reversible": false }
+    }
+  }
+]

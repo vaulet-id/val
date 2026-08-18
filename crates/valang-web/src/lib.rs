@@ -71,10 +71,11 @@ pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
         .unwrap_or_default();
 
     let cats = catalogues(&input["catalogues"]);
+    let ifaces = interfaces(&input["interfaces"]);
     let (program, diagnostics) = if bundle.is_empty() {
-        valang::analyse_against(source, None, &cats)
+        valang::analyse_fully(source, None, &cats, &ifaces)
     } else {
-        valang::analyse_against(source, Some((&bundle, &locales)), &cats)
+        valang::analyse_fully(source, Some((&bundle, &locales)), &cats, &ifaces)
     };
 
     write(
@@ -295,6 +296,24 @@ fn hex_bytes_of(s: &str) -> Vec<u8> {
 
 fn hex_bytes(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// The capabilities the caller published, alongside its catalogues. Both come
+/// from the host for the same reason.
+fn interfaces(j: &Json) -> valang::interface::Interfaces {
+    let mut loaded = Vec::new();
+    if let Some(list) = j.as_array() {
+        for entry in list {
+            let source = match entry {
+                Json::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            if let Ok(mut i) = valang::interface::Interface::parse_many(&source) {
+                loaded.append(&mut i);
+            }
+        }
+    }
+    valang::interface::Interfaces::of(loaded)
 }
 
 /// The catalogues the caller published. A host hands these in; the language does

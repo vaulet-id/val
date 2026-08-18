@@ -29,6 +29,7 @@ fn walked(src: &str, name: &str, args: &[Value]) -> Result<Value, String> {
             .iter()
             .enumerate()
             .map(|(i, _)| valang::ast::Arg {
+                spread: false,
                 name: None,
                 span: Default::default(),
                 value: valang::ast::Expr::Ident { name: f.params[i].name.clone(), span: Default::default() },

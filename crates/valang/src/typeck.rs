@@ -391,7 +391,7 @@ impl<'a> Cx<'a> {
             Expr::Error { .. } => Typed::unknown(),
 
             Expr::Ident { name, span } => {
-                if name == "state" || name == "context" || name == "next" || is_effect_root(name) {
+                if name == "state" || name == "context" || name == "next" {
                     return Typed::plain(Ty::Unknown);
                 }
                 // `Date.now()` is one mistake with one sentence, in `check.rs`.
@@ -407,6 +407,21 @@ impl<'a> Cx<'a> {
                 }
                 if self.p.functions.iter().any(|f| f.name == *name) || is_builtin(name) {
                     return Typed::plain(Ty::Lambda);
+                }
+                // A screen is a place, not a value: `navigate(to: Done)` and
+                // `onTap: Done` name one. Looking it up as a binding would make
+                // every navigation an undefined name.
+                if self.p.screens.iter().any(|s| s.name == *name)
+                    || self.p.actions.iter().any(|a| a.name == *name)
+                {
+                    return Typed::plain(Ty::Unknown);
+                }
+                // A word from a closed vocabulary — `primary`, `replace`,
+                // `sheet`. Which words exist is the host's document, checked
+                // there; here it is enough that a lowercase bare name in an
+                // argument is a word rather than a binding.
+                if name.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
+                    return Typed::plain(Ty::Unknown);
                 }
                 self.err(*span, format!("no name `{name}` is in scope here"));
                 Typed::unknown()
@@ -627,7 +642,7 @@ impl<'a> Cx<'a> {
                 // An effect in the wrong phase is one mistake, and `check.rs`
                 // has already said so. Saying it again as "no such function"
                 // buries the sentence that taught the rule.
-                if name.split('.').next().is_some_and(is_effect_root) {
+                if is_effect_call(&name) {
                     return Typed::with(Ty::Unknown, from);
                 }
                 if constructing {
@@ -780,8 +795,21 @@ fn is_nondeterministic_root(name: &str) -> bool {
     matches!(name, "Date" | "Math")
 }
 
-fn is_effect_root(name: &str) -> bool {
-    matches!(name, "credential" | "payment" | "storage" | "message" | "network" | "disclosure")
+/// The shape of an effect call, not a list of which capabilities exist.
+///
+/// Which ones a host offers is a document the host publishes — see
+/// `interface.rs`. What is needed here is only to tell `credential.issue(…)`
+/// from `receipts.fold(…)`: the second is a list walked by one of the closed set
+/// of combinators, and everything else dotted is a call to a capability.
+fn is_effect_call(call: &str) -> bool {
+    match call.split_once('.') {
+        Some((_, method)) => !is_combinator(method),
+        None => false,
+    }
+}
+
+fn is_combinator(name: &str) -> bool {
+    matches!(name, "map" | "filter" | "fold" | "any" | "all" | "count" | "first")
 }
 
 /// The closed set (§3). Adding to it is a language change, deliberately.

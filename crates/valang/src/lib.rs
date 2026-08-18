@@ -8,6 +8,7 @@
 pub mod ast;
 pub mod check;
 pub mod catalogue;
+pub mod interface;
 pub mod diag;
 pub mod expand;
 pub mod lex;
@@ -45,6 +46,18 @@ pub fn analyse_against(
     bundle: Option<(&TextBundle, &[String])>,
     catalogues: &catalogue::Catalogues,
 ) -> (ast::Program, Vec<Diagnostic>) {
+    analyse_fully(src, bundle, catalogues, &interface::Interfaces::default())
+}
+
+/// Analyse against everything the host published: its catalogues and its
+/// capabilities. Both are documents rather than lists in this crate, for the
+/// same reason — a second host implements VAL, not the first host.
+pub fn analyse_fully(
+    src: &str,
+    bundle: Option<(&TextBundle, &[String])>,
+    catalogues: &catalogue::Catalogues,
+    interfaces: &interface::Interfaces,
+) -> (ast::Program, Vec<Diagnostic>) {
     let (mut program, mut diagnostics) = parse::parse(src);
     // A package's own components become the host's catalogue before anything
     // else looks at a screen, so every later pass — the checks, the capability
@@ -56,6 +69,7 @@ pub fn analyse_against(
         diagnostics.extend(check::check_bundle(&program, bundle, locales));
     }
     diagnostics.extend(catalogue::check_screens(&program, catalogues));
+    diagnostics.extend(interface::check(&program, interfaces));
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
     // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:

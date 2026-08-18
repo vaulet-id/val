@@ -456,13 +456,25 @@ fn placeholders(template: &str) -> Vec<String> {
     out
 }
 
-const EFFECT_ROOTS: &[&str] = &["credential", "payment", "storage", "message", "network", "disclosure"];
-
+/// The shape of an effect, for the checks that run before a host's interfaces
+/// are in reach: `capability.operation`. Which capabilities exist is the host's
+/// answer — see `interface.rs` — and this is only what a call looks like.
+///
+/// `present`, `disclose` and `prove` are syntax rather than calls, which is why
+/// they are named here and the rest are not.
 fn is_effect(name: &str) -> bool {
-    name == "present"
-        || name == "disclose"
-        || name == "prove"
-        || (name.contains('.') && EFFECT_ROOTS.contains(&name.split('.').next().unwrap_or("")))
+    if matches!(name, "present" | "disclose" | "prove") {
+        return true;
+    }
+    // `receipts.fold(…)` walks a list; `credential.issue(…)` calls a
+    // capability. The combinators are a closed set, and everything else dotted
+    // is a call to something the host offers.
+    match name.split_once('.') {
+        Some((_, method)) => {
+            !matches!(method, "map" | "filter" | "fold" | "any" | "all" | "count" | "first")
+        }
+        None => false,
+    }
 }
 
 fn walk_stmts(stmts: &[Stmt], f: &mut impl FnMut(&Stmt)) {
