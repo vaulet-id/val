@@ -164,6 +164,7 @@ impl Parser {
                 "function" => p.functions.push(self.function_decl()),
                 "action" => p.actions.push(self.action_decl()),
                 "screen" => p.screens.push(self.screen_decl()),
+                "component" => p.components.push(self.component_decl()),
                 _ => {
                     let bad = self.bump();
                     if bad.kind != Kind::Eof {
@@ -358,6 +359,15 @@ impl Parser {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
+        let params = self.param_list();
+        let ret = if self.eat(":") { Some(self.type_ref()) } else { None };
+        let body = self.stmt_block();
+        FunctionDecl { name, params, ret, body, span }
+    }
+
+    /// `(name: type, …)`, or nothing. Shared by functions and components so the
+    /// two cannot drift into accepting different parameter lists.
+    fn param_list(&mut self) -> Vec<Field> {
         let mut params = Vec::new();
         if self.eat("(") {
             loop {
@@ -375,9 +385,7 @@ impl Parser {
                 params.push(Field { name: pname, ty, default: None, span: pspan });
             }
         }
-        let ret = if self.eat(":") { Some(self.type_ref()) } else { None };
-        let body = self.stmt_block();
-        FunctionDecl { name, params, ret, body, span }
+        params
     }
 
     fn action_decl(&mut self) -> ActionDecl {
@@ -601,7 +609,7 @@ impl Parser {
                 } else {
                     let span = self.peek().span;
                     let value = self.expr(0);
-                    vec![Arg { name: None, value, span }]
+                    vec![Arg { name: None, value, spread: false, span }]
                 };
                 return Some(Stmt::Effect { name, args, body: Vec::new(), span });
             }
@@ -610,7 +618,7 @@ impl Parser {
                 let value = self.expr(0);
                 return Some(Stmt::Effect {
                     name,
-                    args: vec![Arg { name: None, value, span }],
+                    args: vec![Arg { name: None, value, spread: false, span }],
                     body: Vec::new(),
                     span,
                 });
@@ -656,6 +664,45 @@ impl Parser {
             }
         }
         ScreenDecl { name, data, compute, tree, span }
+    }
+
+    /// `component Name(param: type, …) { …catalogue… }`
+    ///
+    /// No `data` and no `compute`: a component draws what it is handed. A
+    /// component that could declare data of its own would be a screen, and the
+    /// rule that a screen resolves its data before anything is drawn would then
+    /// hold for only some of what is on it.
+    fn component_decl(&mut self) -> ComponentDecl {
+        let span = self.peek().span;
+        self.bump();
+        let name = self.ident();
+        let params = self.param_list();
+
+        let mut tree = Vec::new();
+        self.expect("{");
+        loop {
+            self.skip_newlines();
+            if self.eof() || self.eat("}") {
+                break;
+            }
+            for word in ["data", "compute"] {
+                if self.at(word) && self.peek_at(1).is("{") {
+                    let bad = self.peek().span;
+                    self.diagnostics.push(Diagnostic::error(
+                        bad,
+                        format!("a component has no `{word}` block — it draws what it is handed"),
+                    ));
+                }
+            }
+            let before = self.i;
+            if let Some(n) = self.ui_node() {
+                tree.push(n);
+            }
+            if self.i == before {
+                self.bump();
+            }
+        }
+        ComponentDecl { name, params, tree, span }
     }
 
     fn data_block(&mut self) -> Vec<DataDecl> {
@@ -772,6 +819,11 @@ impl Parser {
                 continue;
             }
             let span = self.peek().span;
+            if self.eat("...") {
+                let value = self.expr(0);
+                out.push(Arg { name: None, value, spread: true, span });
+                continue;
+            }
             let name = if self.peek().kind == Kind::Ident && self.peek_at(1).is(":") {
                 let n = self.bump().text;
                 self.bump();
@@ -780,7 +832,7 @@ impl Parser {
                 None
             };
             let value = self.expr(0);
-            out.push(Arg { name, value, span });
+            out.push(Arg { name, value, spread: false, span });
         }
         out
     }
@@ -893,7 +945,7 @@ impl Parser {
             if self.at("{") && matches!(base, Expr::Call { .. }) {
                 let lam = self.lambda();
                 if let Expr::Call { callee, mut args, span } = base {
-                    args.push(Arg { name: None, span: lam.span(), value: lam });
+                    args.push(Arg { name: None, spread: false, span: lam.span(), value: lam });
                     base = Expr::Call { callee, args, span };
                 }
                 continue;
@@ -962,7 +1014,7 @@ impl Parser {
                     if let Expr::Record { spread, fields, span } = rec {
                         return Expr::Call {
                             callee: Box::new(Expr::Ident { name: t.text, span: t.span }),
-                            args: vec![Arg { name: None, span, value: Expr::Record { spread, fields, span } }],
+                            args: vec![Arg { name: None, spread: false, span, value: Expr::Record { spread, fields, span } }],
                             span: t.span,
                         };
                     }

@@ -8,6 +8,7 @@
 pub mod ast;
 pub mod check;
 pub mod diag;
+pub mod expand;
 pub mod lex;
 pub mod parse;
 pub mod report;
@@ -30,7 +31,11 @@ pub type TextBundle = std::collections::BTreeMap<String, std::collections::BTree
 /// (§9) — and every sentence a person reads is in there rather than in the
 /// program.
 pub fn analyse_with(src: &str, bundle: Option<(&TextBundle, &[String])>) -> (ast::Program, Vec<Diagnostic>) {
-    let (program, mut diagnostics) = parse::parse(src);
+    let (mut program, mut diagnostics) = parse::parse(src);
+    // A package's own components become the host's catalogue before anything
+    // else looks at a screen, so every later pass — the checks, the capability
+    // report, the renderer — sees one kind of node.
+    diagnostics.extend(expand::expand(&mut program));
     diagnostics.extend(check::check(&program));
     diagnostics.extend(typeck::check_types(&program));
     if let Some((bundle, locales)) = bundle {

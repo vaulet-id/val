@@ -18,6 +18,22 @@ pub struct Program {
     pub functions: Vec<FunctionDecl>,
     pub actions: Vec<ActionDecl>,
     pub screens: Vec<ScreenDecl>,
+    /// Compositions the package wrote itself. A component is a name for a piece
+    /// of the catalogue arranged a particular way — it adds no primitive and no
+    /// rendering path, because it expands into the catalogue before a host sees
+    /// it.
+    pub components: Vec<ComponentDecl>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ComponentDecl {
+    pub name: String,
+    /// Named at the call site, like every other call with more than one
+    /// argument. A component takes values and an action to call; it cannot
+    /// declare state or data of its own.
+    pub params: Vec<Field>,
+    pub tree: Vec<UiNode>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +48,10 @@ pub struct Capability {
 pub struct Arg {
     pub name: Option<String>,
     pub value: Expr,
+    /// `...style` — the fields of a record, as if each had been written out.
+    /// Typed, like every other spread here: it cannot invent a field or drop
+    /// one, so a reader knows what may arrive from the record's own type.
+    pub spread: bool,
     pub span: Span,
 }
 
