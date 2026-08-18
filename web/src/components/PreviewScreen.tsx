@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { text as bundle } from '@/examples'
 import type { Resolved } from '@/val/wasm'
 
 // The preview is drawn by Flutter, and the wallet it draws from is the host's.
@@ -7,9 +6,10 @@ import type { Resolved } from '@/val/wasm'
 // compiler parsed, the signed text bundle, and the file somebody can edit.
 
 export function PreviewScreen({
-  screens, locale, dark, onTap,
+  screens, text, locale, dark, onTap,
 }: {
   screens: Resolved[]
+  text: Record<string, Record<string, string>>
   locale: 'th' | 'en'
   dark: boolean
   onTap: (action: string) => void
@@ -36,10 +36,10 @@ export function PreviewScreen({
   React.useEffect(() => {
     if (!ready) return
     frame.current?.contentWindow?.postMessage(
-      JSON.stringify({ screens, text: bundle, locale, dark }),
+      JSON.stringify({ screens, text, locale, dark }),
       '*',
     )
-  }, [ready, screens, locale, dark])
+  }, [ready, screens, text, locale, dark])
 
   // Not checked in: forty megabytes of CanvasKit, and a repository keeps its
   // history forever. So the panel has to be honest about not being built.

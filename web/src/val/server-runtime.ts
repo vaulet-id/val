@@ -10,6 +10,7 @@ import * as val from './wasm'
 
 export type Decision =
   | { kind: 'issue'; credential: string; claims: Record<string, unknown> }
+  | { kind: 'accept'; note: string }
   | { kind: 'refuse'; refusal: { kind: string; why: string } }
   | { kind: 'threw'; error: string }
 
@@ -38,6 +39,11 @@ function sdk(source: string, deviceKey: string) {
       credential,
       claims,
     }),
+
+    /// A run that earns no credential but is not an error. Without this, a
+    /// handler with nothing to issue could only refuse, and every ordinary
+    /// press read as a failure.
+    accept: (note: string): Decision => ({ kind: 'accept', note }),
 
     refuse: (refusal: { kind: string; why: string }): Decision => ({ kind: 'refuse', refusal }),
   }

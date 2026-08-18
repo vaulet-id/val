@@ -28,6 +28,42 @@ use value::Value;
 
 pub type State = BTreeMap<String, Value>;
 
+/// The state a run starts from: what the wallet holds, over the defaults the
+/// program declares.
+///
+/// A fresh install has no state, and `state { taps: int default 0 }` is the
+/// program saying what that means. Taking the wallet's map alone gave a new
+/// application every field of whatever application the wallet was last holding,
+/// and none of its own.
+pub fn initial_state(program: &Program, held: &State) -> State {
+    let mut out = State::new();
+    for f in &program.state {
+        let declared = f.default.as_ref().and_then(literal);
+        if let Some(v) = held.get(&f.name).cloned().or(declared) {
+            out.insert(f.name.clone(), v);
+        } else if !f.ty.optional {
+            out.insert(f.name.clone(), Value::Null);
+        }
+    }
+    out
+}
+
+/// A default is a literal. Anything else would be a computation running before
+/// the program does, with nothing to compute it from.
+fn literal(e: &valang::ast::Expr) -> Option<Value> {
+    use valang::ast::Expr::*;
+    match e {
+        Num { value, .. } => Some(Value::Int(*value)),
+        Str { value, .. } => Some(Value::Str(value.clone())),
+        Bool { value, .. } => Some(Value::Bool(*value)),
+        Member { obj, name, .. } => match obj.as_ref() {
+            Ident { name: ty, .. } => Some(Value::Enum(ty.clone(), name.clone())),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// What the record says happened. Four outcomes, and the difference between the
 /// middle two is the difference between a bug report and a sentence somebody
 /// reads (§5).

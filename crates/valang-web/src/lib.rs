@@ -116,7 +116,7 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
     let Ok(host) = Fixture::parse(&wallet) else {
         return write(json!({ "error": "the wallet is not valid JSON" }).to_string());
     };
-    let before = host.state();
+    let before = valang_runtime::initial_state(&program, &host.state());
     let run = run_action(&program, source, action, &before, &BTreeMap::new(), &host);
     let r = &run.record;
 
@@ -182,7 +182,7 @@ pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
     let Ok(host) = Fixture::parse(&wallet) else {
         return write(json!({ "screens": [] }).to_string());
     };
-    let state = host.state();
+    let state = valang_runtime::initial_state(&program, &host.state());
 
     let screens: Vec<Json> = program
         .screens

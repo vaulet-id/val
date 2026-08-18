@@ -1,16 +1,19 @@
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { FileCode2, FileJson, FileText } from 'lucide-react'
+import { FileCode2, FileJson, FileText, Plus, Trash2 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SourceFile } from '@/examples'
 
 type Item = { path: string; name: string; note?: string; pkg?: string }
 
 export function FileTree({
-  projects, project, onProject, files, hostFiles, serverFiles, active, onSelect,
+  projects, project, onProject, onNew, onRemove, files, hostFiles, serverFiles, active, onSelect,
 }: {
-  projects: { id: string; name: string; note: string }[]
+  projects: { id: string; name: string; note: string; builtin: boolean }[]
   project: string
   onProject: (id: string) => void
+  onNew: () => void
+  onRemove: (id: string) => void
   files: Item[]
   hostFiles?: Item[]
   serverFiles?: Item[]
@@ -25,18 +28,38 @@ export function FileTree({
           which is how a screen declared in a file you were not looking at ended
           up with no explanation in front of you. */}
       <div className="border-b border-[var(--color-border)] px-2 py-2">
-        <select
-          value={project}
-          onChange={(e) => onProject(e.target.value)}
-          className="w-full rounded border border-[var(--color-border)] bg-transparent px-1.5 py-1 text-[12px] font-medium"
-          aria-label="project"
-        >
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1">
+          <Select value={project} onValueChange={onProject}>
+            <SelectTrigger aria-label="project" className="min-w-0 flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            onClick={onNew}
+            title="a project of your own"
+            aria-label="new project"
+            className="rounded border border-[var(--color-border)] p-1 hover:bg-[var(--color-accent)]"
+          >
+            <Plus className="size-3" />
+          </button>
+          {here && !here.builtin && (
+            <button
+              onClick={() => onRemove(here.id)}
+              title="remove this project"
+              aria-label="remove project"
+              className="rounded border border-[var(--color-border)] p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          )}
+        </div>
         {here && (
           <p className="px-0.5 pt-1 text-[10px] leading-snug text-[var(--color-muted-foreground)]">{here.note}</p>
         )}

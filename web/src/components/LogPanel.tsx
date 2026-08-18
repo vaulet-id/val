@@ -197,7 +197,7 @@ function BuildEntry({ entry, build }: { entry: Entry; build: Build }) {
 /// point of showing either.
 function ServerSide({ decision }: { decision: Decision }) {
   const tone =
-    decision.kind === 'issue'
+    decision.kind === 'issue' || decision.kind === 'accept'
       ? 'text-[var(--color-verified)]'
       : decision.kind === 'refuse'
         ? 'text-amber-500'
@@ -218,6 +218,9 @@ function ServerSide({ decision }: { decision: Decision }) {
             </div>
           ))}
         </>
+      )}
+      {decision.kind === 'accept' && (
+        <div className={cn('font-mono text-[11px]', tone)}>accepted · {decision.note}</div>
       )}
       {decision.kind === 'refuse' && (
         <>

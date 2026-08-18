@@ -10,7 +10,7 @@ import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { files, hostFiles, projects, text as bundle } from '@/examples'
+import { bundleOf, examples, HOST, hostFiles, newProject, type Project } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
@@ -23,10 +23,10 @@ export default function App() {
   const [mode, setMode] = React.useState<Mode>('playground')
   const [dark, setDark] = React.useState(false)
   const [locale, setLocale] = React.useState<'th' | 'en'>('en')
-  const [active, setActive] = React.useState(files[0].path)
+  const [active, setActive] = React.useState(examples[0].files[0].path)
   const [sources, setSources] = React.useState<Record<string, string>>(
     Object.fromEntries(
-      [...files, ...hostFiles, ...projects.map((p) => p.server)].map((f) => [f.path, f.source]),
+      [...examples.flatMap((p) => [...p.files, p.server]), ...hostFiles].map((f) => [f.path, f.source]),
     ),
   )
   const [ready, setReady] = React.useState(false)
@@ -35,7 +35,8 @@ export default function App() {
   const [debug, setDebug] = React.useState(false)
   /// One project at a time, which is how anybody actually works. A project is a
   /// package, the wallet it looks at, and the publisher's own server.
-  const [project, setProject] = React.useState(projects[0].id)
+  const [projects, setProjects] = React.useState<Project[]>(examples)
+  const [project, setProject] = React.useState(examples[0].id)
   const [running, setRunning] = React.useState(false)
 
   const monaco = useMonaco()
@@ -55,7 +56,7 @@ export default function App() {
   }, [])
 
   const here = projects.find((p) => p.id === project) ?? projects[0]
-  const packageFiles = files.filter((f) => f.pkg === here.id)
+  const packageFiles = here.files
   const serverFiles = [here.server]
   const all = [...packageFiles, ...hostFiles, ...serverFiles]
   const current = all.find((f) => f.path === active) ?? packageFiles[0]
@@ -70,7 +71,6 @@ export default function App() {
   // package, so the package under inspection is the last `.val` one chosen —
   // which is also what somebody means by it: they are changing the data behind
   // the screen they were just looking at.
-  const pkg = here.id
   const source = sources[active] ?? ''
   const isVal = active.endsWith('.val')
 
@@ -78,26 +78,24 @@ export default function App() {
   // together. `wallet.val` presses an action `loyalty.val` declares; either
   // alone is half a program and fails for the right reason.
   const packageSource = React.useMemo(
-    () =>
-      files
-        .filter((f) => f.pkg === pkg && f.path.endsWith('.val'))
-        .map((f) => sources[f.path] ?? '')
-        .join('\n'),
-    [sources, pkg],
+    () => packageFiles.filter((f) => f.path.endsWith('.val')).map((f) => sources[f.path] ?? '').join('\n'),
+    [sources, packageFiles],
   )
+
+  const bundle = React.useMemo(() => bundleOf(packageFiles, sources), [packageFiles, sources])
 
   const analysis = React.useMemo(() => {
     if (!ready) return null
     try {
-      return val.analyse(packageSource, bundle, LOCALES)
+      return val.analyse(packageSource, bundle.keys, bundle.locales)
     } catch {
       return null
     }
-  }, [ready, packageSource])
+  }, [ready, packageSource, bundle])
 
   const wallet = React.useMemo(() => {
     try {
-      return JSON.parse(sources['fixtures/wallet.json'] ?? '{}')
+      return JSON.parse(sources[HOST] ?? '{}')
     } catch {
       return {}
     }
@@ -134,10 +132,50 @@ export default function App() {
           run.deviceKey,
         )
       }
+      // A committed action changes the wallet, so the wallet file changes. The
+      // preview reads state from there and nowhere else — keeping a second copy
+      // in React is how a screen comes to disagree with the record that was
+      // just signed.
+      if (run.outcome?.kind === 'committed' && run.after) {
+        setSources((all) => {
+          const held = JSON.parse(all[HOST] ?? '{}')
+          // Merged, not replaced: the file is one phone and every project on it
+          // writes here. A run reads back only the fields its own program
+          // declares, so the projects do not see each other — unless two of
+          // them name a field the same, which in a real wallet they could not,
+          // because state is kept per install.
+          const state = { ...(held.state ?? {}), ...(run.after as object) }
+          return { ...all, [HOST]: JSON.stringify({ ...held, state }, null, 2) }
+        })
+      }
+
       setLog((l) => [...l, { at: Date.now(), run, decision }])
       setRunning(false)
     },
     [ready, packageSource, wallet, monaco, sources, here],
+  )
+
+  /// A project of somebody's own. The examples are a starting point; this is
+  /// the point.
+  const addProject = React.useCallback(() => {
+    const n = projects.filter((p) => !p.builtin).length + 1
+    const id = `app-${n}`
+    const made = newProject(id, `New app ${n}`)
+    setProjects((all) => [...all, made])
+    setSources((s) => ({
+      ...s,
+      ...Object.fromEntries([...made.files, made.server].map((f) => [f.path, f.source])),
+    }))
+    setProject(id)
+    setActive(made.files[0].path)
+  }, [projects])
+
+  const removeProject = React.useCallback(
+    (id: string) => {
+      setProjects((all) => all.filter((p) => p.id !== id))
+      setProject((current) => (current === id ? examples[0].id : current))
+    },
+    [],
   )
 
   /// Build the package, then show it running.
@@ -173,7 +211,7 @@ export default function App() {
     if (!monaco || !analysis || !isVal) return
     const model = monaco.editor.getModels().find((m) => m.uri.path.endsWith(current.name))
     if (!model) return
-    const inPkg = files.filter((f) => f.pkg === pkg && f.path.endsWith('.val'))
+    const inPkg = packageFiles.filter((f) => f.path.endsWith('.val'))
     const before = inPkg
       .slice(0, inPkg.findIndex((f) => f.path === active))
       .reduce((n, f) => n + (sources[f.path] ?? '').split('\n').length + 1, 0)
@@ -193,7 +231,7 @@ export default function App() {
           severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
         })),
     )
-  }, [monaco, analysis, active, source, isVal, pkg, sources])
+  }, [monaco, analysis, active, source, isVal, packageFiles, sources])
 
   return (
     <div className="flex h-full flex-col">
@@ -218,6 +256,8 @@ export default function App() {
               projects={projects}
               project={project}
               onProject={setProject}
+              onNew={addProject}
+              onRemove={removeProject}
               files={packageFiles}
               hostFiles={hostFiles}
               serverFiles={serverFiles}
@@ -303,7 +343,7 @@ export default function App() {
               </div>
 
               <TabsContent value="screen" className="min-h-0 flex-1">
-                <PreviewScreen screens={resolved} locale={locale} dark={dark} onTap={dispatch} />
+                <PreviewScreen screens={resolved} text={bundle.keys} locale={locale} dark={dark} onTap={dispatch} />
               </TabsContent>
 
               <TabsContent value="report" className="min-h-0 flex-1">

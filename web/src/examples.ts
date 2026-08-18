@@ -5,7 +5,11 @@ import door from '../../examples/door.val?raw'
 import rejected from '../../examples/rejected.val?raw'
 import textBundle from '../../examples/text.json?raw'
 import walletFixture from '../../fixtures/wallet.json?raw'
-import { DEFAULT_HANDLER } from './server'
+
+/// The one wallet. Every project previews against the same phone, because a
+/// person has one.
+export const HOST = 'fixtures/wallet.json'
+import { DEFAULT_HANDLER, STARTER_HANDLER } from './server'
 
 import spec from '../../docs/spec.md?raw'
 import readme from '../../README.md?raw'
@@ -31,61 +35,127 @@ export const files: SourceFile[] = [
 /// host's answers — what a screen's declaration resolves to — and it is here so
 /// that editing it changes what the preview shows and what a run computes.
 export const hostFiles: SourceFile[] = [
-  { path: 'fixtures/wallet.json', pkg: 'host', name: 'wallet.json', source: walletFixture, note: 'state, credentials, what a query answers' },
+  { path: HOST, pkg: 'host', name: 'wallet.json', source: walletFixture, note: 'state, credentials, what a query answers' },
 ]
 
-/// A project: one package, the host it talks to, and the publisher's own server.
+/// A project: one package, the wallet it looks at, and the publisher's own
+/// server. One Micro App, in other words — its own screens, its own preview,
+/// its own handler.
 ///
-/// The wallet is deliberately **not** per project. A person has one wallet, and
-/// every application they install looks at the same one — which is the whole
-/// shape of this platform, and worth showing rather than saying. The handler is
-/// per project, because a publisher's server and issuer key are theirs alone.
+/// The wallet is deliberately **not** part of one. A person has one, and every
+/// application they install looks at that one, which is the shape of this whole
+/// platform and is better shown than said.
 export type Project = {
   id: string
   name: string
   note: string
+  files: SourceFile[]
   server: SourceFile
+  /// Shipped with the editor, and not removable. Somebody else's project is
+  /// theirs to delete.
+  builtin: boolean
 }
 
-const handler = (id: string): SourceFile => ({
+const handler = (id: string, source = DEFAULT_HANDLER): SourceFile => ({
   path: `server/${id}/handler.ts`,
   pkg: 'server',
   name: 'handler.ts',
-  source: DEFAULT_HANDLER,
+  source,
   note: 'verify the record, then issue or refuse',
 })
 
-export const projects: Project[] = [
-  {
-    id: 'loyalty',
-    name: 'Loyalty card',
-    note: 'every phase, a screen, and a credential issued at the end',
-    server: handler('loyalty'),
-  },
-  {
-    id: 'portfolio',
-    name: 'Portfolio',
-    note: 'no state, no issuance, a proof that discloses nothing',
-    server: handler('portfolio'),
-  },
-  {
-    id: 'door',
-    name: 'Door',
-    note: 'prove an age, disclose nothing else',
-    server: handler('door'),
-  },
-  {
-    id: 'rejected',
-    name: 'Refused programs',
-    note: 'twelve programs and the error each one is owed',
-    server: handler('rejected'),
-  },
+const example = (id: string, name: string, note: string, files: SourceFile[]): Project => ({
+  id,
+  name,
+  note,
+  files,
+  server: handler(id),
+  builtin: true,
+})
+
+export const examples: Project[] = [
+  example('loyalty', 'Loyalty card', 'every phase, a screen, and a credential issued at the end',
+    files.filter((f) => f.pkg === 'loyalty')),
+  example('portfolio', 'Portfolio', 'no state, no issuance, a proof that discloses nothing',
+    files.filter((f) => f.pkg === 'portfolio')),
+  example('door', 'Door', 'prove an age, disclose nothing else',
+    files.filter((f) => f.pkg === 'door')),
+  example('rejected', 'Refused programs', 'twelve programs and the error each one is owed',
+    files.filter((f) => f.pkg === 'rejected')),
 ]
 
-export const docs = [
-  { path: 'docs/spec.md', name: 'The language', source: spec },
-  { path: 'README.md', name: 'Why', source: readme },
-  { path: 'examples/README.md', name: 'Examples', source: examplesReadme },
-]
+/// What a new project starts as: the smallest thing that compiles, runs, and
+/// leaves a record. No credential, because the wallet is somebody else's file
+/// and a starter that failed on the first press would teach the wrong lesson —
+/// reading one is the next page of the guide, not the first.
+const STARTER_APP = `app "example.new"
+version 1
 
-export const text: Record<string, Record<string, string>> = JSON.parse(textBundle).keys
+capabilities {
+}
+
+state {
+  taps: int default 0
+}
+
+action Tap {
+  compute {
+    const next = state.taps + 1
+  }
+
+  update {
+    taps: next
+  }
+}
+
+screen Home {
+  column {
+    card(text: "count", taps: state.taps)
+    button(text: "tap", emphasis: primary, onTap: Tap)
+  }
+}
+`
+
+const STARTER_TEXT = `{
+  "locales": ["en", "th"],
+  "keys": {
+    "count": { "en": "Tapped {taps} times", "th": "กดไปแล้ว {taps} ครั้ง" },
+    "tap":   { "en": "Tap", "th": "กด" }
+  }
+}
+`
+
+export function newProject(id: string, name: string): Project {
+  return {
+    id,
+    name,
+    note: 'yours — edit the code, press the button, read the log',
+    builtin: false,
+    files: [
+      { path: `${id}/app.val`, pkg: id, name: 'app.val', source: STARTER_APP, note: 'the application' },
+      { path: `${id}/text.json`, pkg: id, name: 'text.json', source: STARTER_TEXT, note: 'every sentence a person reads' },
+    ],
+    server: handler(id, STARTER_HANDLER),
+  }
+}
+
+/// The text bundle a project ships, read out of its own `text.json`.
+///
+/// Not a global: every package carries its own, they are signed together, and a
+/// shared one would be a sentence somebody else's application is responsible
+/// for.
+export function bundleOf(files: SourceFile[], sources: Record<string, string>) {
+  const file = files.find((f) => f.name === 'text.json')
+  if (!file) return { keys: {}, locales: ['en', 'th'] }
+  try {
+    const parsed = JSON.parse(sources[file.path] ?? file.source)
+    return {
+      keys: (parsed.keys ?? {}) as Record<string, Record<string, string>>,
+      locales: (parsed.locales ?? ['en', 'th']) as string[],
+    }
+  } catch {
+    // A bundle being edited is a bundle that is briefly not JSON. Reporting it
+    // as missing every key would bury the one problem that is real.
+    return { keys: {}, locales: ['en', 'th'] }
+  }
+}
