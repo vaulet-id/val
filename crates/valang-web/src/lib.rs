@@ -140,6 +140,9 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
                 "payload": value_json(&e.payload),
                 "reversible": e.reversible,
             })).collect::<Vec<_>>(),
+            // The token, which is all a publisher's server is handed.
+            "token": valang_runtime::attestation::jwt(r),
+            "deviceKey": hex_bytes(&r.device_key),
             "record": {
                 "codeHash": hex(&r.code_hash),
                 "inputHash": hex(&r.input_hash),
@@ -210,6 +213,77 @@ fn component_json(c: &Component) -> Json {
         "args": Json::Object(c.args.iter().map(|(k, v)| (k.clone(), value_json(v))).collect::<Map<_, _>>()),
         "children": c.children.iter().map(component_json).collect::<Vec<_>>(),
     })
+}
+
+/// The check a publisher's server runs, in the browser — the same crate a Go or
+/// a Python SDK will bind to, so the editor is not demonstrating a second
+/// implementation of the thing it is teaching.
+#[no_mangle]
+pub extern "C" fn val_verify(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let token = input["token"].as_str().unwrap_or("");
+    let source = input["source"].as_str().unwrap_or("");
+
+    let device_key = hex_bytes_of(input["deviceKey"].as_str().unwrap_or(""));
+    let last_root = input["lastRoot"].as_str().map(hex_bytes_of);
+    let code = valang_verify::code_hash(source);
+    let never = |_: &str| false;
+
+    let expect = valang_verify::Expectation {
+        code_hash: &code,
+        device_key: &device_key,
+        last_root: last_root.as_deref(),
+        spent: &never,
+    };
+
+    match valang_verify::verify(token, &expect) {
+        Ok(v) => write(
+            json!({
+                "ok": true,
+                "record": {
+                    "app": v.record.app,
+                    "version": v.record.version,
+                    "action": v.record.action,
+                    "codeHash": v.record.code_hash,
+                    "previousRoot": v.record.previous_root,
+                    "nextRoot": v.record.next_root,
+                    "outcome": v.record.outcome,
+                },
+                "effects": v.effects.iter().map(|e| json!({
+                    "capability": e.capability,
+                    "payload": value_json(&e.payload),
+                    "reversible": e.reversible,
+                })).collect::<Vec<_>>(),
+            })
+            .to_string(),
+        ),
+        Err(r) => write(json!({ "ok": false, "refusal": describe(&r) }).to_string()),
+    }
+}
+
+fn describe(r: &valang_verify::Refusal) -> Json {
+    use valang_verify::Refusal::*;
+    match r {
+        Malformed(w) => json!({ "kind": "malformed", "why": w }),
+        Unsigned(w) => json!({ "kind": "unsigned", "why": w }),
+        UnknownCode { expected, found } => json!({
+            "kind": "unknownCode",
+            "why": format!("this record is from code {}, and this publisher published {}", &found[..8.min(found.len())], &expected[..8.min(expected.len())]),
+        }),
+        DidNotCommit(w) => json!({ "kind": "didNotCommit", "why": format!("the run {w}, so nothing was earned") }),
+        NoSuchEffect(w) => json!({ "kind": "noSuchEffect", "why": w }),
+        AlreadySpent(w) => json!({ "kind": "alreadySpent", "why": w }),
+        RolledBack { seen, offered } => json!({
+            "kind": "rolledBack",
+            "why": format!("this reaches back to {}, and {} was already seen", &offered[..8.min(offered.len())], &seen[..8.min(seen.len())]),
+        }),
+    }
+}
+
+fn hex_bytes_of(s: &str) -> Vec<u8> {
+    (0..s.len() / 2)
+        .filter_map(|i| u8::from_str_radix(s.get(i * 2..i * 2 + 2)?, 16).ok())
+        .collect()
 }
 
 // -------------------------------------------------------------------- shapes

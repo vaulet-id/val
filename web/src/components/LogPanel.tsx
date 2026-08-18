@@ -20,7 +20,9 @@ const OUTCOME = {
   defect: { icon: XCircle, tone: 'text-red-500', label: 'defect' },
 } as const
 
-export type Entry = { at: number; run: RunResult }
+import type { Decision } from '@/val/server-runtime'
+
+export type Entry = { at: number; run: RunResult; decision?: Decision }
 
 export function LogPanel({ entries, onClear }: { entries: Entry[]; onClear: () => void }) {
   if (!entries.length)
@@ -108,6 +110,8 @@ function LogEntry({ entry }: { entry: Entry }) {
         </div>
       )}
 
+      {entry.decision && <ServerSide decision={entry.decision} />}
+
       {run.record && (
         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 pl-5 font-mono text-[9px] text-[var(--color-muted-foreground)]">
           <span>root {run.record.previousRoot.slice(0, 8)}</span>
@@ -115,6 +119,46 @@ function LogEntry({ entry }: { entry: Entry }) {
           <span>{run.record.nextRoot.slice(0, 8)}</span>
           <span>· {run.record.bytes} bytes, signed {run.record.signature.slice(0, 8)}</span>
         </div>
+      )}
+    </div>
+  )
+}
+
+/// The other half of the transaction. The device produced a record; this is what
+/// the publisher's server did with it — and the two being in one place is the
+/// point of showing either.
+function ServerSide({ decision }: { decision: Decision }) {
+  const tone =
+    decision.kind === 'issue'
+      ? 'text-[var(--color-verified)]'
+      : decision.kind === 'refuse'
+        ? 'text-amber-500'
+        : 'text-red-500'
+
+  return (
+    <div className="mt-2 border-l-2 border-[var(--color-border)] pl-3">
+      <div className="text-[9px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
+        your server
+      </div>
+      {decision.kind === 'issue' && (
+        <>
+          <div className={cn('font-mono text-[11px]', tone)}>issued {decision.credential}</div>
+          {Object.entries(decision.claims).map(([k, v]) => (
+            <div key={k} className="flex gap-1.5 font-mono text-[10px]">
+              <span className="w-28 shrink-0 text-[var(--color-muted-foreground)]">{k}</span>
+              <span>{show(v)}</span>
+            </div>
+          ))}
+        </>
+      )}
+      {decision.kind === 'refuse' && (
+        <>
+          <div className={cn('font-mono text-[11px]', tone)}>refused · {decision.refusal.kind}</div>
+          <p className="text-[10px] leading-relaxed text-[var(--color-muted-foreground)]">{decision.refusal.why}</p>
+        </>
+      )}
+      {decision.kind === 'threw' && (
+        <div className={cn('text-[10px] leading-relaxed', tone)}>the handler threw: {decision.error}</div>
       )}
     </div>
   )

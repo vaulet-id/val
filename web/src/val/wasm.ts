@@ -64,6 +64,8 @@ export type RunResult = {
   before?: unknown
   after?: unknown
   effects?: { capability: string; payload: unknown; reversible: boolean }[]
+  token?: string
+  deviceKey?: string
   record?: {
     codeHash: string
     inputHash: string
@@ -84,6 +86,7 @@ type Exports = {
   val_free: (ptr: number, len: number) => void
   val_analyse: (ptr: number, len: number) => number
   val_render: (ptr: number, len: number) => number
+  val_verify: (ptr: number, len: number) => number
   val_run: (ptr: number, len: number) => number
 }
 
@@ -95,7 +98,7 @@ export async function load(): Promise<void> {
   wasm = instance.exports as unknown as Exports
 }
 
-function call(fn: 'val_analyse' | 'val_render' | 'val_run', input: unknown): unknown {
+function call(fn: 'val_analyse' | 'val_render' | 'val_run' | 'val_verify', input: unknown): unknown {
   if (!wasm) throw new Error('the compiler is not loaded')
   const bytes = new TextEncoder().encode(JSON.stringify(input))
   const inPtr = wasm.val_alloc(bytes.length)
@@ -122,6 +125,20 @@ export function analyse(
 
 export function resolve(source: string, wallet: unknown): { screens: Resolved[] } {
   return call('val_render', { source, wallet }) as { screens: Resolved[] }
+}
+
+export type VerifyResult = {
+  ok: boolean
+  refusal?: { kind: string; why: string }
+  record?: { app: string; version: string; action: string; outcome: string; previousRoot: string; nextRoot: string }
+  effects?: { capability: string; payload: unknown; reversible: boolean }[]
+}
+
+/// What a publisher's server runs. The same crate a Go or a Python SDK will
+/// bind to — the editor is not demonstrating a second implementation of the
+/// check it is teaching.
+export function verifyRecord(token: string, source: string, deviceKey: string): VerifyResult {
+  return call('val_verify', { token, source, deviceKey }) as VerifyResult
 }
 
 /// One action, against the wallet the caller supplies — which is the file

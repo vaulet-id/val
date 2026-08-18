@@ -10,9 +10,12 @@ import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { files, hostFiles, text as bundle } from '@/examples'
+import { files, hostFiles, serverFiles, text as bundle } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
+import { runHandler, type Decision } from '@/val/server-runtime'
+import { Button } from '@/components/ui/button'
+import { Play, Loader2 } from 'lucide-react'
 
 const LOCALES = ['en', 'th']
 
@@ -22,12 +25,13 @@ export default function App() {
   const [locale, setLocale] = React.useState<'th' | 'en'>('en')
   const [active, setActive] = React.useState(files[0].path)
   const [sources, setSources] = React.useState<Record<string, string>>(
-    Object.fromEntries([...files, ...hostFiles].map((f) => [f.path, f.source])),
+    Object.fromEntries([...files, ...hostFiles, ...serverFiles].map((f) => [f.path, f.source])),
   )
   const [ready, setReady] = React.useState(false)
   const [tab, setTab] = React.useState('screen')
   const [log, setLog] = React.useState<Entry[]>([])
   const [debug, setDebug] = React.useState(false)
+  const [running, setRunning] = React.useState(false)
   const monaco = useMonaco()
 
   React.useEffect(() => {
@@ -44,7 +48,7 @@ export default function App() {
     val.load().then(() => setReady(true))
   }, [])
 
-  const all = [...files, ...hostFiles]
+  const all = [...files, ...hostFiles, ...serverFiles]
   const current = all.find((f) => f.path === active) ?? files[0]
 
   // Editing the host's wallet must not empty the preview. It belongs to no
@@ -98,17 +102,38 @@ export default function App() {
     }
   }, [ready, analysis, packageSource, wallet])
 
+  // One press, both sides. The action runs on the device and the record it
+  // produces goes straight to the publisher's handler — which is the whole
+  // transaction, and the thing no tool shows in one place today.
   const dispatch = React.useCallback(
-    (action: string) => {
+    async (action: string) => {
       if (!ready) return
-      const run = val.run(packageSource, action, wallet)
-      setLog((l) => [...l, { at: Date.now(), run }])
-      // A press is worth reading the moment it happens, so the pane opens for
-      // it rather than waiting to be found.
+      setRunning(true)
       setDebug(true)
+
+      const run = val.run(packageSource, action, wallet)
+      let decision: Decision | undefined
+      if (monaco && run.token && run.deviceKey) {
+        decision = await runHandler(
+          monaco,
+          sources['server/handler.ts'] ?? '',
+          run.token,
+          packageSource,
+          run.deviceKey,
+        )
+      }
+      setLog((l) => [...l, { at: Date.now(), run, decision }])
+      setRunning(false)
     },
-    [ready, packageSource, wallet],
+    [ready, packageSource, wallet, monaco, sources],
   )
+
+  /// What the button does: run the first action this package declares. A press
+  /// in the preview is the same path, with the action the screen named.
+  const buildAndRun = React.useCallback(() => {
+    const first = analysis?.actions[0]
+    if (first) void dispatch(first)
+  }, [analysis, dispatch])
 
   // Diagnostics land as markers, so a float is underlined where it was written
   // rather than described in a panel somewhere else. Only for the file being
@@ -158,7 +183,14 @@ export default function App() {
       ) : (
         <ResizablePanelGroup direction="horizontal" autoSaveId="val-playground" className="min-h-0 flex-1">
           <ResizablePanel defaultSize={15} minSize={9} maxSize={30}>
-            <FileTree heading="package" files={files} hostFiles={hostFiles} active={active} onSelect={setActive} />
+            <FileTree
+              heading="package"
+              files={files}
+              hostFiles={hostFiles}
+              serverFiles={serverFiles}
+              active={active}
+              onSelect={setActive}
+            />
           </ResizablePanel>
 
           <ResizableHandle withHandle />
@@ -169,7 +201,7 @@ export default function App() {
             <Editor
               height="100%"
               path={active}
-              language={isVal ? 'val' : 'json'}
+              language={isVal ? 'val' : active.endsWith('.ts') ? 'typescript' : 'json'}
               theme={dark ? 'val-dark' : 'val-light'}
               value={source}
               onChange={(v) => setSources((s) => ({ ...s, [active]: v ?? '' }))}
@@ -221,8 +253,18 @@ export default function App() {
                   <TabsTrigger value="screen">Preview</TabsTrigger>
                   <TabsTrigger value="report">Report</TabsTrigger>
                 </TabsList>
-                {!ready && (
+                {!ready ? (
                   <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">loading the compiler…</span>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="ml-auto"
+                    onClick={buildAndRun}
+                    disabled={running || !analysis?.actions.length}
+                  >
+                    {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                    Build &amp; Run
+                  </Button>
                 )}
               </div>
 

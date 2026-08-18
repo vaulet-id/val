@@ -31,6 +31,13 @@ is that what ran can be checked.
   the roots before and after. Where it stops resembling a reducer is the part
   worth reading: the effects are requested rather than performed, and the state
   commits only if the host takes them
+- **the server is a file too**, under `server` rather than under the package,
+  because it runs on the publisher's machine and holds their issuer key — the
+  one thing an application must never have. Press Build & Run and one press
+  shows the whole transaction: the action on the device, the record it signed,
+  and what the publisher's handler did with it. The check the handler runs is
+  `valang-verify` compiled to Wasm, which is the same crate a Go or a Python SDK
+  will bind to, so this is not a second implementation of the thing it teaches
 - **the wallet is a file** — `fixtures/wallet.json`, under `host` rather than
   under the package, because a `.va` never carries somebody\'s wallet. Edit it
   and the screen changes without a line of the application changing, which is

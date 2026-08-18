@@ -6,10 +6,11 @@ import type { SourceFile } from '@/examples'
 type Item = { path: string; name: string; note?: string }
 
 export function FileTree({
-  files, hostFiles, active, onSelect, heading,
+  files, hostFiles, serverFiles, active, onSelect, heading,
 }: {
   files: Item[]
   hostFiles?: Item[]
+  serverFiles?: Item[]
   active: string
   onSelect: (path: string) => void
   heading: string
@@ -21,6 +22,9 @@ export function FileTree({
           wallet, and putting it under the same heading as the package would be
           the one line of this interface that lied. */}
       {hostFiles?.length ? <Group label="host" files={hostFiles} active={active} onSelect={onSelect} /> : null}
+      {/* And the publisher's own side, which holds their issuer key and never
+          goes near the phone. */}
+      {serverFiles?.length ? <Group label="server" files={serverFiles} active={active} onSelect={onSelect} /> : null}
       <div className="mt-auto border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-snug text-[var(--color-muted-foreground)]">
         One package, several files, one scope — no imports across packages.
       </div>

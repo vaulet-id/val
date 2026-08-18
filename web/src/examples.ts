@@ -5,6 +5,7 @@ import door from '../../examples/door.val?raw'
 import rejected from '../../examples/rejected.val?raw'
 import textBundle from '../../examples/text.json?raw'
 import walletFixture from '../../fixtures/wallet.json?raw'
+import { DEFAULT_HANDLER } from './server'
 
 import spec from '../../docs/spec.md?raw'
 import readme from '../../README.md?raw'
@@ -31,6 +32,13 @@ export const files: SourceFile[] = [
 /// that editing it changes what the preview shows and what a run computes.
 export const hostFiles: SourceFile[] = [
   { path: 'fixtures/wallet.json', pkg: 'host', name: 'wallet.json', source: walletFixture, note: 'state, credentials, what a query answers' },
+]
+
+/// The publisher's own side. Not part of the package either, and for a different
+/// reason: this runs on their server, holds their issuer key, and never goes
+/// near the phone.
+export const serverFiles: SourceFile[] = [
+  { path: 'server/handler.ts', pkg: 'server', name: 'handler.ts', source: DEFAULT_HANDLER, note: 'verify the record, then issue or refuse' },
 ]
 
 export const docs = [
