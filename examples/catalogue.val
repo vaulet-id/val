@@ -65,7 +65,7 @@ screen Catalogue {
 
   column {
     // `card` — a heading with values in it.
-    card(text: "summary", presses: state.presses, spent: spent)
+    card(text: sentence("summary", presses: state.presses, spent: spent))
 
     // `section` — a subhead, which is how this wallet groups what follows.
     section(text: "rows")
@@ -79,7 +79,7 @@ screen Catalogue {
     // empty list draws the wallet's own empty state, never yours.
     section(text: "fromTheWallet")
     list(receipts) { r ->
-      row(text: "receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at)
+      row(text: sentence("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
 
     // `button` — `emphasis: primary` is the one that docks to the bottom of the

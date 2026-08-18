@@ -185,6 +185,12 @@ pub struct UiNode {
     /// introduced by the interface rather than by the program.
     pub lambda: Option<String>,
     pub children: Vec<UiNode>,
+    /// The names that came from this node's `slots { … }` block, kept after the
+    /// block itself is flattened into ordinary arguments. The compiler compares
+    /// them with the placeholders in the sentence this node names: a slot the
+    /// sentence does not have, or a placeholder nothing fills, is a failed
+    /// build.
+    pub slots: Vec<String>,
     pub span: Span,
 }
 

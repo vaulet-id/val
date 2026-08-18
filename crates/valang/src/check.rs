@@ -361,6 +361,8 @@ pub fn check_bundle(
             });
         }
     }
+    // Key to the slots the node fills it with, so the two can be compared.
+    let mut filled: Vec<(String, crate::diag::Span, Vec<String>)> = Vec::new();
     for s in &p.screens {
         for n in &s.tree {
             walk_ui(n, &mut |node| {
@@ -371,9 +373,37 @@ pub fn check_bundle(
                     }
                     if let Expr::Str { value, span } = &a.value {
                         want.push((value.clone(), *span, "screen"));
+                        filled.push((value.clone(), *span, node.slots.clone()));
                     }
                 }
             });
+        }
+    }
+
+    // A sentence names its values in braces, and the code supplies them by
+    // name. Neither half is allowed to be a guess: a placeholder nothing fills
+    // renders as itself, and a slot the sentence does not name is a value
+    // nobody reads — usually a rename that stopped halfway.
+    for (key, span, slots) in &filled {
+        let Some(entry) = bundle.get(key) else { continue };
+        for (locale, template) in entry {
+            let named = placeholders(template);
+            for want in &named {
+                if !slots.contains(want) {
+                    d.push(Diagnostic::error(
+                        *span,
+                        format!("`{key}` says `{{{want}}}` in {locale}, and nothing fills it"),
+                    ));
+                }
+            }
+            for have in slots {
+                if !named.contains(have) {
+                    d.push(Diagnostic::error(
+                        *span,
+                        format!("`{key}` has no `{{{have}}}` in {locale}"),
+                    ));
+                }
+            }
         }
     }
 
@@ -397,6 +427,33 @@ pub fn check_bundle(
         }
     }
     d
+}
+
+/// The names a template asks for, in the order they appear. `{amount}` is one;
+/// `{{` is not — a sentence that wants a brace escapes it the way every other
+/// template language does.
+fn placeholders(template: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes: Vec<char> = template.chars().collect();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != '{' {
+            i += 1;
+            continue;
+        }
+        if bytes.get(i + 1) == Some(&'{') {
+            i += 2;
+            continue;
+        }
+        let start = i + 1;
+        let Some(end) = (start..bytes.len()).find(|&j| bytes[j] == '}') else { break };
+        let name: String = bytes[start..end].iter().collect();
+        if !name.is_empty() {
+            out.push(name.trim().to_string());
+        }
+        i = end + 1;
+    }
+    out
 }
 
 const EFFECT_ROOTS: &[&str] = &["credential", "payment", "storage", "message", "network", "disclosure"];

@@ -802,7 +802,7 @@ impl Parser {
                 }
             }
         }
-        Some(UiNode { kind, args, lambda, children, span })
+        Some(UiNode { kind, args, lambda, children, slots: Vec::new(), span })
     }
 
     // ------------------------------------------------------------ expressions

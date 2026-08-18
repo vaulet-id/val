@@ -11,10 +11,10 @@ screen Wallet {
   }
 
   column {
-    card(text: "balance", points: state.member.points)
+    card(text: sentence("balance", points: state.member.points))
     section(text: "history")
     list(receipts) { r ->
-      row(text: "receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at)
+      row(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
     button(text: "scan", emphasis: primary, onTap: ScanToEarn)
   }
@@ -44,8 +44,8 @@ and the same record.
 ```val
 column { … }
 section(text: "key")
-card(text: "key", slot: value)
-row(text: "key", slot: value, onTap: Action)
+card(text: sentence("key", name: value))
+row(text: sentence("key", name: value), onTap: Action)
 list(binding) { item -> … }
 button(text: "key", emphasis: primary, onTap: Action)
 ```

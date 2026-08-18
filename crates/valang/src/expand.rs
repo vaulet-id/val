@@ -19,6 +19,15 @@ use crate::diag::{Diagnostic, Span};
 pub const CATALOGUE: &[&str] =
     &["column", "row", "card", "section", "list", "button", "tab", "tabs"];
 
+/// The call that turns a signed key and its values into one sentence.
+///
+/// `sentence("summary", amount: total)` rather than a key plus loose arguments:
+/// a component takes the finished sentence and never learns which key it was or
+/// how many values it took, so one component renders any sentence. A component
+/// that took the key and filled the values itself could only be used with
+/// sentences that happened to name the same ones.
+pub const SENTENCE: &str = "sentence";
+
 pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
     let mut d = Vec::new();
 
@@ -64,10 +73,76 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
         for node in std::mem::take(&mut s.tree) {
             out.extend(expand_node(node, &by_name, &types, &mut d));
         }
-        s.tree = out;
+        s.tree = out.into_iter().map(|n| open_sentences(n, &mut d)).collect();
     }
     program.screens = screens;
     d
+}
+
+/// `text: sentence("summary", amount: total)` becomes `text: "summary"` with
+/// `amount: total` beside it, and the slot names kept on the node.
+///
+/// Flattening here means one shape leaves the front end: a host is handed a key
+/// and named values, and does not have to know that the source wrote them as one
+/// call. The renderer stays the renderer.
+fn open_sentences(node: UiNode, d: &mut Vec<Diagnostic>) -> UiNode {
+    let mut args = Vec::new();
+    let mut slots = node.slots;
+
+    for a in node.args {
+        let Expr::Call { callee, args: inner, span } = &a.value else {
+            args.push(a);
+            continue;
+        };
+        if callee.path().as_deref() != Some(SENTENCE) {
+            args.push(a);
+            continue;
+        }
+
+        let mut inner = inner.iter();
+        let Some(key) = inner.next() else {
+            d.push(Diagnostic::error(
+                *span,
+                "`sentence` names a key from the text bundle: `sentence(\"summary\", amount: total)`"
+                    .to_string(),
+            ));
+            continue;
+        };
+        if !matches!(key.value, Expr::Str { .. }) {
+            d.push(Diagnostic::error(
+                key.span,
+                "a sentence's key is written here, not passed in — it is checked against the words that were signed".to_string(),
+            ));
+            continue;
+        }
+
+        args.push(Arg { name: a.name.clone(), value: key.value.clone(), spread: false, span: a.span });
+        for v in inner {
+            match &v.name {
+                Some(name) => {
+                    slots.push(name.clone());
+                    args.push(Arg {
+                        name: Some(name.clone()),
+                        value: v.value.clone(),
+                        spread: false,
+                        span: v.span,
+                    });
+                }
+                None => d.push(Diagnostic::error(
+                    v.span,
+                    "a sentence's values are named, because the words they go into name them"
+                        .to_string(),
+                )),
+            }
+        }
+    }
+
+    UiNode {
+        args,
+        slots,
+        children: node.children.into_iter().map(|c| open_sentences(c, d)).collect(),
+        ..node
+    }
 }
 
 /// `...style` inside a component's body, where `style` is one of its parameters
@@ -132,10 +207,10 @@ fn expand_node(
     d: &mut Vec<Diagnostic>,
 ) -> Vec<UiNode> {
     let Some(decl) = by_name.get(&node.kind) else {
-        let UiNode { kind, args, lambda, children, span } = node;
+        let UiNode { kind, args, lambda, children, slots, span } = node;
         let children =
             children.into_iter().flat_map(|c| expand_node(c, by_name, types, d)).collect();
-        return vec![UiNode { kind, args, lambda, children, span }];
+        return vec![UiNode { kind, args, lambda, children, slots, span }];
     };
 
     let bound = bind(&node, decl, d);
@@ -212,15 +287,9 @@ fn bind(call: &UiNode, decl: &ComponentDecl, d: &mut Vec<Diagnostic>) -> BTreeMa
 /// Replace a component's parameters with what the call site handed it.
 fn substitute(node: UiNode, bound: &BTreeMap<String, Expr>) -> UiNode {
     UiNode {
-        kind: node.kind,
-        args: node
-            .args
-            .into_iter()
-            .map(|a| Arg { value: replace(a.value, bound), ..a })
-            .collect(),
-        lambda: node.lambda,
+        args: node.args.into_iter().map(|a| Arg { value: replace(a.value, bound), ..a }).collect(),
         children: node.children.into_iter().map(|c| substitute(c, bound)).collect(),
-        span: node.span,
+        ..node
     }
 }
 

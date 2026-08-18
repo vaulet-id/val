@@ -100,8 +100,8 @@ navigate Screen
 ```val
 column { … }
 section(text: "key")
-card(text: "key", slot: value)
-row(text: "key", slot: value, onTap: Action)
+card(text: sentence("key", name: value))
+row(text: sentence("key", name: value), onTap: Action)
 list(binding) { item -> … }
 button(text: "key", emphasis: primary, onTap: Action)
 ```

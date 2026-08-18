@@ -27,7 +27,7 @@ screen Wallet {
     // `text:` is a key into the signed manifest, never a sentence. The compiler
     // checks the key exists, that `points` is a slot, that its type matches,
     // and that every locale this app ships to has a translation.
-    card(text: "balance", points: state.member.points)
+    card(text: sentence("balance", points: state.member.points))
 
     // A section subhead, which is how this host groups a list. There are no
     // tabs in the catalogue — the wallet has never had one, and a screen cannot
@@ -35,7 +35,7 @@ screen Wallet {
     section(text: "history")
 
     list(receipts) { r ->
-      row(text: "receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at)
+      row(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
 
     // Primary, so the host docks it. A call to action that scrolls with the
