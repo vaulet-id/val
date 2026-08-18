@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* Thai, in the face vaulet-site sets it in.
+ *
+ * The docs are written in both languages and the system fallback for Thai is
+ * usually a looped face, which reads as a different voice from the English
+ * beside it. Anuphan is loopless and grotesque-shaped, so the two match. It is
+ * listed after the Latin stack rather than in front of it: the browser takes
+ * the first font that has the glyph, so this is reached only by Thai. */
+@font-face {
+  font-family: "Anuphan";
+  src: url("/fonts/Anuphan.ttf") format("truetype");
+  font-weight: 100 700;
+  font-display: swap;
+  unicode-range: U+0E01-0E5B, U+200B, U+25CC;
+}
+
 @theme {
   --color-border: hsl(240 6% 90%);
   --color-input: hsl(240 6% 90%);
@@ -16,6 +31,7 @@
   --color-selfasserted: hsl(38 92% 38%);
   --color-origin: hsl(215 90% 45%);
   --font-mono: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Anuphan", sans-serif;
 }
 
 .dark {

@@ -126,13 +126,13 @@ class Vaulet {
     const buttonText = TextStyle(
       fontSize: 15,
       fontWeight: FontWeight.w600,
-      fontFamilyFallback: ['NotoSansThai'],
+      fontFamilyFallback: ['Anuphan'],
     );
     return ThemeData(
       // Latin from the default font, Thai from the one bundled beside it. A
       // fallback rather than a family, so the preview keeps looking like the
       // wallet in English and stops drawing boxes in Thai.
-      fontFamilyFallback: const ['NotoSansThai'],
+      fontFamilyFallback: const ['Anuphan'],
       useMaterial3: true,
       colorScheme: scheme,
       filledButtonTheme: FilledButtonThemeData(
