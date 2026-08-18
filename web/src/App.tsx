@@ -4,7 +4,8 @@ import { Navbar, type Mode } from '@/components/Navbar'
 import { FileTree } from '@/components/FileTree'
 import { PreviewScreen } from '@/components/PreviewScreen'
 import { ReportPanel } from '@/components/ReportPanel'
-import { LogPanel, type Entry } from '@/components/LogPanel'
+import { DebugPane } from '@/components/DebugPane'
+import type { Entry } from '@/components/LogPanel'
 import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -26,6 +27,7 @@ export default function App() {
   const [ready, setReady] = React.useState(false)
   const [tab, setTab] = React.useState('screen')
   const [log, setLog] = React.useState<Entry[]>([])
+  const [debug, setDebug] = React.useState(false)
   const monaco = useMonaco()
 
   React.useEffect(() => {
@@ -101,7 +103,9 @@ export default function App() {
       if (!ready) return
       const run = val.run(packageSource, action, wallet)
       setLog((l) => [...l, { at: Date.now(), run }])
-      setTab('log')
+      // A press is worth reading the moment it happens, so the pane opens for
+      // it rather than waiting to be found.
+      setDebug(true)
     },
     [ready, packageSource, wallet],
   )
@@ -137,7 +141,17 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <Navbar mode={mode} onMode={setMode} dark={dark} onDark={setDark} locale={locale} onLocale={setLocale} />
+      <Navbar
+        mode={mode}
+        onMode={setMode}
+        dark={dark}
+        onDark={setDark}
+        locale={locale}
+        onLocale={setLocale}
+        debugger={debug}
+        onDebugger={setDebug}
+        problems={analysis?.diagnostics.length ?? 0}
+      />
 
       {mode === 'docs' ? (
         <DocsView />
@@ -150,6 +164,8 @@ export default function App() {
           <ResizableHandle withHandle />
 
           <ResizablePanel defaultSize={53} minSize={25}>
+            <ResizablePanelGroup direction="vertical" autoSaveId="val-editor">
+              <ResizablePanel defaultSize={debug ? 62 : 100} minSize={20}>
             <Editor
               height="100%"
               path={active}
@@ -169,6 +185,28 @@ export default function App() {
                 automaticLayout: true,
               }}
             />
+              </ResizablePanel>
+
+              {debug && (
+                <>
+                  <ResizableHandle />
+                  <ResizablePanel defaultSize={38} minSize={12}>
+                    <DebugPane
+                      diagnostics={analysis?.diagnostics ?? []}
+                      entries={log}
+                      onClear={() => setLog([])}
+                      onClose={() => setDebug(false)}
+                      onGo={(line) => {
+                        const editor = monaco?.editor.getEditors()[0]
+                        editor?.revealLineInCenter(line)
+                        editor?.setPosition({ lineNumber: line, column: 1 })
+                        editor?.focus()
+                      }}
+                    />
+                  </ResizablePanel>
+                </>
+              )}
+            </ResizablePanelGroup>
           </ResizablePanel>
 
           <ResizableHandle withHandle />
@@ -179,7 +217,6 @@ export default function App() {
                 <TabsList>
                   <TabsTrigger value="screen">Preview</TabsTrigger>
                   <TabsTrigger value="report">Report</TabsTrigger>
-                  <TabsTrigger value="log">Log{log.length ? ` ${log.length}` : ''}</TabsTrigger>
                 </TabsList>
                 {!ready && (
                   <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">loading the compiler…</span>
@@ -196,11 +233,6 @@ export default function App() {
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="log" className="min-h-0 flex-1">
-                <ScrollArea className="h-full">
-                  <LogPanel entries={log} onClear={() => setLog([])} />
-                </ScrollArea>
-              </TabsContent>
             </Tabs>
           </ResizablePanel>
         </ResizablePanelGroup>

@@ -21,6 +21,10 @@ is that what ran can be checked.
   `./preview/build.sh`; it is not checked in, being forty megabytes of CanvasKit
 - **the report** is derived from the code, which is the whole point of it. A
   publisher cannot understate what they never wrote down
+- **the debugger**, in a pane under the editor where an editor keeps this sort
+  of thing. Problems and the log belong together and belong there: both are about
+  the program in front of you, and both used to be on the far side of the window
+  from it. A problem is clickable and takes you to the line
 - **the log** is what a press did. An action is `(state, input, context, code)`
   to `(state\', output, effects)`, which is a reducer — so the panel reads like
   one: what was dispatched, which fields moved, what the host was asked for, and
