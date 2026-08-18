@@ -122,3 +122,50 @@ fn a_component_that_holds_no_children_is_reported() {
     let msgs = errors(&src, false);
     assert!(msgs.iter().any(|m| m.contains("holds no children")), "got {msgs:?}");
 }
+
+const FORM: &str = r#"
+app "example.form"
+version 1
+
+capabilities {
+}
+
+state {
+  note: string default ""
+}
+
+action Save {
+  input {
+    body: string
+  }
+
+  update {
+    note: body
+  }
+}
+
+screen Home {
+  column {
+    field(text: sentence("body"), into: body)
+    button(text: sentence("save"), emphasis: primary, onTap: Save)
+  }
+}
+"#;
+
+/// A field writes into a name, and that name is an input of the action the
+/// screen's press calls. Unchecked, it fails at the one moment somebody has
+/// already filled the form in.
+#[test]
+fn a_field_writes_into_an_input_the_action_declares() {
+    assert!(errors(FORM, false).is_empty(), "{:?}", errors(FORM, false));
+}
+
+#[test]
+fn a_field_writing_into_a_name_nothing_takes_is_reported() {
+    let src = FORM.replace("into: body)", "into: subject)");
+    let msgs = errors(&src, false);
+    assert!(
+        msgs.iter().any(|m| m.contains("takes an input named `subject`")),
+        "got {msgs:?}"
+    );
+}

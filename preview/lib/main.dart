@@ -362,6 +362,27 @@ class _Phone extends StatelessWidget {
   }
 }
 
+/// What the form holds, until it is submitted.
+///
+/// The host's, not the application's: a scroll position or a half-typed field in
+/// application state would be hashed, signed and replayed, and "provable" would
+/// mean less by one press each time.
+class _Form extends InheritedWidget {
+  const _Form({required this.values, required this.onChanged, required super.child});
+
+  final Map<String, Object?> values;
+  final void Function(String, Object?) onChanged;
+
+  static Map<String, Object?> of(BuildContext c) =>
+      c.dependOnInheritedWidgetOfExactType<_Form>()?.values ?? const {};
+
+  static void set(BuildContext c, String name, Object? value) =>
+      c.getInheritedWidgetOfExactType<_Form>()?.onChanged(name, value);
+
+  @override
+  bool updateShouldNotify(_Form old) => old.values != values;
+}
+
 /// A screen, built the way the wallet builds one: an `AppBar`, a scrolling body
 /// on the standard 16pt gutter, and the primary action **docked at the bottom**
 /// rather than sitting inline in the content.
@@ -371,11 +392,18 @@ class _Phone extends StatelessWidget {
 /// screen, and the wallet answered that once — in `BottomActionBar`, for every
 /// screen — so a preview that put the button inline would be showing a layout
 /// the host does not produce.
-class _Screen extends StatelessWidget {
+class _Screen extends StatefulWidget {
   const _Screen({required this.screen, required this.incoming});
 
   final Map<String, dynamic> screen;
   final Incoming incoming;
+
+  @override
+  State<_Screen> createState() => _ScreenState();
+}
+
+class _ScreenState extends State<_Screen> {
+  final Map<String, Object?> _values = {};
 
   static bool _isPrimary(Map<String, dynamic> n) =>
       n['kind'] == 'button' && ((n['args'] as Map?)?['emphasis'] as String?)?.trim() == 'primary';
@@ -402,30 +430,33 @@ class _Screen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nodes = ((screen['tree'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final nodes = ((widget.screen['tree'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final docked = _flatten(nodes).where(_isPrimary).toList();
 
-    return Scaffold(
+    return _Form(
+      values: _values,
+      onChanged: (name, value) => setState(() => _values[name] = value),
+      child: Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         toolbarHeight: 52,
         // The screen's own sentence where it has one. The identifier behind it
         // is ASCII, so a title taken from it could never be Thai — which is
         // what it was doing until screens could carry a title.
-        title: screen['title'] == null
+        title: widget.screen['title'] == null
             ? Text(
-                screen['name'] as String? ?? '',
+                widget.screen['name'] as String? ?? '',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
               )
             : _Node(
-                node: screen['title'] as Map<String, dynamic>,
-                incoming: incoming,
+                node: widget.screen['title'] as Map<String, dynamic>,
+                incoming: widget.incoming,
               ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, Vaulet.lg),
         children: [
-          for (final n in _prune(nodes)) _Node(node: n, incoming: incoming),
+          for (final n in _prune(nodes)) _Node(node: n, incoming: widget.incoming),
         ],
       ),
       bottomNavigationBar: docked.isEmpty
@@ -436,10 +467,11 @@ class _Screen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final b in docked)
-                    SizedBox(width: double.infinity, child: _Node(node: b, incoming: incoming)),
+                    SizedBox(width: double.infinity, child: _Node(node: b, incoming: widget.incoming)),
                 ],
               ),
             ),
+      ),
     );
   }
 }
@@ -540,6 +572,16 @@ class _NodeState extends State<_Node> {
   /// an application that formatted a number would get Thai digits, the
   /// thousands separator and the currency position wrong separately from every
   /// other application.
+  /// The same sentence as [_text], as a plain string, for the places a toolkit
+  /// wants one — a field's label cannot be a widget.
+  String _label() {
+    final key = args['text'] as String?;
+    if (key == null) return '';
+    final entry = (widget.incoming.text[key] as Map?)?.cast<String, dynamic>();
+    final template = entry?[widget.incoming.locale] as String?;
+    return template ?? key;
+  }
+
   Widget _text({TextStyle? style, bool upper = false}) {
     final key = args['text'] as String?;
     if (key == null) return const SizedBox.shrink();
@@ -678,6 +720,35 @@ class _NodeState extends State<_Node> {
           ],
         );
 
+      // What a person types, held by the host until they submit. `into` names
+      // the input it becomes.
+      case 'field':
+        final into = (args['into'] as String?)?.trim();
+        final kind = (args['kind'] as String?)?.trim();
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: Vaulet.sm),
+          child: TextField(
+            keyboardType: kind == 'number' ? TextInputType.number : TextInputType.text,
+            decoration: InputDecoration(
+              labelText: _label(),
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+          ),
+        );
+
+      case 'toggle':
+        final into = (args['into'] as String?)?.trim();
+        return SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: _text(),
+          value: into == null ? false : _Form.of(context)[into] == true,
+          onChanged: into == null
+              ? null
+              : (v) => _Form.set(context, into, v),
+        );
+
       case 'button':
         final emphasis = (args['emphasis'] as String?)?.trim();
         final action = (args['onTap'] as String?)?.trim();
@@ -712,8 +783,14 @@ class _NodeState extends State<_Node> {
     }
   }
 
+  /// A press carries the form with it.
+  ///
+  /// What a field holds while somebody is typing belongs to the host — it is
+  /// not application state, it is not hashed and it is not in the record. The
+  /// action is given what the form held at the moment it was submitted, which
+  /// is what `input` is.
   void _tap(String? action) => web.window.parent?.postMessage(
-        jsonEncode({'type': 'tap', 'action': action}).toJS,
+        jsonEncode({'type': 'tap', 'action': action, 'input': _Form.of(context)}).toJS,
         '*'.toJS,
       );
 

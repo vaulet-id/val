@@ -12,6 +12,8 @@ import transitText from '../../examples/transit-text.json?raw'
 import transitHandler from '../../examples/transit-handler.go?raw'
 import catalogue from '../../examples/catalogue.val?raw'
 import catalogueText from '../../examples/catalogue-text.json?raw'
+import note from '../../examples/note.val?raw'
+import noteText from '../../examples/note-text.json?raw'
 import condo from '../../examples/condo.val?raw'
 import condoText from '../../examples/condo-text.json?raw'
 import condoHandler from '../../examples/condo-handler.py?raw'
@@ -57,6 +59,8 @@ export const files: SourceFile[] = [
   { path: 'examples/transit-text.json', pkg: 'transit', name: 'text.json', source: transitText, note: 'the signed text bundle' },
   { path: 'examples/catalogue.val', pkg: 'catalogue', name: 'catalogue.val', source: catalogue, note: 'every component the wallet ships' },
   { path: 'examples/catalogue-text.json', pkg: 'catalogue', name: 'text.json', source: catalogueText, note: 'the signed text bundle' },
+  { path: 'examples/note.val', pkg: 'note', name: 'note.val', source: note, note: 'a form, and where what it holds lives' },
+  { path: 'examples/note-text.json', pkg: 'note', name: 'text.json', source: noteText, note: 'the signed text bundle' },
   { path: 'examples/condo.val', pkg: 'condo', name: 'condo.val', source: condo, note: 'a vote weighted by a share of the building' },
   { path: 'examples/condo-text.json', pkg: 'condo', name: 'text.json', source: condoText, note: 'the signed text bundle' },
 ]
@@ -121,6 +125,9 @@ export const examples: Project[] = [
     { name: 'handler.rs', source: referendumHandler }),
   example('catalogue', 'Component catalogue', 'every component on one screen, and what each prop does',
     files.filter((f) => f.pkg === 'catalogue')),
+  example('note', 'A note', 'a form: the wallet holds what is typed and the action is given it',
+    files.filter((f) => f.pkg === 'note'),
+    { name: 'handler.ts', source: STARTER_HANDLER }),
   example('condo', 'Condominium meeting', 'a vote weighted by ownership, with the statutory cap checked on the server',
     files.filter((f) => f.pkg === 'condo'),
     { name: 'handler.py', source: condoHandler }),

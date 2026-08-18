@@ -237,6 +237,50 @@ pub fn check_screens(
         });
     }
 
+    // A field writes into a name, and that name is an input of the action the
+    // screen's press calls. Checked here because it is the only place both are
+    // in reach — and unchecked it fails at the one moment a person has already
+    // filled the form in.
+    for screen in &program.screens {
+        let mut into: Vec<(String, crate::diag::Span)> = Vec::new();
+        let mut actions: Vec<String> = Vec::new();
+        walk(&screen.tree, &mut |node| {
+            for a in &node.args {
+                match a.name.as_deref() {
+                    Some("into") => {
+                        if let Some(name) = a.value.path() {
+                            into.push((name, a.span));
+                        }
+                    }
+                    Some("onTap") => {
+                        if let Some(name) = a.value.path() {
+                            actions.push(name);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        for (name, span) in into {
+            let known = actions.iter().any(|action| {
+                program
+                    .actions
+                    .iter()
+                    .find(|a| &a.name == action)
+                    .is_some_and(|a| declares_input(a, &name))
+            });
+            if !known {
+                d.push(Diagnostic::error(
+                    span,
+                    format!(
+                        "nothing this screen can press takes an input named `{name}`"
+                    ),
+                ));
+            }
+        }
+    }
+
     for p in &program.catalogues {
         if !catalogues.loaded.iter().any(|c| &c.id() == p) {
             d.push(Diagnostic::error(
@@ -262,4 +306,12 @@ fn walk(nodes: &[crate::ast::UiNode], f: &mut impl FnMut(&crate::ast::UiNode)) {
         f(n);
         walk(&n.children, f);
     }
+}
+
+/// Whether an action's `input` block declares this name.
+fn declares_input(action: &crate::ast::ActionDecl, name: &str) -> bool {
+    use crate::ast::{Phase, Stmt};
+    action.phases.iter().filter(|b| b.phase == Phase::Input).any(|b| {
+        b.stmts.iter().any(|s| matches!(s, Stmt::Binding { name: n, .. } if n == name))
+    })
 }

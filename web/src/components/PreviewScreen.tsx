@@ -12,7 +12,7 @@ export function PreviewScreen({
   text: Record<string, Record<string, string>>
   locale: 'th' | 'en'
   dark: boolean
-  onTap: (action: string) => void
+  onTap: (action: string, input: Record<string, unknown>) => void
 }) {
   const frame = React.useRef<HTMLIFrameElement>(null)
   const [ready, setReady] = React.useState(false)
@@ -24,7 +24,7 @@ export function PreviewScreen({
       try {
         const msg = JSON.parse(e.data)
         if (msg.ready) setReady(true)
-        if (msg.type === 'tap' && msg.action) onTap(msg.action)
+        if (msg.type === 'tap' && msg.action) onTap(msg.action, msg.input ?? {})
       } catch {
         /* not ours */
       }

@@ -1,0 +1,12 @@
+{
+  "_comment": "The note package's own bundle.",
+  "locales": ["en", "th"],
+  "keys": {
+    "noteTitle": { "en": "A note", "th": "บันทึก" },
+    "current": { "en": "Saved: {note}", "th": "บันทึกไว้: {note}" },
+    "write": { "en": "Write one", "th": "เขียนใหม่" },
+    "body": { "en": "Your note", "th": "ข้อความ" },
+    "remind": { "en": "Remind me", "th": "เตือนฉัน" },
+    "save": { "en": "Save", "th": "บันทึก" }
+  }
+}

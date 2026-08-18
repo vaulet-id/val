@@ -1,0 +1,46 @@
+// A form, and where what it holds lives.
+//
+// Nothing a person types is application state. The wallet holds it while they
+// are typing, hands it over when they submit, and the action is given it as
+// `input` — so `state` stays the thing that is hashed, signed and replayed.
+
+app "id.vaulet.example.note"
+version 1
+
+capabilities {
+}
+
+state {
+  note:      string default ""
+  reminders: bool default false
+}
+
+action Save {
+  input {
+    body:  string
+    remind: bool
+  }
+
+  require {
+    body != ""
+  }
+
+  update {
+    note:      body
+    reminders: remind
+  }
+}
+
+screen Note {
+  title: sentence("noteTitle")
+
+  column {
+    card(text: sentence("current", note: state.note))
+
+    section(text: sentence("write"))
+    field(text: sentence("body"), into: body)
+    toggle(text: sentence("remind"), into: remind)
+
+    button(text: sentence("save"), emphasis: primary, onTap: Save)
+  }
+}

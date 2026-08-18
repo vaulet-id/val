@@ -118,7 +118,10 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
         return write(json!({ "error": "the wallet is not valid JSON" }).to_string());
     };
     let before = valang_runtime::initial_state(&program, &host.state());
-    let run = run_action(&program, source, action, &before, &BTreeMap::new(), &host);
+    // What the form held when it was submitted. The host collected it and
+    // handed it over; nothing about it was ever application state.
+    let submitted = json_state(&input["input"]);
+    let run = run_action(&program, source, action, &before, &submitted, &host);
     let r = &run.record;
 
     write(
@@ -310,6 +313,26 @@ fn catalogues(j: &Json) -> valang::catalogue::Catalogues {
         }
     }
     valang::catalogue::Catalogues::of(loaded)
+}
+
+/// A JSON object as the values an action is given.
+fn json_state(j: &Json) -> BTreeMap<String, valang_runtime::value::Value> {
+    let mut out = BTreeMap::new();
+    if let Some(map) = j.as_object() {
+        for (k, v) in map {
+            let value = match v {
+                Json::String(s) => valang_runtime::value::Value::Str(s.clone()),
+                Json::Bool(b) => valang_runtime::value::Value::Bool(*b),
+                Json::Number(n) => n
+                    .as_i64()
+                    .map(valang_runtime::value::Value::Int)
+                    .unwrap_or(valang_runtime::value::Value::Null),
+                _ => valang_runtime::value::Value::Null,
+            };
+            out.insert(k.clone(), value);
+        }
+    }
+    out
 }
 
 fn text_bundle(j: &Json) -> valang::TextBundle {

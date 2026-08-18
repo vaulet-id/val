@@ -133,12 +133,12 @@ export default function App() {
   // produces goes straight to the publisher's handler — which is the whole
   // transaction, and the thing no tool shows in one place today.
   const dispatch = React.useCallback(
-    async (action: string) => {
+    async (action: string, input: Record<string, unknown> = {}) => {
       if (!ready) return
       setRunning(true)
       setDebug(true)
 
-      const run = val.run(packageSource, action, wallet)
+      const run = val.run(packageSource, action, wallet, input)
       let decision: Decision | undefined
       if (run.token && run.deviceKey) {
         decision = await runHandler(

@@ -151,6 +151,11 @@ export function verifyRecord(token: string, source: string, deviceKey: string): 
 
 /// One action, against the wallet the caller supplies — which is the file
 /// somebody can edit, so a run here is a run over data they chose.
-export function run(source: string, action: string, wallet: unknown): RunResult {
-  return call('val_run', { source, action, wallet }) as RunResult
+export function run(
+  source: string,
+  action: string,
+  wallet: unknown,
+  input: Record<string, unknown> = {},
+): RunResult {
+  return call('val_run', { source, action, wallet, input }) as RunResult
 }
