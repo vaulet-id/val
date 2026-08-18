@@ -1,45 +1,36 @@
 # Actions
 
-An action is the only thing that runs. It is a function:
-
-```
-(previous state, input, runtime context, code) → (new state, output, effects)
-```
-
-Everything else in the language exists so that signature can be true — which is
-what makes a run replayable, and a replayable run is the only kind that can be
-proved.
+An action is the only thing that runs:
 
 ```
 input → require → verify → compute → update → execute
 ```
 
-Omit any of them; never reorder them.
+Omit any phase; never reorder them.
 
-## The four ways an action does not commit
+## Choosing how an action declines
 
-They are different things to different people, and choosing the wrong one is the
-most common mistake in a first application.
+There are four ways an action does not commit, and picking the wrong one is the
+most common mistake in a first app.
 
 | | who sees it | when to use it |
 | --- | --- | --- |
-| `require` fails | nobody | a thing that should never be false. It being false is your bug |
-| `verify` fails | the person | the credential was forged, stale, or outside your anchor |
+| `require` fails | nobody | something that should never be false. If it is, you have a bug |
+| `verify` fails | the person | a forged, expired or out-of-anchor credential |
 | `refuse "key"` | the person | your own rule: too small, too soon, already claimed |
-| the host refuses | the person | they said no |
+| the wallet refuses | the person | they said no |
 
 A business rule in `require` gets you a crash where you wanted a message. A bug
 in `refuse` gets somebody a polite sentence about a mistake you made.
 
-## Declaring one binds nothing
+## Declaring an action does not run it
 
-An action happens because somebody pressed something. If no screen in the package
-names it in an `onTap`, nothing can reach it — and the compiler says so, because
-**the capabilities it needs are still on the consent sheet a person agreed to**.
+An action runs because somebody pressed something. If no screen in the package
+names it in an `onTap`, nothing can reach it — and the compiler tells you,
+because the capabilities it needs are still on the consent sheet.
 
-Actions may live in one file and be pressed from a screen in another: a package
-is one scope. A package with no screens at all is a fragment waiting for the rest
-of itself, and is left alone.
+Actions may live in one file and be pressed from a screen in another; a package
+is one scope.
 
 ## `input`
 
@@ -50,11 +41,11 @@ input {
 ```
 
 Names declared here are in scope for every later phase, bare — `receipt`, not
-`input.receipt`, the way a function's parameters are.
+`input.receipt`.
 
 ## `require`
 
-Preconditions, and narrowing:
+Preconditions, and narrowing an optional:
 
 ```val
 require {
@@ -63,28 +54,24 @@ require {
 }
 ```
 
-`exists` rather than `!= null`, because the people who most need to read this
-block are the ones for whom `null` is jargon. Until you have said it, reading
-through `state.member` is a type error rather than a crash later.
+Use `exists`, not `!= null`. Until you have said it, reading through
+`state.member` is a type error rather than a crash later.
 
 ## `verify`
 
-Trust policies, and the only place a credential becomes usable. Multiple
-expressions are implicitly ANDed.
+Trust policies, and the only place a credential becomes usable. Several
+expressions are combined with AND.
 
 ## `compute`
 
-Pure. No effects, and **no effect can hide behind a function** — every `function`
-in this language is pure, so there is no effectful helper to call.
+Pure. No effects, and no effect can hide behind a function — every `function` in
+this language is pure.
 
-That costs you something real: a sequence of effects used by three actions gets
-written out three times. In exchange, "what can this action do" is one block you
-can read, rather than a call graph you have to follow. For a language whose whole
-purpose is that question, the trade is not close.
+Arithmetic traps rather than wraps: overflow and division by zero stop the
+action.
 
-Arithmetic here traps rather than wraps. Overflow and division by zero stop the
-action, because a wrong number that the execution record would then faithfully
-prove is worse than a failure.
+Note: a sequence of effects used by three actions has to be written out three
+times. In exchange, everything an action can do is in its `execute` block.
 
 ## `update`
 
@@ -98,12 +85,9 @@ update {
 }
 ```
 
-Each line names a field and the value it takes; anything unnamed is unchanged. A
-colon and not `=` — there is no assignment anywhere in this language — and the
-previous state is still readable as `state.…` on the right of every line.
-
-Paths may nest and may not contain a list index. If you need a new list, build it
-in `compute` and name it here in one line.
+Each line names a field and the value it takes; anything unnamed is unchanged.
+Paths may nest but may not contain a list index — build the new list in
+`compute` and name it here in one line.
 
 ## `execute`
 
@@ -115,16 +99,16 @@ execute {
 }
 ```
 
-`next` is the state `update` produced. Recomputing the same arithmetic here
-instead is how two copies of one number start disagreeing.
+`next` is the state `update` produced. Use it rather than recomputing the same
+arithmetic here.
 
-**The effects here are one batch.** The host takes all of them or none, and your
-state commits only if it took them. No effect may read another's result — if one
-genuinely depends on another's outcome, that is two actions, and the person gets
-to see both.
+**The effects are one batch.** The wallet takes all of them or none, and your
+state commits only if it did. No effect may read another's result — if one
+depends on another's outcome, that is two actions.
 
-Irreversible effects are ordered last automatically, and an action performs **at
-most one disclosure**: nothing un-tells somebody a postcode, so a second one
-could not be conditional on a batch the first has already completed.
+**At most one disclosure per action.** A disclosure cannot be undone, so a second
+one could not depend on a batch the first has already completed.
+
+Irreversible effects are ordered last automatically.
 
 Next: [screens](06-screens.md).

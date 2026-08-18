@@ -1,7 +1,7 @@
 # Reference
 
-Everything the language has, in one place. The reasoning behind each is in
-[the specification](../spec.md); this is the list.
+Everything the language has, in one place. For the rules behind each, see
+[the reference](../spec.md).
 
 ## Types
 

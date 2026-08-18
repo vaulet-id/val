@@ -1,13 +1,15 @@
 # Your first application
 
-A loyalty card. Somebody scans a receipt, earns a point per baht, and their
-membership credential is reissued at the new balance.
+You will build a loyalty card. Somebody scans a receipt, earns a point per baht,
+and their membership credential is reissued at the new balance.
 
-It is a small application and it uses everything: reading a credential, checking
-who issued it, computing, changing state, and asking the host to issue something
-new. Build this and the rest of the guide is detail.
+It is small and it uses everything: reading a credential, checking who issued
+it, computing, changing state, and asking the wallet to issue something new.
 
-## Say who you are and what you may do
+Open the playground and follow along, or create `loyalty.val` and `text.json` in
+a directory.
+
+## 1. Declare what the app is and what it may do
 
 ```val
 app "th.co.codefin.loyalty"
@@ -19,14 +21,13 @@ capabilities {
 }
 ```
 
-Two things a person will see before they install this, and the only two things
-this application will ever be allowed to do.
+These are the only two things this app will ever be allowed to do, and the
+person sees both before installing.
 
-Declare a capability you do not use and the build fails. That is not tidiness:
-consent asked for something unused is consent spent on nothing, and it is how
-people learn to press yes without reading.
+Caution: declaring a capability you do not use fails the build. Do not add
+capabilities in advance of needing them.
 
-## Describe the data
+## 2. Describe the data
 
 ```val
 enum Tier { bronze, silver, gold }
@@ -49,16 +50,13 @@ state {
 }
 ```
 
-`amount` is in satang because **there is no floating point**. Money in this
-language is always minor units — and so is everything else that would want a
-decimal point. A quantity of shares is micro-shares; a percentage is basis
-points.
+`amount` is in satang because there is no floating point. Money is always minor
+units; a percentage is basis points.
 
-`state` is yours and it persists between actions. `member` is optional, written
-`LoyaltyMember?`, which means you cannot read through it until you have said it
-exists.
+`state` persists between actions. `member` is optional — `LoyaltyMember?` — so
+you cannot read through it until you have said it exists.
 
-## Say who you trust
+## 3. Say who you trust
 
 ```val
 trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
@@ -72,16 +70,14 @@ trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
 }
 ```
 
-A trust policy is the only way to get at what a credential says. It names an
-**anchor** — a root the chain resolves against — rather than a specific issuer,
-so a merchant joining your scheme does not mean shipping a new version of your
-app.
+A trust policy is the only way to reach what a credential says. `anchor` names a
+root the chain resolves against, so a merchant joining your scheme does not mean
+shipping a new version.
 
-The three faces above are on every credential: was it signed, has it been
-revoked, is it held by the person in front of you. An application that decided
-those for itself is the thing trust policies exist to prevent.
+The three checks above are on every credential: was it signed, has it been
+revoked, is it held by the person in front of you.
 
-## Write the action
+## 4. Write the action
 
 ```val
 action ScanToEarn {
@@ -123,32 +119,22 @@ action ScanToEarn {
 }
 ```
 
-Six phases, in that order, and you may omit any of them.
+Six phases, always in this order. You may omit any of them.
 
-**`require`** is for things that should never be false. If one is, it is a bug in
-your application: the action stops and nobody is shown a message.
+| phase | what it is for |
+| --- | --- |
+| `require` | things that should never be false. If one is, you have a bug and nobody is shown a message |
+| `verify` | where a credential becomes usable. Failing here is ordinary, and the person is told |
+| `compute` | pure calculation. `refuse` declines for your own reasons, naming a key in `text.json` |
+| `update` | the next state, as a table of what changed. `:` not `=` |
+| `execute` | effects. It builds a request; the wallet asks the person, and your state commits only if they agree |
 
-**`verify`** is where a credential becomes usable. `receipt with
-ReceiptFromMerchant` produces a `Verified<ReceiptFromMerchant>` — and that type,
-naming the policy, is the only way to reach `claims`. Failing here is ordinary:
-a forged or stale receipt, and the person is told.
+`receipt with ReceiptFromMerchant` produces a `Verified<ReceiptFromMerchant>`.
+That type is the only way to reach `.claims`, so the check cannot be forgotten.
 
-**`compute`** is pure. No effects, and `refuse` is how you decline for your own
-reasons — naming a key in your text bundle, because the sentence somebody reads
-has to be one that was signed.
+## 5. Add the sentences
 
-**`update`** describes the next state as a table of what changed. Not
-assignment: a colon, because the line says what the next state is while the
-previous one is still readable on the right of it.
-
-**`execute`** is the only place an effect appears — and it does not perform one.
-It builds a request, the host asks the person, and your state commits only if
-they said yes.
-
-## Add the sentences
-
-Nothing in the code above is a sentence somebody reads. Those live in
-`text.json`, one entry per key, one line per language:
+No sentence a person reads is in the code. They live in `text.json`:
 
 ```json
 {
@@ -162,17 +148,17 @@ Nothing in the code above is a sentence somebody reads. Those live in
 }
 ```
 
-A key with no translation for a locale you ship to is a **failed build**, not a
-bug report. So is a key your code names and the bundle does not have.
+A key your code names that the bundle does not have is a failed build. So is a
+key with no translation for a locale you ship to.
 
-## Check it
+## 6. Check it
 
 ```bash
-valc loyalty.val        # reads text.json beside it
+valc loyalty.val
 ```
 
-Diagnostics first, then the capability report — which is what a person will be
-shown, derived from your code rather than written by you:
+You get diagnostics first, then the capability report — what the person will be
+shown, derived from your code:
 
 ```
 th.co.codefin.loyalty v1
@@ -184,7 +170,7 @@ writes state   lifetimePoints, member.points, member.tier
 irreversible   none
 ```
 
-Read that as your user would. If it says something you did not intend, the code
-says it — the report cannot be edited, and the host recomputes it anyway.
+Read it as your user would. If it says something you did not intend, your code
+says it — the report cannot be edited, and the wallet recomputes it anyway.
 
 Next: [capabilities and consent](03-capabilities.md).

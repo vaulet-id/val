@@ -1,6 +1,6 @@
 # Screens
 
-You declare a screen. The host draws it.
+You declare a screen. The wallet draws it.
 
 ```val
 screen Wallet {
@@ -23,63 +23,59 @@ screen Wallet {
 
 ## Declare your data; do not fetch it
 
-The `data` block is resolved by the host **before anything is drawn**. No
-half-drawn screen, no permission prompt arriving while somebody is scrolling, and
-one block a reviewer can read to learn what this screen sees of a wallet.
+The wallet resolves the `data` block before anything is drawn. No half-drawn
+screen, and no permission prompt arriving while somebody is scrolling.
 
-`verified with` is doing real work: the list cannot show a receipt that failed
-the policy. Not "is filtered out" — cannot appear, because the filtering is the
-host's and not a line of your code that somebody could delete.
+`verified with` means a receipt that fails the policy cannot appear — not "is
+filtered out". The filtering is the wallet's, not a line of your code somebody
+could delete.
 
-`limit` is not politeness. It is what makes a total over the list a bounded
-computation, and what lets a proof over it compile to a circuit.
+`limit` is required on a list you compute over. It bounds the work, which is
+what lets a total over the list compile to a circuit.
 
 ## A press names an action
 
 `onTap` names an action you declared. There is no other kind of handler, so
-everything a screen can start goes through `require → verify → compute → update →
-execute`, with the same consent and the same record. **A screen adds no path to
-an effect.**
+everything a screen can start goes through the six phases with the same consent
+and the same record.
 
-## The components are the host's
+## The components are the wallet's
 
-You get what the host ships. On Vaulet today that is a small set — cards, rows,
-sections, lists, buttons — and asking for something else does not draw something
-approximate, it says the component is not in this catalogue.
+```val
+column { … }
+section(text: "key")
+card(text: "key", slot: value)
+row(text: "key", slot: value, onTap: Action)
+list(binding) { item -> … }
+button(text: "key", emphasis: primary, onTap: Action)
+```
 
-Props are **semantic**: `text`, `icon`, `emphasis`, `state`, `onTap`. No colours,
-no fonts, no pixel sizes. Every application looks like it belongs to the wallet,
-which is a feature for the person and a constraint for you. If you need pixels,
-you want the webview tier — and its lower capability ceiling.
+Props are semantic: `text`, `icon`, `emphasis`, `state`, `onTap`. No colours, no
+fonts, no pixel sizes. Asking for a component the catalogue does not have is
+reported, not approximated.
 
-Your package records which catalogue version it was built against, and a host
-renders those semantics or refuses. A component that quietly means something else
-on a later version is a screen the person did not consent to.
+If you need pixels, use the webview tier and its lower capability ceiling.
 
 ## Text is not in your code
 
-`text: "balance"` is a key into your signed bundle, never a sentence:
+`text: "balance"` is a key into your signed bundle:
 
 ```json
 "balance": { "en": "You have {points} points", "th": "คุณมี {points} แต้ม" }
 ```
 
-You supply the slots; the host formats them. That is not a division for its own
-sake — it means Thai numerals, the Buddhist era and the currency position are
-right once for every application, instead of being wrong differently in forty of
-them.
-
-Strings cannot be built in VAL at all. No interpolation, no `+`. Every sentence a
-person reads comes from something that was signed, which is also what makes the
-rule against imitating the wallet's own chrome enforceable.
+You supply the slots; the wallet formats them. Thai numerals, the Buddhist era
+and currency position are right once for every app instead of being wrong
+differently in forty of them.
 
 ## Interaction state is not your state
 
 Which tab is open, where a list is scrolled, what is typed in a field that has
-not been submitted: all the host's. Your `state` is hashed, signed and replayed —
-a scroll position in it would dilute the word "provable" by every press.
+not been submitted: all the wallet's. You get what the form held at the moment
+it was submitted, through `input`.
 
-You get what the form held **at the moment it was submitted**, through `input`.
+Note: your `state` is hashed, signed and replayed. A scroll position in it would
+dilute what "provable" means, one press at a time.
 
 ## Screens derive but do not act
 
@@ -89,8 +85,8 @@ compute {
 }
 ```
 
-Pure, an action's rules, no effects. Keeping a total in `state` instead would
-hash, sign and replay a number that is a function of what is already on the
-screen — which is how two copies of one number start disagreeing.
+Pure, an action's rules, no effects. Keep a total here rather than in `state` —
+a value you can compute from what is already on the screen does not need to be
+stored.
 
 Next: [disclosing and proving](07-disclosing-and-proving.md).
