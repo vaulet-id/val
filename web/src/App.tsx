@@ -213,7 +213,10 @@ export default function App() {
 
           <ResizablePanel defaultSize={32} minSize={18}>
             <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col">
-              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-2">
+              {/* Room above and below the group. Flush against the rule it
+                  sits on, a control reads as part of the border rather than as
+                  something to press. */}
+              <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-2 py-2">
                 <TabsList>
                   <TabsTrigger value="screen">Preview</TabsTrigger>
                   <TabsTrigger value="report">Report</TabsTrigger>

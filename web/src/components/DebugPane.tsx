@@ -29,7 +29,7 @@ export function DebugPane({
 
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-y border-[var(--color-border)] px-2">
+      <div className="flex shrink-0 items-center gap-2 border-y border-[var(--color-border)] px-2 py-2">
         <TabsList>
           <TabsTrigger value="problems">
             Problems{diagnostics.length ? ` ${diagnostics.length}` : ''}
