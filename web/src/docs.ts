@@ -50,10 +50,15 @@ export type Page = {
   headings: { id: string; text: string }[]
 }
 
+/// A title, as an id.
+///
+/// Letters and numbers in any script, not `a-z0-9`: every Thai title stripped
+/// to the empty string, so every page in the Thai guide had the same id — the
+/// nav highlighted all of them at once and opening one opened the first.
 const slug = (s: string) =>
   s
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .trim()
     .replace(/\s+/g, '-')
 
