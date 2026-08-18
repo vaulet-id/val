@@ -3,21 +3,36 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { FileCode2, FileJson, FileText } from 'lucide-react'
 import type { SourceFile } from '@/examples'
 
-type Item = { path: string; name: string; note?: string }
+type Item = { path: string; name: string; note?: string; pkg?: string }
 
 export function FileTree({
-  files, hostFiles, serverFiles, active, onSelect, heading,
+  files, hostFiles, serverFiles, active, onSelect,
 }: {
   files: Item[]
   hostFiles?: Item[]
   serverFiles?: Item[]
   active: string
   onSelect: (path: string) => void
-  heading: string
 }) {
+  // One heading per package, not one heading called "package".
+  //
+  // They were listed together, which said these six files were one application
+  // — so the preview showing a screen declared in a file you were not looking
+  // at had no explanation on screen. They are four packages, and saying so is
+  // the explanation.
+  const packages = [...new Set(files.map((f) => f.pkg ?? ''))]
+
   return (
     <aside className="flex h-full min-w-0 flex-col">
-      <Group label={heading} files={files} active={active} onSelect={onSelect} />
+      {packages.map((pkg) => (
+        <Group
+          key={pkg}
+          label={pkg}
+          files={files.filter((f) => (f.pkg ?? '') === pkg)}
+          active={active}
+          onSelect={onSelect}
+        />
+      ))}
       {/* The host's own data, in its own group. A `.va` never carries somebody's
           wallet, and putting it under the same heading as the package would be
           the one line of this interface that lied. */}
@@ -26,7 +41,8 @@ export function FileTree({
           goes near the phone. */}
       {serverFiles?.length ? <Group label="server" files={serverFiles} active={active} onSelect={onSelect} /> : null}
       <div className="mt-auto border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-snug text-[var(--color-muted-foreground)]">
-        One package, several files, one scope — no imports across packages.
+        A package is several files sharing one scope. Nothing is imported across
+        one.
       </div>
     </aside>
   )
