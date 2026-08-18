@@ -1,8 +1,20 @@
 import { marked } from 'marked'
 import spec from '../../docs/spec.md?raw'
-import readme from '../../README.md?raw'
-import examples from '../../examples/README.md?raw'
-import preview from '../../preview/README.md?raw'
+
+// The guide, which is the documentation somebody arrives for: they want to
+// build a Micro App, not to argue about the language. The specification stays,
+// at the bottom, because a guide that answers most questions still has to
+// point at the thing that answers the rest exactly.
+import g01 from '../../docs/guide/01-what-you-are-building.md?raw'
+import g02 from '../../docs/guide/02-your-first-application.md?raw'
+import g03 from '../../docs/guide/03-capabilities.md?raw'
+import g04 from '../../docs/guide/04-credentials-and-trust.md?raw'
+import g05 from '../../docs/guide/05-actions.md?raw'
+import g06 from '../../docs/guide/06-screens.md?raw'
+import g07 from '../../docs/guide/07-disclosing-and-proving.md?raw'
+import g08 from '../../docs/guide/08-state-and-versions.md?raw'
+import g09 from '../../docs/guide/09-publishing.md?raw'
+import g10 from '../../docs/guide/10-reference.md?raw'
 
 // The documents, cut into pages at their `##` headings.
 //
@@ -84,6 +96,35 @@ function pages(markdown: string, group: string, openingTitle: string): Page[] {
   return out
 }
 
+/// A guide page is a whole document — its `#` title, its own sections. Cutting
+/// one at `##` would scatter a single explanation across five nav entries.
+function page(markdown: string, group: string): Page {
+  const lines = markdown.split('\n')
+  const title = (lines.find((l) => l.startsWith('# ')) ?? '# Untitled').slice(2).trim()
+  const body = lines.filter((l) => !l.startsWith('# ')).join('\n').trim()
+  const headings = body
+    .split('\n')
+    .filter((l) => l.startsWith('## '))
+    .map((l) => {
+      const text = l.slice(3).replace(/[`*]/g, '')
+      return { id: slug(text), text }
+    })
+  const lede = body
+    .split('\n\n')
+    .map((p) => p.trim())
+    .find((p) => p && !p.startsWith('#') && !p.startsWith('```') && !p.startsWith('|') && !p.startsWith('>'))
+  const lifted = lede && lede.length < 320 ? lede : undefined
+  return {
+    id: `${slug(group)}/${slug(title)}`,
+    group,
+    title,
+    section: group,
+    lede: lifted?.replace(/[`*]/g, ''),
+    markdown: lifted ? body.replace(lifted, '').trim() : body,
+    headings,
+  }
+}
+
 /// Which group a specification section belongs under.
 ///
 /// Twelve numbered sections in a flat list is a table of contents, not a
@@ -92,11 +133,7 @@ function pages(markdown: string, group: string, openingTitle: string): Page[] {
 /// finding out what this is, learning to write it, understanding what happens
 /// when it runs, or looking for the parts nobody has settled.
 const SPEC_GROUPS: [string, string[]][] = [
-  ['Start here', ['What VAL is for', 'Shape of a program']],
-  ['Writing it', ['Values and types', 'Verification', 'Actions', 'Totality']],
-  ['Running it', ['Execution and its record', 'Compilation target', 'Proofs']],
-  ['Interfaces', ['User interface']],
-  ['Unsettled', ['Open questions', 'Order of work']],
+  ['The specification', []],
 ]
 
 function grouped(markdown: string, fallback: string): Page[] {
@@ -107,17 +144,27 @@ function grouped(markdown: string, fallback: string): Page[] {
 }
 
 export const docs: Page[] = [
-  ...grouped(spec, 'Start here'),
-  ...pages(readme, 'Why VAL', 'Overview'),
-  ...pages(examples, 'Examples', 'Overview'),
-  ...pages(preview, 'The renderer', 'Overview'),
+  page(g01, 'Getting started'),
+  page(g02, 'Getting started'),
+  page(g03, 'Building an app'),
+  page(g04, 'Building an app'),
+  page(g05, 'Building an app'),
+  page(g06, 'Building an app'),
+  page(g07, 'Building an app'),
+  page(g08, 'Building an app'),
+  page(g09, 'Shipping it'),
+  page(g10, 'Shipping it'),
+  ...grouped(spec, 'The specification'),
 ]
 
 /// In the order the groups are written above, then anything else — a group that
 /// arrives later should appear where it belongs rather than where it was added.
+/// The order somebody meets them in: what this is, how to write one, how to
+/// ship it — and the exact rules underneath, for when the guide is not enough.
+const ORDER = ['Getting started', 'Building an app', 'Shipping it', 'The specification']
 export const groups = [
-  ...SPEC_GROUPS.map(([name]) => name).filter((g) => docs.some((d) => d.group === g)),
-  ...[...new Set(docs.map((d) => d.group))].filter((g) => !SPEC_GROUPS.some(([name]) => name === g)),
+  ...ORDER.filter((g) => docs.some((d) => d.group === g)),
+  ...[...new Set(docs.map((d) => d.group))].filter((g) => !ORDER.includes(g)),
 ]
 
 marked.use({

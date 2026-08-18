@@ -9,9 +9,10 @@ refuses; and what actually ran can be recorded, replayed and checked afterwards
 by somebody who was not there. That is the whole idea. Everything below is a
 consequence of it.
 
-**Nothing here works yet.** The specification is [`docs/spec.md`](docs/spec.md)
-and the open questions at the end of it are still open. What follows is why it
-is shaped the way it is.
+**Building a Micro App?** Start with [the guide](docs/guide/01-what-you-are-building.md),
+which is written for you rather than for whoever is arguing about the language.
+The exact rules are in [`docs/spec.md`](docs/spec.md), and the open questions at
+the end of it are still open. What follows is why it is shaped the way it is.
 
 ## Why a language rather than a sandbox
 
