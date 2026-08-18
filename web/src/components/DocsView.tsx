@@ -11,7 +11,8 @@ import { registerVal } from '@/val/monaco-lang'
 //
 // The middle column is measured rather than filled — a specification is read in
 // long paragraphs, and a line of prose that runs the width of a monitor is one
-// the eye loses on the way back.
+// the eye loses on the way back. Wide enough that the code blocks, which are
+// the widest thing on most pages, stop wrapping before the prose does.
 
 export function DocsView({ dark, locale }: { dark: boolean; locale: Locale }) {
   const docs = React.useMemo(() => pagesFor(locale), [locale])
@@ -114,7 +115,7 @@ export function DocsView({ dark, locale }: { dark: boolean; locale: Locale }) {
 
       {/* The page */}
       <ScrollArea className="min-w-0 flex-1">
-        <div ref={body} className="mx-auto max-w-[46rem] px-10 py-8">
+        <div ref={body} className="mx-auto max-w-[60rem] px-12 py-8">
           <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-muted-foreground)]">
             <span>VAL</span>
             <ChevronRight className="size-3" />
