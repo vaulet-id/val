@@ -1,21 +1,53 @@
 {
   "_comment": "The catalogue package's own bundle. Every slot a component takes is filled here, which is the point: code supplies values and the wallet formats them.",
-  "locales": ["en", "th"],
+  "locales": [
+    "en",
+    "th"
+  ],
   "keys": {
     "summary": {
       "en": "{presses} presses · {spent} spent",
       "th": "กด {presses} ครั้ง · ใช้ไป {spent}"
     },
-    "rows": { "en": "Rows", "th": "แถว" },
-    "plainRow": { "en": "A row with no action", "th": "แถวที่ไม่มี action" },
-    "pressableRow": { "en": "A row that calls Press", "th": "แถวที่เรียก Press" },
-    "fromTheWallet": { "en": "From the wallet", "th": "จาก wallet" },
+    "rows": {
+      "en": "Rows",
+      "th": "แถว"
+    },
+    "plainRow": {
+      "en": "A row with no action",
+      "th": "แถวที่ไม่มี action"
+    },
+    "pressableRow": {
+      "en": "A row that calls Press",
+      "th": "แถวที่เรียก Press"
+    },
+    "fromTheWallet": {
+      "en": "From the wallet",
+      "th": "จาก wallet"
+    },
     "receiptRow": {
       "en": "{merchant} · {at}",
       "th": "{merchant} · {at}"
     },
-    "buttons": { "en": "Buttons", "th": "ปุ่ม" },
-    "secondary": { "en": "Reset", "th": "เริ่มใหม่" },
-    "primary": { "en": "Press", "th": "กด" }
+    "buttons": {
+      "en": "Buttons",
+      "th": "ปุ่ม"
+    },
+    "secondary": {
+      "en": "Reset",
+      "th": "เริ่มใหม่"
+    },
+    "primary": {
+      "en": "Press",
+      "th": "กด"
+    },
+    "receiptTitle": {
+      "en": "Receipt",
+      "th": "ใบเสร็จ"
+    },
+    "receiptDetail": {
+      "en": "{merchant} · {amount}",
+      "th": "{merchant} · {amount}"
+    }
   }
 }

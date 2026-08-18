@@ -312,6 +312,10 @@ impl Expr {
         match self {
             Expr::Ident { name, .. } => Some(name.clone()),
             Expr::Member { obj, name, .. } => Some(format!("{}.{}", obj.path()?, name)),
+            // `Receipt(merchant: …)` — what a press names is the callee, and
+            // the arguments are what it is opened with. Without this a press
+            // that hands something over was a press that named nothing.
+            Expr::Call { callee, .. } => callee.path(),
             _ => None,
         }
     }

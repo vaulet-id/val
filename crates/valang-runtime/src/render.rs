@@ -58,6 +58,22 @@ pub fn render(
     state: &BTreeMap<String, Value>,
     host: &dyn Host,
 ) -> Result<Screen, Trap> {
+    render_with(program, screen_name, state, &BTreeMap::new(), host)
+}
+
+/// Resolve a screen with what a press handed it.
+///
+/// A screen takes parameters the way a component does, so a detail screen can be
+/// written once and opened with any row. The values are bound before anything is
+/// evaluated, which is why a parameterised screen cannot be resolved ahead of
+/// time and is resolved when it is opened.
+pub fn render_with(
+    program: &Program,
+    screen_name: &str,
+    state: &BTreeMap<String, Value>,
+    args: &BTreeMap<String, Value>,
+    host: &dyn Host,
+) -> Result<Screen, Trap> {
     let screen: &ScreenDecl = program
         .screens
         .iter()
@@ -65,6 +81,9 @@ pub fn render(
         .ok_or_else(|| Trap::Unsupported(format!("no screen named `{screen_name}`")))?;
 
     let mut ev = Eval::new(program, host.context());
+    for (name, value) in args {
+        ev.bind(name, value.clone());
+    }
     let mut resolved = Vec::new();
 
     for d in &screen.data {
@@ -151,7 +170,24 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
             (_, Some(name), Value::Null) if !name.contains('.') => Value::Str(name),
             _ => evaluated,
         };
-        args.insert(key, value);
+        args.insert(key.clone(), value);
+
+        // `onTap: Detail(receipt: r)` — the target's own arguments, evaluated
+        // here where `r` is bound, so what a screen is opened with is a value
+        // rather than an expression somebody else has to evaluate later.
+        if key == "onTap" {
+            if let valang::ast::Expr::Call { args: given, .. } = &a.value {
+                let mut with = BTreeMap::new();
+                for g in given {
+                    if let Some(name) = &g.name {
+                        with.insert(name.clone(), ev.expr(&g.value, state).unwrap_or(Value::Null));
+                    }
+                }
+                if !with.is_empty() {
+                    args.insert("onTapWith".to_string(), Value::Map(with));
+                }
+            }
+        }
     }
 
     // `list(receipts) { r -> row(…) }` is expanded here, with `r` bound, so what

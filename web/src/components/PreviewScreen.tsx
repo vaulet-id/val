@@ -6,13 +6,14 @@ import type { Resolved } from '@/val/wasm'
 // compiler parsed, the signed text bundle, and the file somebody can edit.
 
 export function PreviewScreen({
-  screens, text, locale, dark, onTap,
+  screens, text, locale, dark, onTap, onScreen,
 }: {
   screens: Resolved[]
   text: Record<string, Record<string, string>>
   locale: 'th' | 'en'
   dark: boolean
   onTap: (action: string, input: Record<string, unknown>) => void
+  onScreen?: (screen: string, args: Record<string, unknown>) => void
 }) {
   const frame = React.useRef<HTMLIFrameElement>(null)
   const [ready, setReady] = React.useState(false)
@@ -25,6 +26,9 @@ export function PreviewScreen({
         const msg = JSON.parse(e.data)
         if (msg.ready) setReady(true)
         if (msg.type === 'tap' && msg.action) onTap(msg.action, msg.input ?? {})
+        // A screen that takes parameters is resolved when it is opened, because
+        // its content depends on the row that opened it.
+        if (msg.type === 'screen' && msg.screen) onScreen?.(msg.screen, msg.args ?? {})
       } catch {
         /* not ours */
       }

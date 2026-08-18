@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ALLOWED, blankFile, bundleOf, examples, type Group, HOST, hostFiles, newProject, type Project } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
+import type { Resolved } from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
 import { Button } from '@/components/ui/button'
 import { Play, Loader2 } from 'lucide-react'
@@ -55,6 +56,9 @@ export default function App() {
   const [hosts, setHosts] = React.useState(hostFiles)
   const [project, setProject] = React.useState(examples[0].id)
   const [running, setRunning] = React.useState(false)
+  /// Screens resolved on the way in, keyed by name. A screen with parameters has
+  /// no content until something opens it.
+  const [opened, setOpened] = React.useState<Record<string, Resolved>>({})
 
   const monaco = useMonaco()
 
@@ -128,6 +132,23 @@ export default function App() {
       return []
     }
   }, [ready, analysis, packageSource, wallet])
+
+  /// A screen the preview moved to, resolved with what the press handed it.
+  ///
+  /// The host does this, not the application: moving between screens never
+  /// reaches an application, and this is the host looking up what it draws.
+  const openScreen = React.useCallback(
+    (name: string, args: Record<string, unknown>) => {
+      if (!ready) return
+      try {
+        const s = val.screen(packageSource, name, wallet, args) as unknown as Resolved
+        setOpened((all) => ({ ...all, [name]: s }))
+      } catch {
+        /* the screen stays as it was resolved without arguments */
+      }
+    },
+    [ready, packageSource, wallet],
+  )
 
   // One press, both sides. The action runs on the device and the record it
   // produces goes straight to the publisher's handler — which is the whole
@@ -465,7 +486,14 @@ export default function App() {
               </div>
 
               <TabsContent value="screen" className="min-h-0 flex-1">
-                <PreviewScreen screens={resolved} text={bundle.keys} locale={locale} dark={dark} onTap={dispatch} />
+                <PreviewScreen
+                  screens={resolved.map((s) => opened[s.name] ?? s)}
+                  text={bundle.keys}
+                  locale={locale}
+                  dark={dark}
+                  onTap={dispatch}
+                  onScreen={openScreen}
+                />
               </TabsContent>
 
               <TabsContent value="report" className="min-h-0 flex-1">

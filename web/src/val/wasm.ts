@@ -99,6 +99,7 @@ type Exports = {
   val_alloc: (len: number) => number
   val_free: (ptr: number, len: number) => void
   val_analyse: (ptr: number, len: number) => number
+  val_screen: (ptr: number, len: number) => number
   val_render: (ptr: number, len: number) => number
   val_verify: (ptr: number, len: number) => number
   val_run: (ptr: number, len: number) => number
@@ -112,7 +113,10 @@ export async function load(): Promise<void> {
   wasm = instance.exports as unknown as Exports
 }
 
-function call(fn: 'val_analyse' | 'val_render' | 'val_run' | 'val_verify', input: unknown): unknown {
+function call(
+  fn: 'val_analyse' | 'val_render' | 'val_screen' | 'val_run' | 'val_verify',
+  input: unknown,
+): unknown {
   if (!wasm) throw new Error('the compiler is not loaded')
   const bytes = new TextEncoder().encode(JSON.stringify(input))
   const inPtr = wasm.val_alloc(bytes.length)
@@ -153,6 +157,22 @@ export type VerifyResult = {
 /// check it is teaching.
 export function verifyRecord(token: string, source: string, deviceKey: string): VerifyResult {
   return call('val_verify', { token, source, deviceKey }) as VerifyResult
+}
+
+/// One screen, resolved with what a press handed it. A screen that takes
+/// parameters cannot be resolved ahead of time, so a host asks for it when it
+/// moves.
+export function screen(
+  source: string,
+  name: string,
+  wallet: unknown,
+  args: Record<string, unknown> = {},
+): { name: string; tree: unknown[]; title?: unknown; error?: string } {
+  return call('val_screen', { source, screen: name, wallet, args }) as {
+    name: string
+    tree: unknown[]
+    error?: string
+  }
 }
 
 /// One action, against the wallet the caller supplies — which is the file

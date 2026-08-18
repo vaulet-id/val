@@ -49,7 +49,7 @@ action Reset {
   }
 }
 
-screen Catalogue {
+screen Catalogue start: true {
   // What this screen sees of the wallet, resolved before anything is drawn.
   data {
     receipts: credentials of PurchaseReceipt verified with AnyReceipt
@@ -72,14 +72,15 @@ screen Catalogue {
 
     // `row` — a line with a leading icon. With `onTap` it gains a chevron and
     // becomes pressable; without one it is a line of text.
-    tile(text: "plainRow")
-    tile(text: "pressableRow", onTap: Press)
+    tile(text: sentence("plainRow"))
+    tile(text: sentence("pressableRow"), onTap: Press)
 
     // `list` — one row per element, with each element's slots resolved. An
     // empty list draws the wallet's own empty state, never yours.
     section(text: "fromTheWallet")
     list(receipts) { r ->
-      tile(text: sentence("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at))
+      tile(text: sentence("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at),
+           onTap: Receipt(merchant: r.claims.merchant, amount: r.claims.amount))
     }
 
     // `button` — `emphasis: primary` is the one that docks to the bottom of the
@@ -87,5 +88,16 @@ screen Catalogue {
     section(text: "buttons")
     button(text: "secondary", emphasis: secondary, onTap: Reset)
     button(text: "primary", emphasis: primary, onTap: Press)
+  }
+}
+
+// A screen opened with a row. It is written once and works for every receipt,
+// because what it needs arrives as parameters rather than being read out of a
+// selection somebody had to remember to set.
+screen Receipt(merchant: string, amount: int) {
+  title: sentence("receiptTitle")
+
+  column {
+    card(text: sentence("receiptDetail", merchant: merchant, amount: amount))
   }
 }

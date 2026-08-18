@@ -178,6 +178,31 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
 /// the next renderer is written in. What is left over there is drawing and
 /// formatting, which is what a toolkit is for.
 #[no_mangle]
+/// One screen, resolved with what a press handed it.
+///
+/// A parameterised screen cannot be resolved ahead of time — its content depends
+/// on the row that opened it — so a host asks for it when it moves.
+#[no_mangle]
+pub extern "C" fn val_screen(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let source = input["source"].as_str().unwrap_or("");
+    let name = input["screen"].as_str().unwrap_or("");
+    let wallet = input["wallet"].to_string();
+
+    let (program, _) = valang::analyse(source);
+    let Ok(host) = Fixture::parse(&wallet) else {
+        return write(json!({ "error": "the wallet is not valid JSON" }).to_string());
+    };
+    let state = valang_runtime::initial_state(&program, &host.state());
+    let args = json_state(&input["args"]);
+
+    match valang_runtime::render::render_with(&program, name, &state, &args, &host) {
+        Ok(s) => write(screen_json(&s).to_string()),
+        Err(e) => write(json!({ "error": format!("{e:?}") }).to_string()),
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
     let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
     let source = input["source"].as_str().unwrap_or("");
@@ -193,25 +218,29 @@ pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
         .screens
         .iter()
         .filter_map(|s| resolve_screen(&program, &s.name, &state, &host).ok())
-        .map(|s| {
-            json!({
-                "name": s.name,
-                "title": s.title.as_ref().map(component_json),
-                "start": s.start,
-                "data": s.data.iter().map(|d| json!({
-                    "name": d.name,
-                    "grade": d.grade,
-                    "of": d.of,
-                    "policy": d.policy,
-                    "rows": d.rows,
-                })).collect::<Vec<_>>(),
-                "derived": Json::Object(s.derived.iter().map(|(k, v)| (k.clone(), value_json(v))).collect::<Map<_, _>>()),
-                "tree": s.tree.iter().map(component_json).collect::<Vec<_>>(),
-            })
-        })
+        .map(|s| screen_json(&s))
         .collect();
 
     write(json!({ "screens": screens }).to_string())
+}
+
+/// A resolved screen, as the renderer receives it. One shape, whether a host
+/// asked for every screen or for one it is moving to.
+fn screen_json(s: &valang_runtime::render::Screen) -> Json {
+    json!({
+        "name": s.name,
+        "title": s.title.as_ref().map(component_json),
+        "start": s.start,
+        "data": s.data.iter().map(|d| json!({
+            "name": d.name,
+            "grade": d.grade,
+            "of": d.of,
+            "policy": d.policy,
+            "rows": d.rows,
+        })).collect::<Vec<_>>(),
+        "derived": Json::Object(s.derived.iter().map(|(k, v)| (k.clone(), value_json(v))).collect::<Map<_, _>>()),
+        "tree": s.tree.iter().map(component_json).collect::<Vec<_>>(),
+    })
 }
 
 fn component_json(c: &Component) -> Json {

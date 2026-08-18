@@ -272,10 +272,21 @@ class _PreviewAppState extends State<PreviewApp> {
   bool _isScreen(String target) =>
       _in.screens.any((s) => (s as Map<String, dynamic>)['name'] == target);
 
-  void _navigate(String screen) => setState(() {
-        if (_stack.isEmpty) _stack.add(_opening['name'] as String);
-        _stack.add(screen);
-      });
+  void _navigate(String screen, [Map<String, Object?> args = const {}]) {
+    setState(() {
+      if (_stack.isEmpty) _stack.add(_opening['name'] as String);
+      _stack.add(screen);
+    });
+    // A screen that takes parameters cannot have been resolved ahead of time —
+    // its content depends on the row that opened it — so the host is asked for
+    // it with what the press handed over.
+    if (args.isNotEmpty) {
+      web.window.parent?.postMessage(
+        jsonEncode({'type': 'screen', 'screen': screen, 'args': args}).toJS,
+        '*'.toJS,
+      );
+    }
+  }
 
   void _back() => setState(() {
         if (_stack.length > 1) _stack.removeLast();
@@ -350,7 +361,7 @@ class _Phone extends StatelessWidget {
   });
 
   final bool canGoBack;
-  final void Function(String)? onNavigate;
+  final void Function(String, [Map<String, Object?>])? onNavigate;
   final VoidCallback? onBack;
 
   static const width = 393.0;
@@ -432,9 +443,9 @@ class _Nav extends InheritedWidget {
   const _Nav({required this.go, required super.child});
 
   /// True when the target was a screen and the move happened.
-  final bool Function(String) go;
+  final bool Function(String, Map<String, Object?>) go;
 
-  static bool Function(String)? of(BuildContext c) =>
+  static bool Function(String, Map<String, Object?>)? of(BuildContext c) =>
       c.dependOnInheritedWidgetOfExactType<_Nav>()?.go;
 
   @override
@@ -483,7 +494,7 @@ class _Screen extends StatefulWidget {
   final Map<String, dynamic> screen;
   final Incoming incoming;
   final bool canGoBack;
-  final void Function(String)? onNavigate;
+  final void Function(String, [Map<String, Object?>])? onNavigate;
   final VoidCallback? onBack;
 
   @override
@@ -522,10 +533,10 @@ class _ScreenState extends State<_Screen> {
     final docked = _flatten(nodes).where(_isPrimary).toList();
 
     return _Nav(
-      go: (target) {
+      go: (target, args) {
         final onNavigate = widget.onNavigate;
         if (onNavigate == null || !widget.incoming.hasScreen(target)) return false;
-        onNavigate(target);
+        onNavigate(target, args);
         return true;
       },
       child: _Form(
@@ -901,7 +912,8 @@ class _NodeState extends State<_Node> {
     // moving between screens is the host's own business — it never reaches the
     // application, which is why nothing is posted for it.
     final navigate = _Nav.of(context);
-    if (navigate != null && navigate(target)) return;
+    final with_ = (args['onTapWith'] as Map?)?.cast<String, Object?>() ?? const <String, Object?>{};
+    if (navigate != null && navigate(target, with_)) return;
 
     web.window.parent?.postMessage(
       jsonEncode({'type': 'tap', 'action': target, 'input': _Form.of(context)}).toJS,
