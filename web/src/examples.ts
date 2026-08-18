@@ -4,6 +4,7 @@ import wallet from '../../examples/wallet.val?raw'
 import door from '../../examples/door.val?raw'
 import rejected from '../../examples/rejected.val?raw'
 import textBundle from '../../examples/text.json?raw'
+import portfolioText from '../../examples/portfolio-text.json?raw'
 import walletFixture from '../../fixtures/wallet.json?raw'
 
 /// The one wallet. Every project previews against the same phone, because a
@@ -40,6 +41,7 @@ export const files: SourceFile[] = [
   { path: 'examples/door.val', pkg: 'door', name: 'door.val', source: door, note: 'prove an age, disclose nothing' },
   { path: 'examples/rejected.val', pkg: 'rejected', name: 'rejected.val', source: rejected, note: 'programs that must not compile' },
   { path: 'examples/text.json', pkg: 'loyalty', name: 'text.json', source: textBundle, note: 'the signed text bundle' },
+  { path: 'examples/portfolio-text.json', pkg: 'portfolio', name: 'text.json', source: portfolioText, note: 'the signed text bundle' },
 ]
 
 /// Not part of any package: a `.va` never carries somebody's wallet. It is the
