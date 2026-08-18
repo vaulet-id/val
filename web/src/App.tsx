@@ -10,7 +10,7 @@ import { DocsView } from '@/components/DocsView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { bundleOf, examples, HOST, hostFiles, newProject, type Project } from '@/examples'
+import { ALLOWED, blankFile, bundleOf, examples, type Group, HOST, hostFiles, newProject, type Project } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
 import * as val from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
@@ -26,7 +26,7 @@ export default function App() {
   const [active, setActive] = React.useState(examples[0].files[0].path)
   const [sources, setSources] = React.useState<Record<string, string>>(
     Object.fromEntries(
-      [...examples.flatMap((p) => [...p.files, p.server]), ...hostFiles].map((f) => [f.path, f.source]),
+      [...examples.flatMap((p) => [...p.files, ...p.servers]), ...hostFiles].map((f) => [f.path, f.source]),
     ),
   )
   const [ready, setReady] = React.useState(false)
@@ -36,6 +36,9 @@ export default function App() {
   /// One project at a time, which is how anybody actually works. A project is a
   /// package, the wallet it looks at, and the publisher's own server.
   const [projects, setProjects] = React.useState<Project[]>(examples)
+  /// The host's files are not part of any project — a person has one phone —
+  /// so they live beside the projects rather than inside one.
+  const [hosts, setHosts] = React.useState(hostFiles)
   const [project, setProject] = React.useState(examples[0].id)
   const [running, setRunning] = React.useState(false)
 
@@ -57,8 +60,8 @@ export default function App() {
 
   const here = projects.find((p) => p.id === project) ?? projects[0]
   const packageFiles = here.files
-  const serverFiles = [here.server]
-  const all = [...packageFiles, ...hostFiles, ...serverFiles]
+  const serverFiles = here.servers
+  const all = [...packageFiles, ...hosts, ...serverFiles]
   const current = all.find((f) => f.path === active) ?? packageFiles[0]
 
   // Opening a project opens its first file, or the editor shows one that is no
@@ -126,7 +129,7 @@ export default function App() {
       if (monaco && run.token && run.deviceKey) {
         decision = await runHandler(
           monaco,
-          sources[here.server.path] ?? '',
+          here.servers.map((f) => ({ name: f.name, source: sources[f.path] ?? '' })),
           run.token,
           packageSource,
           run.deviceKey,
@@ -164,11 +167,80 @@ export default function App() {
     setProjects((all) => [...all, made])
     setSources((s) => ({
       ...s,
-      ...Object.fromEntries([...made.files, made.server].map((f) => [f.path, f.source])),
+      ...Object.fromEntries([...made.files, ...made.servers].map((f) => [f.path, f.source])),
     }))
     setProject(id)
     setActive(made.files[0].path)
   }, [projects])
+
+  /// A file in one of the three groups.
+  ///
+  /// Named by the person adding it, because the name is the only thing about a
+  /// file the playground cannot guess — a package is analysed as one scope, and
+  /// a server file is imported by the name it is saved under.
+  const addFile = React.useCallback(
+    (group: Group) => {
+      const name = window.prompt(`New file in ${group} — ${ALLOWED[group].join(' or ')}`)?.trim()
+      if (!name) return
+      if (!ALLOWED[group].some((ext) => name.endsWith(ext))) {
+        window.alert(`${group} files end in ${ALLOWED[group].join(' or ')}`)
+        return
+      }
+
+      const made = blankFile(group, here.id, name)
+      const taken = [...packageFiles, ...hosts, ...serverFiles].some((f) => f.path === made.path)
+      if (taken) {
+        window.alert(`${name} is already here`)
+        return
+      }
+
+      setSources((all) => ({ ...all, [made.path]: made.source }))
+      if (group === 'host') setHosts((all) => [...all, made])
+      else {
+        setProjects((all) =>
+          all.map((p) =>
+            p.id !== here.id
+              ? p
+              : group === 'package'
+                ? { ...p, files: [...p.files, made] }
+                : { ...p, servers: [...p.servers, made] },
+          ),
+        )
+      }
+      setActive(made.path)
+    },
+    [here, packageFiles, hosts, serverFiles],
+  )
+
+  /// Removing a file, except the three the playground cannot do without: the
+  /// wallet the preview reads, the last `.val` of a package, and the server's
+  /// entry point.
+  const removeFile = React.useCallback(
+    (path: string) => {
+      if (path === HOST) return window.alert('the preview reads the wallet from this file')
+      const inPackage = packageFiles.some((f) => f.path === path)
+      if (inPackage && path.endsWith('.val') && packageFiles.filter((f) => f.path.endsWith('.val')).length === 1) {
+        return window.alert('a package is at least one .val')
+      }
+      if (path.endsWith('handler.ts')) return window.alert('handler.ts is what a record is sent to')
+
+      setSources((all) => {
+        const rest = { ...all }
+        delete rest[path]
+        return rest
+      })
+      setHosts((all) => all.filter((f) => f.path !== path))
+      setProjects((all) =>
+        all.map((p) =>
+          p.id !== here.id
+            ? p
+            : { ...p, files: p.files.filter((f) => f.path !== path), servers: p.servers.filter((f) => f.path !== path) },
+        ),
+      )
+      if (active === path) setActive(packageFiles[0]?.path ?? HOST)
+    },
+    [here, packageFiles, active],
+  )
 
   const removeProject = React.useCallback(
     (id: string) => {
@@ -259,10 +331,12 @@ export default function App() {
               onNew={addProject}
               onRemove={removeProject}
               files={packageFiles}
-              hostFiles={hostFiles}
+              hostFiles={hosts}
               serverFiles={serverFiles}
               active={active}
               onSelect={setActive}
+              onAddFile={addFile}
+              onRemoveFile={removeFile}
             />
           </ResizablePanel>
 

@@ -51,7 +51,7 @@ function sdk(source: string, deviceKey: string) {
 
 /// Monaco's TypeScript worker, used as a transpiler. It is the same service that
 /// type-checks the file in front of you, so what runs is what was checked.
-async function transpile(monaco: typeof Monaco, code: string): Promise<string> {
+async function transpile(monaco: typeof Monaco, name: string, code: string): Promise<string> {
   // CommonJS, because what runs it is a `new Function` with an `exports` to
   // assign to rather than a module loader. Emitting ESM produced `export
   // default` in a place nothing could import from, which threw at the first
@@ -63,7 +63,7 @@ async function transpile(monaco: typeof Monaco, code: string): Promise<string> {
     noEmit: false,
   })
 
-  const uri = monaco.Uri.parse('inmemory://server/handler.ts')
+  const uri = monaco.Uri.parse(`inmemory://server/${name}`)
   const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(code, 'typescript', uri)
   model.setValue(code)
 
@@ -73,23 +73,67 @@ async function transpile(monaco: typeof Monaco, code: string): Promise<string> {
   return output.outputFiles[0]?.text ?? ''
 }
 
+/// One server file, keyed by the name `handler.ts` would import it as.
+export type ServerFile = { name: string; source: string }
+
+/// The entry point. Everything else in the group is a library it may import,
+/// which is the only reason adding a second server file is worth anything.
+const ENTRY = 'handler.ts'
+
+/// A module id as written in an import, resolved to a file name: `./sign`,
+/// `./sign.ts` and `sign.ts` are the same file.
+function resolve(id: string, files: ServerFile[]): ServerFile | undefined {
+  const bare = id.replace(/^\.\//, '').replace(/\.ts$/, '')
+  return files.find((f) => f.name.replace(/\.ts$/, '') === bare)
+}
+
+/// Load a module and everything it imports, once each.
+///
+/// A cache rather than a fresh evaluation per import, so a module holding
+/// state holds one lot of it — and so a cycle stops instead of recursing until
+/// the tab does.
+function loader(compiled: Map<string, string>, files: ServerFile[]) {
+  const loaded = new Map<string, Record<string, unknown>>()
+
+  const load = (name: string): Record<string, unknown> => {
+    const already = loaded.get(name)
+    if (already) return already
+
+    const exports: Record<string, unknown> = {}
+    loaded.set(name, exports)
+
+    const js = compiled.get(name) ?? ''
+    const require = (id: string) => {
+      const target = resolve(id, files)
+      if (!target) throw new Error(`no file named ${id} in this server`)
+      return load(target.name)
+    }
+    // eslint-disable-next-line no-new-func
+    new Function('exports', 'module', 'require', js)(exports, { exports }, require)
+    return exports
+  }
+
+  return load
+}
+
 export async function runHandler(
   monaco: typeof Monaco,
-  code: string,
+  files: ServerFile[],
   token: string,
   source: string,
   deviceKey: string,
 ): Promise<Decision> {
   try {
-    const js = await transpile(monaco, code)
-    // The module's default export, without a module loader: the emitted code
-    // assigns to `exports.default`, so give it an `exports` to assign to.
-    const exports: { default?: (t: string, v: unknown) => Promise<Decision> } = {}
-    // eslint-disable-next-line no-new-func
-    const load = new Function('exports', 'module', `${js}\nreturn exports`)
-    const loaded = load(exports, { exports }) as typeof exports
-    const handler = loaded.default ?? exports.default
-    if (!handler) return { kind: 'threw', error: 'the handler has no default export' }
+    if (!files.some((f) => f.name === ENTRY)) {
+      return { kind: 'threw', error: `this server has no ${ENTRY}` }
+    }
+
+    const compiled = new Map<string, string>()
+    for (const f of files) compiled.set(f.name, await transpile(monaco, f.name, f.source))
+
+    const exports = loader(compiled, files)(ENTRY)
+    const handler = exports.default as ((t: string, v: unknown) => Promise<Decision>) | undefined
+    if (!handler) return { kind: 'threw', error: `${ENTRY} has no default export` }
 
     const decision = await handler(token, sdk(source, deviceKey))
     return decision ?? { kind: 'threw', error: 'the handler returned nothing' }

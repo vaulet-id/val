@@ -50,7 +50,7 @@ export type Project = {
   name: string
   note: string
   files: SourceFile[]
-  server: SourceFile
+  servers: SourceFile[]
   /// Shipped with the editor, and not removable. Somebody else's project is
   /// theirs to delete.
   builtin: boolean
@@ -69,7 +69,7 @@ const example = (id: string, name: string, note: string, files: SourceFile[]): P
   name,
   note,
   files,
-  server: handler(id),
+  servers: [handler(id)],
   builtin: true,
 })
 
@@ -135,7 +135,7 @@ export function newProject(id: string, name: string): Project {
       { path: `${id}/app.val`, pkg: id, name: 'app.val', source: STARTER_APP, note: 'the application' },
       { path: `${id}/text.json`, pkg: id, name: 'text.json', source: STARTER_TEXT, note: 'every sentence a person reads' },
     ],
-    server: handler(id, STARTER_HANDLER),
+    servers: [handler(id, STARTER_HANDLER)],
   }
 }
 
@@ -158,4 +158,54 @@ export function bundleOf(files: SourceFile[], sources: Record<string, string>) {
     // as missing every key would bury the one problem that is real.
     return { keys: {}, locales: ['en', 'th'] }
   }
+}
+
+/// The three places a file can be: the package that is signed and installed,
+/// the host's own data, and the publisher's server. They are not
+/// interchangeable, which is the point of showing them apart.
+export type Group = 'package' | 'host' | 'server'
+
+/// The file a group starts as when somebody adds one.
+///
+/// Enough to compile or to run, because an empty file reports an error before
+/// it has been typed into, and the first thing a person then does is delete it.
+export function blankFile(group: Group, id: string, name: string): SourceFile {
+  if (group === 'host') {
+    return {
+      path: `fixtures/${name}`,
+      pkg: 'host',
+      name,
+      source: '{\n}\n',
+      note: 'more of what the host answers',
+    }
+  }
+  if (group === 'server') {
+    return {
+      path: `server/${id}/${name}`,
+      pkg: 'server',
+      name,
+      // A module, because the other server files can import it — `handler.ts`
+      // is the one that runs and the rest are its library.
+      source: `export function help() {\n  return 'help'\n}\n`,
+      note: 'imported by handler.ts',
+    }
+  }
+  return {
+    path: `${id}/${name}`,
+    pkg: id,
+    name,
+    source: name.endsWith('.json')
+      ? '{\n  "locales": ["en", "th"],\n  "keys": {}\n}\n'
+      : `// The rest of the package. One scope, so this file sees what the others\n// declare and declares for them in turn.\n`,
+    note: 'part of the package',
+  }
+}
+
+/// What a group will accept. A `.val` in the host group would be analysed by
+/// nothing and a `.json` in the server group would be run by nothing; both look
+/// like a file that quietly does not work.
+export const ALLOWED: Record<Group, string[]> = {
+  package: ['.val', '.json'],
+  host: ['.json'],
+  server: ['.ts'],
 }
