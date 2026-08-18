@@ -48,9 +48,10 @@ pub struct Capability {
 pub struct Arg {
     pub name: Option<String>,
     pub value: Expr,
-    /// `...style` — the fields of a record, as if each had been written out.
-    /// Typed, like every other spread here: it cannot invent a field or drop
-    /// one, so a reader knows what may arrive from the record's own type.
+    /// `...style`, where `style` names a record. It expands to one named
+    /// argument per field of that record's declared type, so what arrives is
+    /// knowable from the type rather than from whatever a caller happened to
+    /// pass. A value that is not a declared record cannot be spread here.
     pub spread: bool,
     pub span: Span,
 }

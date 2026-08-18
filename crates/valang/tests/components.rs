@@ -14,6 +14,7 @@ capabilities {
 
 type CardStyle {
   emphasis: string?
+  icon:     string?
 }
 
 state {
@@ -38,7 +39,7 @@ component TwoButtons(left: string, right: string) {
 
 screen Home {
   column {
-    MoneyCard(label: "balance", amount: state.presses, style: { emphasis: "primary" })
+    MoneyCard(label: "balance", amount: state.presses, style: { emphasis: "primary", icon: "wallet" })
     TwoButtons(left: "a", right: "b")
   }
 }
@@ -146,5 +147,44 @@ fn an_argument_the_component_does_not_take_is_reported() {
     assert!(
         msgs.iter().any(|m| m.contains("has no `middle`")),
         "expected the extra argument to be named, got {msgs:?}"
+    );
+}
+
+/// A spread becomes one named argument per field of the record's declared type,
+/// so a reader can say what the call passes by reading `CardStyle`.
+#[test]
+fn a_spread_becomes_one_argument_per_field() {
+    let (program, _) = valang::analyse(SRC);
+    let card = &program.screens[0].tree[0].children[0];
+    let names: Vec<&str> = card.args.iter().filter_map(|a| a.name.as_deref()).collect();
+    assert_eq!(names, ["text", "amount", "emphasis", "icon"]);
+    assert!(card.args.iter().all(|a| !a.spread), "a spread survived expansion");
+}
+
+/// Only a record this package declared. A list spread into an argument list is
+/// the reading this symbol has in the languages the expression layer borrows
+/// from, and it is not what this means.
+#[test]
+fn only_a_declared_record_may_be_spread() {
+    let src = SRC.replace(
+        "component MoneyCard(label: string, amount: int, style: CardStyle) {",
+        "component MoneyCard(label: string, amount: int, style: int) {",
+    );
+    let msgs = errors(&src);
+    assert!(
+        msgs.iter().any(|m| m.contains("only a record")),
+        "expected the spread to be refused, got {msgs:?}"
+    );
+}
+
+/// A rest parameter would leave the component unable to say what it accepts,
+/// which is the one thing its declaration is for.
+#[test]
+fn a_spread_must_name_a_parameter() {
+    let src = SRC.replace("card(text: label, amount: amount, ...style)", "card(...whatever)");
+    let msgs = errors(&src);
+    assert!(
+        msgs.iter().any(|m| m.contains("is not a parameter")),
+        "expected an unknown name to be reported, got {msgs:?}"
     );
 }

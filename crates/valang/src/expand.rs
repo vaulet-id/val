@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::{Arg, ComponentDecl, Expr, Program, UiNode};
+use crate::ast::{Arg, ComponentDecl, CredentialDecl, Expr, Program, UiNode};
 use crate::diag::{Diagnostic, Span};
 
 /// What the host ships. A component may not take one of these names — that
@@ -55,16 +55,70 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
         return d;
     }
 
+    let types: BTreeMap<String, CredentialDecl> =
+        program.types.iter().map(|t| (t.name.clone(), t.clone())).collect();
+
     let mut screens = std::mem::take(&mut program.screens);
     for s in &mut screens {
         let mut out = Vec::new();
         for node in std::mem::take(&mut s.tree) {
-            out.extend(expand_node(node, &by_name, &mut d));
+            out.extend(expand_node(node, &by_name, &types, &mut d));
         }
         s.tree = out;
     }
     program.screens = screens;
     d
+}
+
+/// `...style` inside a component's body, where `style` is one of its parameters
+/// and that parameter's type is a record this package declared.
+///
+/// It becomes one named argument per field of that record. A spread of anything
+/// else is refused: a list cannot be spread into an argument list, and a value
+/// with no declared record type would leave a reader unable to say what the call
+/// passes.
+fn spread_args(
+    a: &Arg,
+    decl: &ComponentDecl,
+    types: &BTreeMap<String, CredentialDecl>,
+    d: &mut Vec<Diagnostic>,
+) -> Vec<Arg> {
+    let Expr::Ident { name, .. } = &a.value else {
+        d.push(Diagnostic::error(a.span, "`...` spreads a record named by a parameter".to_string()));
+        return Vec::new();
+    };
+    let Some(param) = decl.params.iter().find(|p| &p.name == name) else {
+        d.push(Diagnostic::error(
+            a.span,
+            format!("`{}` is not a parameter of `{}`", name, decl.name),
+        ));
+        return Vec::new();
+    };
+    let Some(record) = types.get(&param.ty.name) else {
+        d.push(Diagnostic::error(
+            a.span,
+            format!(
+                "`{}` is a `{}`, and only a record this package declares with `type` can be spread",
+                name, param.ty.name
+            ),
+        ));
+        return Vec::new();
+    };
+
+    record
+        .fields
+        .iter()
+        .map(|f| Arg {
+            name: Some(f.name.clone()),
+            value: Expr::Member {
+                obj: Box::new(a.value.clone()),
+                name: f.name.clone(),
+                span: a.span,
+            },
+            spread: false,
+            span: a.span,
+        })
+        .collect()
 }
 
 /// One node, and everything it stands for.
@@ -74,45 +128,59 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
 fn expand_node(
     node: UiNode,
     by_name: &BTreeMap<String, ComponentDecl>,
+    types: &BTreeMap<String, CredentialDecl>,
     d: &mut Vec<Diagnostic>,
 ) -> Vec<UiNode> {
     let Some(decl) = by_name.get(&node.kind) else {
         let UiNode { kind, args, lambda, children, span } = node;
-        let children = children.into_iter().flat_map(|c| expand_node(c, by_name, d)).collect();
+        let children =
+            children.into_iter().flat_map(|c| expand_node(c, by_name, types, d)).collect();
         return vec![UiNode { kind, args, lambda, children, span }];
     };
 
     let bound = bind(&node, decl, d);
-    decl.tree
-        .iter()
-        .cloned()
+
+    // A spread in the body names one of this component's parameters, so it is
+    // resolved here, where that parameter's declared type is in reach.
+    let body: Vec<UiNode> = decl.tree.iter().cloned().map(|n| flatten(n, decl, types, d)).collect();
+
+    body.into_iter()
         .map(|n| substitute(n, &bound))
-        .flat_map(|n| expand_node(n, by_name, d))
+        .flat_map(|n| expand_node(n, by_name, types, d))
         .collect()
+}
+
+/// Replace every `...param` in a component's body with the named arguments it
+/// stands for, before the parameters themselves are substituted.
+fn flatten(
+    node: UiNode,
+    decl: &ComponentDecl,
+    types: &BTreeMap<String, CredentialDecl>,
+    d: &mut Vec<Diagnostic>,
+) -> UiNode {
+    let mut args = Vec::new();
+    for a in node.args {
+        if a.spread {
+            args.extend(spread_args(&a, decl, types, d));
+        } else {
+            args.push(a);
+        }
+    }
+    UiNode {
+        args,
+        children: node.children.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
+        ..node
+    }
 }
 
 /// Argument to parameter, by name.
 ///
-/// A spread contributes the fields of the record it names. A parameter with no
-/// argument and no `?` is a missing argument, reported here rather than as a
-/// name that resolves to nothing inside the component.
+/// A parameter with no argument and no `?` is a missing argument, reported here
+/// rather than as a name that resolves to nothing inside the component.
 fn bind(call: &UiNode, decl: &ComponentDecl, d: &mut Vec<Diagnostic>) -> BTreeMap<String, Expr> {
     let mut out = BTreeMap::new();
 
     for a in &call.args {
-        if a.spread {
-            // The fields are known from the record's type, which the type
-            // checker has already established; what arrives here is the
-            // expression, and each parameter reads its own field from it.
-            for p in &decl.params {
-                out.entry(p.name.clone()).or_insert_with(|| Expr::Member {
-                    obj: Box::new(a.value.clone()),
-                    name: p.name.clone(),
-                    span: a.span,
-                });
-            }
-            continue;
-        }
         if let Some(name) = &a.name {
             out.insert(name.clone(), a.value.clone());
         }
