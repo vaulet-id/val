@@ -75,3 +75,15 @@ body { background: var(--color-background); color: var(--color-foreground); }
 .prose-val hr { border: 0; border-top: 1px solid var(--color-border); margin: 2rem 0; }
 .prose-val a { color: var(--color-origin); text-decoration: underline; text-underline-offset: 2px; }
 .prose-val strong { font-weight: 650; }
+
+/* Tailwind v4's reset drops the browser's `cursor: pointer` on buttons, so
+   every control in the editor read as text until it was clicked. Set once
+   here rather than on each button, which is how half of them come to disagree. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  [role="option"],
+  summary {
+    cursor: pointer;
+  }
+}

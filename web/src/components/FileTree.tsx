@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { FileCode2, FileJson, FileText, Plus, Trash2, X } from 'lucide-react'
+import { FileCode2, FileJson, FileText, Plus, Trash2 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Group as GroupName, SourceFile } from '@/examples'
 
@@ -8,7 +8,7 @@ type Item = { path: string; name: string; note?: string; pkg?: string }
 
 export function FileTree({
   projects, project, onProject, onNew, onRemove, files, hostFiles, serverFiles, active, onSelect,
-  onAddFile, onRemoveFile,
+  onAddFile, onRemoveFile, canRemove,
 }: {
   projects: { id: string; name: string; note: string; builtin: boolean }[]
   project: string
@@ -22,6 +22,7 @@ export function FileTree({
   onSelect: (path: string) => void
   onAddFile: (group: GroupName) => void
   onRemoveFile: (path: string) => void
+  canRemove: (path: string) => boolean
 }) {
   const here = projects.find((p) => p.id === project)
 
@@ -68,16 +69,16 @@ export function FileTree({
         )}
       </div>
 
-      <Group label="package" files={files} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} />
+      <Group label="package" files={files} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} canRemove={canRemove} />
       {/* The host's own data, in its own group. A `.va` never carries somebody's
           wallet, and putting it under the same heading as the package would be
           the one line of this interface that lied. */}
       {/* The same wallet in every project, because a person has one and every
           application they install looks at that one. */}
-      {hostFiles?.length ? <Group label="host" files={hostFiles} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} /> : null}
+      {hostFiles?.length ? <Group label="host" files={hostFiles} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} canRemove={canRemove} /> : null}
       {/* And the publisher's own side, which holds their issuer key and never
           goes near the phone. */}
-      {serverFiles?.length ? <Group label="server" files={serverFiles} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} /> : null}
+      {serverFiles?.length ? <Group label="server" files={serverFiles} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} canRemove={canRemove} /> : null}
       <div className="mt-auto border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-snug text-[var(--color-muted-foreground)]">
         A package is several files sharing one scope. Nothing is imported across
         one.
@@ -87,7 +88,7 @@ export function FileTree({
 }
 
 function Group({
-  label, files, active, onSelect, onAdd, onRemove,
+  label, files, active, onSelect, onAdd, onRemove, canRemove,
 }: {
   label: GroupName
   files: Item[]
@@ -95,6 +96,7 @@ function Group({
   onSelect: (path: string) => void
   onAdd: (group: GroupName) => void
   onRemove: (path: string) => void
+  canRemove: (path: string) => boolean
 }) {
   return (
     <>
@@ -138,18 +140,20 @@ function Group({
                     </span>
                   )}
                 </button>
-                <button
-                  onClick={() => onRemove(f.path)}
-                  title="remove this file"
-                  aria-label={`remove ${f.name}`}
-                  className={cn(
-                    'absolute right-1.5 top-1.5 rounded p-0.5 text-[var(--color-muted-foreground)]',
-                    'opacity-0 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]',
-                    'group-hover:opacity-100 focus-visible:opacity-100',
-                  )}
-                >
-                  <X className="size-3" />
-                </button>
+                {canRemove(f.path) && (
+                  <button
+                    onClick={() => onRemove(f.path)}
+                    title="remove this file"
+                    aria-label={`remove ${f.name}`}
+                    className={cn(
+                      'absolute right-1.5 top-1.5 rounded p-0.5 text-[var(--color-muted-foreground)]',
+                      'opacity-0 hover:bg-[var(--color-background)] hover:text-[var(--color-foreground)]',
+                      'group-hover:opacity-100 focus-visible:opacity-100',
+                    )}
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
               </div>
             )
           })}

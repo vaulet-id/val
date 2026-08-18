@@ -212,11 +212,24 @@ export default function App() {
     [here, packageFiles, hosts, serverFiles],
   )
 
+  /// What can go. An example is what the documentation points at, so its own
+  /// files stay; a file added here is the person's own wherever they added it.
+  const removable = React.useCallback(
+    (path: string) => {
+      const file = [...packageFiles, ...hosts, ...serverFiles].find((f) => f.path === path)
+      if (!file) return false
+      if (file.added) return true
+      return !here.builtin && file.pkg !== 'host'
+    },
+    [here, packageFiles, hosts, serverFiles],
+  )
+
   /// Removing a file, except the three the playground cannot do without: the
   /// wallet the preview reads, the last `.val` of a package, and the server's
   /// entry point.
   const removeFile = React.useCallback(
     (path: string) => {
+      if (!removable(path)) return
       if (path === HOST) return window.alert('the preview reads the wallet from this file')
       const inPackage = packageFiles.some((f) => f.path === path)
       if (inPackage && path.endsWith('.val') && packageFiles.filter((f) => f.path.endsWith('.val')).length === 1) {
@@ -239,7 +252,7 @@ export default function App() {
       )
       if (active === path) setActive(packageFiles[0]?.path ?? HOST)
     },
-    [here, packageFiles, active],
+    [here, packageFiles, active, removable],
   )
 
   const removeProject = React.useCallback(
@@ -337,6 +350,7 @@ export default function App() {
               onSelect={setActive}
               onAddFile={addFile}
               onRemoveFile={removeFile}
+              canRemove={removable}
             />
           </ResizablePanel>
 

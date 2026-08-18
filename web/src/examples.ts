@@ -18,7 +18,18 @@ import examplesReadme from '../../examples/README.md?raw'
 /// `pkg` is which package a file belongs to. A package is several files sharing
 /// one scope, so the playground analyses them together — `wallet.val` presses an
 /// action `loyalty.val` declares, and either alone is half a program.
-export type SourceFile = { path: string; name: string; source: string; note: string; pkg: string }
+///
+/// `added` marks a file somebody made here rather than one that shipped with
+/// the playground. The examples are what the documentation points at, so they
+/// can be added to and read but not taken apart.
+export type SourceFile = {
+  path: string
+  name: string
+  source: string
+  note: string
+  pkg: string
+  added?: boolean
+}
 
 // Read out of the repository rather than copied into the playground. A copy is
 // how a playground starts teaching a language that no longer exists.
@@ -177,6 +188,7 @@ export function blankFile(group: Group, id: string, name: string): SourceFile {
       name,
       source: '{\n}\n',
       note: 'more of what the host answers',
+      added: true,
     }
   }
   if (group === 'server') {
@@ -188,6 +200,7 @@ export function blankFile(group: Group, id: string, name: string): SourceFile {
       // is the one that runs and the rest are its library.
       source: `export function help() {\n  return 'help'\n}\n`,
       note: 'imported by handler.ts',
+      added: true,
     }
   }
   return {
@@ -198,6 +211,7 @@ export function blankFile(group: Group, id: string, name: string): SourceFile {
       ? '{\n  "locales": ["en", "th"],\n  "keys": {}\n}\n'
       : `// The rest of the package. One scope, so this file sees what the others\n// declare and declares for them in turn.\n`,
     note: 'part of the package',
+    added: true,
   }
 }
 
