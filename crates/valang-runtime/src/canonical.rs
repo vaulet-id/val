@@ -28,6 +28,13 @@ impl Canonical for DeterministicCbor {
 /// unambiguous where a shape is not.
 pub const TAG_ENUM: u64 = 40_001;
 
+/// And a credential, for the same reason: a map with `type` and `claims` in it
+/// is a shape somebody could also write by hand, and a decoder that guessed
+/// would sometimes guess wrong. Encoding and decoding have to be inverses, or a
+/// verifier reading a record is reading something subtly other than what was
+/// signed.
+pub const TAG_CREDENTIAL: u64 = 40_002;
+
 fn head(major: u8, arg: u64, out: &mut Vec<u8>) {
     // Shortest form. A length of 10 encoded in eight bytes would be legal CBOR
     // and a different byte string for the same value, which is the whole thing
@@ -104,6 +111,7 @@ fn write(v: &Value, out: &mut Vec<u8>) {
             write(&Value::Str(m.clone()), out);
         }
         Value::Credential { ty, claims, verified } => {
+            head(6, TAG_CREDENTIAL, out);
             let mut m = std::collections::BTreeMap::new();
             m.insert("type".to_string(), Value::Str(ty.clone()));
             m.insert("claims".to_string(), Value::Map(claims.clone()));

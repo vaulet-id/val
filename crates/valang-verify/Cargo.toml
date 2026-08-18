@@ -1,0 +1,15 @@
+[package]
+name = "valang-verify"
+description = "Verifying an execution record — the one implementation every server SDK binds to"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+valang-runtime = { path = "../valang-runtime" }
+sha2 = "0.10"
+ed25519-dalek = "2"
+
+[dev-dependencies]
+valang.workspace = true

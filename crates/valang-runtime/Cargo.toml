@@ -15,10 +15,13 @@ sha2 = "0.10"
 # editor, in a diff, in a test — and a canonical binary encoding is for what is
 # hashed rather than for what is typed.
 serde_json = { version = "1", optional = true }
+# The fixture signs for real, so that a verifier has something to verify. A
+# stub that hashed instead would let every test pass against a check nobody ran.
+ed25519-dalek = { version = "2", optional = true }
 
 [features]
 default = ["fixture"]
-fixture = ["dep:serde_json"]
+fixture = ["dep:serde_json", "dep:ed25519-dalek"]
 
 [dev-dependencies]
 sha2 = "0.10"

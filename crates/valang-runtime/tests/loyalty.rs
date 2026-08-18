@@ -486,3 +486,46 @@ fn the_fixture_is_the_same_wallet_the_tests_were_writing_by_hand() {
     let run = run_action(&program, LOYALTY, "ScanToEarn", &refused.state(), &BTreeMap::new(), &refused);
     assert!(matches!(run.outcome, Outcome::Refused(_)));
 }
+
+/// Encoding and decoding have to be inverses, for every value the language has.
+/// Two have needed a tag to make that true — an enum member, which was a pair of
+/// strings, and a credential, which was a map anybody could also have written by
+/// hand. Both were found by something downstream reading back subtly other than
+/// what was signed.
+#[test]
+fn every_value_survives_the_round_trip() {
+    use valang_runtime::decode::decode;
+    let enc = DeterministicCbor;
+
+    let values = vec![
+        Value::Null,
+        Value::Bool(true),
+        Value::Int(-1_000_000),
+        Value::Str("แต้ม".into()),
+        Value::Bytes(vec![0, 1, 2, 255]),
+        Value::Enum("Tier".into(), "gold".into()),
+        Value::List(vec![Value::Str("Tier".into()), Value::Str("gold".into())]),
+        Value::Map(BTreeMap::from([("a".to_string(), Value::Int(1))])),
+        Value::Credential {
+            ty: "LoyaltyMember".into(),
+            claims: BTreeMap::from([("points".to_string(), Value::Int(1_365))]),
+            verified: Some("ReceiptFromMerchant".into()),
+        },
+        // The shape a credential used to encode as, which must not decode as one.
+        Value::Map(BTreeMap::from([
+            ("type".to_string(), Value::Str("LoyaltyMember".into())),
+            ("claims".to_string(), Value::Map(BTreeMap::new())),
+        ])),
+    ];
+
+    for v in &values {
+        assert_eq!(decode(&enc.encode(v)).unwrap(), *v, "round trip: {v}");
+    }
+
+    // And no two of them encode alike.
+    let mut bytes: Vec<Vec<u8>> = values.iter().map(|v| enc.encode(v)).collect();
+    let before = bytes.len();
+    bytes.sort();
+    bytes.dedup();
+    assert_eq!(bytes.len(), before, "two different values encoded to the same bytes");
+}

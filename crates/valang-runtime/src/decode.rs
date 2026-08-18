@@ -111,18 +111,31 @@ impl P<'_> {
                 }
                 Value::List(items)
             }
-            6 => {
-                if arg != crate::canonical::TAG_ENUM {
-                    return Err(Malformed::Unsupported { major: 6, at });
-                }
-                match self.value()? {
-                    Value::List(items) => match items.as_slice() {
-                        [Value::Str(a), Value::Str(b)] => Value::Enum(a.clone(), b.clone()),
-                        _ => return Err(Malformed::Unsupported { major: 6, at }),
-                    },
+            6 if arg == crate::canonical::TAG_ENUM => match self.value()? {
+                Value::List(items) => match items.as_slice() {
+                    [Value::Str(a), Value::Str(b)] => Value::Enum(a.clone(), b.clone()),
                     _ => return Err(Malformed::Unsupported { major: 6, at }),
-                }
-            }
+                },
+                _ => return Err(Malformed::Unsupported { major: 6, at }),
+            },
+            6 if arg == crate::canonical::TAG_CREDENTIAL => match self.value()? {
+                Value::Map(m) => Value::Credential {
+                    ty: match m.get("type") {
+                        Some(Value::Str(s)) => s.clone(),
+                        _ => String::new(),
+                    },
+                    claims: match m.get("claims") {
+                        Some(Value::Map(c)) => c.clone(),
+                        _ => BTreeMap::new(),
+                    },
+                    verified: match m.get("verified") {
+                        Some(Value::Str(s)) => Some(s.clone()),
+                        _ => None,
+                    },
+                },
+                _ => return Err(Malformed::Unsupported { major: 6, at }),
+            },
+            6 => return Err(Malformed::Unsupported { major: 6, at }),
             5 => {
                 let mut m = BTreeMap::new();
                 let mut last: Option<Vec<u8>> = None;

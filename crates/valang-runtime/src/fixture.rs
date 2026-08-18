@@ -11,11 +11,18 @@
 
 use std::collections::BTreeMap;
 
+use ed25519_dalek::{Signer, SigningKey};
 use serde_json::Value as Json;
-use sha2::{Digest, Sha256};
 
 use crate::host::{Context, EffectRequest, Host, Verdict};
 use crate::value::Value;
+
+/// The device key this stub signs with.
+///
+/// A fixed seed, in the open, on purpose: it is a development key and anything
+/// that looked like a secret here would eventually be treated as one. A real
+/// device holds one in secure hardware and it never leaves.
+const DEV_SEED: [u8; 32] = *b"val fixture device key, not real";
 
 pub struct Fixture {
     json: Json,
@@ -90,13 +97,11 @@ impl Host for Fixture {
     }
 
     fn sign(&self, bytes: &[u8]) -> Vec<u8> {
-        // A hash, not a signature. A real device signs with a key in secure
-        // hardware, and nothing here should be mistaken for that.
-        Sha256::digest(bytes).to_vec()
+        SigningKey::from_bytes(&DEV_SEED).sign(bytes).to_bytes().to_vec()
     }
 
     fn device_key(&self) -> Vec<u8> {
-        b"fixture-device".to_vec()
+        SigningKey::from_bytes(&DEV_SEED).verifying_key().to_bytes().to_vec()
     }
 }
 
