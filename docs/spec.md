@@ -1,340 +1,131 @@
-# VAL — the language
+# VAL
 
-**Status:** draft, 2026-08-17. Nothing here is built. This is the specification
-to argue with; the open questions in §11 are open, and the recommendation under
-each is what the rest of the document assumes until somebody says otherwise.
+A language for Micro Apps — small applications that run inside somebody's
+wallet, beside their passport and their bank credentials.
 
-VAL is a **domain-specific language, not a general-purpose one**, and it is
-**total**: every program halts, and the compiler knows it (§6). The design
-principle is a declarative shell with a small expression layer — the outer
-structure is data, the inner expressions are familiar to anyone who has written
-TypeScript or Dart.
-
-That second half is a constraint, not a mood. The shell may invent whatever it
-needs, because nothing else looks like it. The expression layer may not: it
-borrows `const`, `function`, `switch`, `?:`, spread, `T?` and `List<T>` from
-languages the reader already has, and where a construct would have to be
-invented, the answer is usually that the shell should have handled it. A DSL
-whose expressions are a fourth dialect costs its reader twice.
-
-### Two readers
-
-A VAL program has two audiences and they are not the same people.
-
-**The shell is read by people who do not write code.** A partner deciding
-whether to publish an app, a compliance officer asking what it touches, a
-security reviewer, the person whose credentials it wants. They read
-`capabilities`, `trust`, `require`, `verify` and `execute`, and they must be
-able to answer "what can this do to me" without being taught a language first.
-
-**The expression layer is written by people who do.** Arithmetic, string
-handling, a tier lookup. It should be boring and familiar, which is what
-borrowing from TypeScript and Dart buys.
-
-**Where the two conflict, move the work into the shell.** That is the rule, and
-it has already changed three things: `update` is a table of fields rather than
-nested spreads, `require` says `exists` rather than `!= null`, and a lookup that
-would be a chain of `?:` is a `switch` that reads as a table. Each moved a
-decision out of the half nobody outside can read.
-
-The cost is a larger shell — more keywords, more blocks, more grammar. That is
-the right place to spend, because the shell is the part that gets read a hundred
-times more often than it gets written.
-
----
-
-## 1. What VAL is for
-
-An application written in VAL declares what it may do before it does it, and
-what it actually did can be checked afterwards by somebody who was not there.
-
-That is the whole of it. The properties usually listed — declarative structure,
-immutability, determinism, capability-based security, explicit effects — are not
-a feature list. Each is there because dropping it would break the sentence above.
-
-**A sandbox and this are not the same thing.** A sandbox establishes that an
-application *could not* have done something. It says nothing about what the
-application *did*. Once an application acts on somebody's behalf — presenting a
-credential, moving money, signing a payload — that second question is the one
-being asked, and isolation does not answer it.
-
-### The host
-
-VAL has no I/O. It does not know what a credential store, a payment rail, a
-network or a screen is. It computes, and where an effect is called for it emits
-a description of one:
-
-```
-EffectRequest { capability, operation, payload }
-```
-
-A **host** turns those into reality, or refuses them. It decides, in order: is
-the capability declared · did the person consent · does host policy allow it ·
-is the application trusted · is the operation in scope. Only then does anything
-happen.
-
-[Vaulet](https://vaulet.id) is the first host and the reason VAL exists. It is
-not privileged in the language. Where the language needs something only a host
-can supply — a canonical encoding, a clock, randomness, trust resolution — the
-interface is specified here and the host implements it.
-
-### Said against the thing it resembles
-
-A blockchain answers three questions: what execution means, who decides it
-happened, and where the state lives. So does this, differently.
-
-```
-blockchain = verifiable state machine + distributed consensus
-                                      + replicated global state
-
-VAL        = verifiable state machine + capability security
-                                      + private local state
-                                      + transferable evidence
-                                      + existing authority
-```
-
-The first term is the same, and it is why this smells like a contract language:
-determinism and totality are what independent re-execution requires. The
-difference is who re-executes. A blockchain is re-run by everyone; a VAL action
-is re-run by whoever you handed the evidence to.
-
-**Evidence replaces replication, not consensus.** A blockchain copies the state
-so anyone can check it. This keeps the state and hands out proofs. Same goal,
-opposite direction of travel.
-
-**Capability security does not replace consensus**, and pretending otherwise
-would hide a real gap. They sit on different axes: consensus settles, after the
-fact, whose version of events counts; capabilities decide, beforehand, what may
-be attempted at all. The thing consensus provides that this does not is
-protection against a person rewriting their own history — what stands in for it
-is a verifier's memory of the last root it saw, and an issuer's signature over
-the root a credential derived from (§7). That is weaker, deliberately.
-
-**The last term is the one that is easy to miss.** Mining and staking exist to
-manufacture an authority where none exists — a world with no one entitled to say
-what is true. VAL never manufactures one, because the authorities are already
-there: a state's CSCA, a licensed broker, an employer, a bank.
-
-> A blockchain produces authority where there is none. VAL transmits authority
-> that already exists.
-
-Which draws the boundary of this design honestly: nothing here provides
-consensus, so **bearer value passing between strangers is out of scope.** While
-points are only good with whoever issued them there is a single party entitled
-to settle disputes about them, and no ledger is needed. The day they are
-transferable and honoured by merchants who do not trust the issuer, this
-paragraph stops being true and the question has to be asked again.
-
-### Who is trusted
-
-**The application is not.** Its publisher wrote code we did not review line by
-line, may be a company nobody has heard of, and has an interest in the person's
-credentials that is not the person's interest. Nothing in this document assumes
-otherwise, and every rule that looks like an inconvenience is that assumption
-being applied.
-
-**The host is**, by the person, because they chose it and because it holds their
-keys. It is what scopes capabilities, draws consent, performs disclosures, holds
-tokens, and refuses.
-
-Two consequences that are easy to miss and expensive to discover late:
-
-**The package must verify itself, from itself.** Every check in this document —
-effect placement, capability declaration, provenance, totality, exhaustiveness,
-text bundle completeness, the bound that makes a circuit finite — is re-run *by
-the host* over the package it received. A publisher's build passing proves
-nothing: they own the build. Nothing may therefore be checkable only with
-information outside the package, and the checker has to be small enough to run
-on a phone at install time. That is another reason the language is small and
-total, and it is a constraint on everything added to it later.
-
-**The artifact is the source.** v1 ships the program as VAL and walks its typed
-AST, so what a reviewer read is what executes — there is no compiled blob to
-compare against a repository nobody can see. When the Wasm back end arrives (§8)
-this stops being free: the package must still carry the source and let the host
-compile it, or the build must be reproducible. Shipping bytecode alone would put
-the publisher back in a position of trust that this section just removed.
-
----
-
-## 2. Shape of a program
-
-```
+```val
 app "th.co.codefin.loyalty"
 version 1
 
-capabilities { … }        // everything this app may ever ask for
-enum · credential · type  // declarations
-state { … }               // what persists between actions
-trust … { … }             // named verification policies
-function … { … }          // pure helpers
-action … { … }            // the only executable thing
+capabilities {
+  credential.read(PurchaseReceipt)
+  credential.issue(LoyaltyMember)
+}
 ```
 
-**An application is a package, and a package may be several files.** They share
-one scope: there is no per-file namespace and no import statement, because a
-file is how the author organises the work, not a boundary anybody else should
-have to trace. A reviewer still finds everything with one search.
+A Micro App reads credentials the person already holds, computes, and asks the
+wallet to act — issue a credential, take a payment, prove a fact.
 
-**There are no imports across packages.** The only things worth sharing are pure
-helpers and trust policies — helpers that are genuinely common belong in the
-closed set of builtins, and a shared policy is published in a register and named
-with its hash, the way the claim vocabulary is (ADR 0046). What is not on offer
-is a dependency somebody else can change after you have signed.
+You get four things without building them:
 
-The application identifier is a **quoted string**, not a bare dotted name: a
-reverse-DNS identifier and a field access are the same shape, and a lexer should
-not have to tell them apart by context.
+- **No login.** The person is already identified by credentials a government, a
+  bank or an employer issued.
+- **No user data to store.** It stays in their wallet. You read a claim under a
+  policy you named.
+- **Proofs without disclosure.** Ask whether somebody is over twenty without
+  learning their birthday.
+- **A signed record of every run**, to hand to a customer or an auditor.
 
-### Grammar rules that everything else assumes
+## What is different from the languages you know
 
-**A newline ends a statement, and there are no semicolons** — except inside an
-unclosed bracket, where the statement continues. A long expression is wrapped in
-`( … )` on purpose, which makes complexity visible instead of implicit. The rule
-that a line ending in an operator continues is deliberately not adopted: a
-language selling the absence of surprises should not import the one rule an
-entire industry has been guessing wrong about for twenty years.
+| | |
+| --- | --- |
+| Declare before you use | Everything the app can do is in `capabilities`. Using something you did not declare fails the build; declaring something you do not use fails the build too. |
+| No floating point | Money is in minor units — satang, cents. Percentages are basis points. |
+| No loops, no recursion | Lists are consumed by `map`, `filter`, `fold`, `any`, `all`, `count`, `first`. Every program halts. |
+| No string building | No `+`, no interpolation. Every sentence a person reads comes from `text.json`, by key. |
+| No screens of your own | You declare `card`, `row`, `button`; the wallet draws them. |
+| No assignment | `const` only. Records are derived with spread; state is changed by an `update` block. |
+| Errors are outcomes | No `Result`, no exceptions, no early return. An action commits or it does not. |
 
-**Separators follow the two readers.** The shell is newline-separated; inside an
-expression, elements are comma-separated. `member.tier: tier` on its own line,
-`{ ...member, tier: tier }` with commas. One rule, and it is the same rule that
-decided everything else about who reads what.
-
-**Keywords are reserved, not contextual.** The check is not theoretical: of the
-57 claims in the reserved vocabulary today, none collides with a keyword — and
-the vocabulary avoids `state` by spelling it `address.region`, as OpenID Connect
-does. Contextual keywords cost a worse error message on every mistake, and they
-are being bought here against a collision that does not exist.
-
-**A dot is always field access.** Claim names in the register are written as
-paths — `address.postal_code`, `address.region` — because a credential holds
-those apart (ADR 0031), and that is structure rather than a name with a dot in
-it. The credential's type turns it into structure and VAL reads it as structure.
-The consequence must be stated rather than discovered: **`claims.address` on its
-own is not a value**, because no issuer ever signed a claim by that name, and
-the compiler says so instead of handing back a record with half its fields
-empty.
-
-**`if` and `switch` parenthesise their condition**, as TypeScript and Dart do
-and as Rust does not. The reason is not taste: it removes every ambiguity
-between a block and a record literal, which is a special case Rust had to add a
-rule for.
-
-**Numeric literals** are decimal, with `_` permitted between digits — `100_000`,
-never `_1` or `1_`. No hexadecimal, no binary, no exponent: a loyalty scheme has
-no use for them and each is a way to write a number a reviewer cannot read at a
-glance.
-
-`12.50` **lexes as one token and the parser rejects it**, rather than the lexer
-splitting it into `12`, `.`, `50` and producing "expected field name". The whole
-of `rejected.val` stands on this: a rule is only taught by the message it
-produces.
-
-**Identifiers are ASCII.** Strings are full UTF-8 and Thai text belongs in them,
-but a language that decides who somebody is cannot have identifiers where a
-Cyrillic `а` and a Latin `a` are different names that look identical. The
-readability this gives up is recovered where it belongs: what a person reads is
-the consent sheet and the app's own description, which come from the signed
-manifest, not from identifiers anybody can choose.
-
-**Names this program chooses are camelCase** — `lifetimePoints`, `tierFor`.
-**Claim names it does not choose are left alone**: `purchased_at`,
-`document_number` and the rest come from the issuer's vocabulary, and rewriting
-them to look like local code would hide the one fact that matters about them,
-which is that somebody else defined them.
-
-**Arguments are named once there are two of them.**
-
-```
-payment.request(to: merchant, amount: 12000)     // reads without documentation
-payment.request(merchant, 12000)                 // rejected
-```
-
-A single argument may be positional — `tierFor(total)` — because there is
-nothing to confuse it with. Beyond one, the call site is read far more often
-than it is written, frequently by somebody deciding whether to approve what it
-does, and an unlabelled pair of numbers is exactly where that reader stops.
+**New here?** Start with [your first application](guide/02-your-first-application.md),
+which builds a working loyalty card. This document is the reference you come
+back to.
 
 ---
 
-## 3. Values and types
+## Program structure
 
-`string int bool date datetime bytes`, custom record types, enums,
-`List<T>`, `T?`, `Verified<P>`, `Proof<bool>`.
+A program is a **package**: one or more `.val` files plus a `text.json`. The
+files share one scope — there are no imports and no per-file namespaces, so a
+screen in one file may call an action declared in another.
 
-**`int` is 64-bit and signed, and arithmetic traps on overflow.** Trapping is
-the only deterministic option — wrapping produces a wrong answer that the
-execution record would then faithfully prove, which is worse than failing. A
-trap aborts the action and commits nothing.
+```val
+app "th.co.codefin.loyalty"     // reverse-DNS, in quotes
+version 1
 
-**Strings are compared and passed, never built.** No interpolation, no `+`. This
-is not about lexer cost: every sentence a person reads must come from something
-that was signed, and a string assembled at runtime is a sentence nobody
-reviewed — which would make the rule against imitating host chrome unenforceable
-the day UI arrives. Text for people lives in the manifest as a template with
-named slots, and code supplies the values (§9). Composite keys are structured
-arguments, not concatenation: `storage.write(scope: "member", id: memberId, …)`.
-
-**Division by zero traps**, as overflow does and for the same reason: a wrong
-number the execution record would then faithfully prove is worse than a failure.
-An application that has a meaningful answer for a zero denominator writes it.
-
-**There is no floating point.** Two reasons and either would be enough: NaN bit
-patterns are the main source of nondeterminism under Wasm (§8), and money and
-points want integers or fixed point regardless. Amounts are minor units.
-
-A `state` field declares its starting value with `default`, not `=`:
-
+capabilities { … }              // what this app may do — declared once per package
+enum · credential · type        // data declarations
+state { … }                     // what persists between actions
+trust … { … }                   // named verification policies
+function … { … }                // pure helpers
+action … { … }                  // the only executable thing
+screen … { … }                  // what the person sees
 ```
+
+### Syntax
+
+- **A newline ends a statement.** No semicolons. A statement continues while a
+  bracket is open, so wrap long expressions in `( … )`.
+- **The shell is newline-separated, expressions are comma-separated.**
+  `member.tier: tier` on its own line; `{ ...member, tier: tier }` with commas.
+- **`if` and `switch` parenthesise their condition**, as in TypeScript and Dart.
+- **Numbers are decimal**, with `_` allowed between digits: `100_000`. No hex,
+  no binary, no exponents, and `12.50` is a compile error.
+- **Identifiers are ASCII and camelCase** for names you choose. Claim names from
+  an issuer keep their own spelling: `purchased_at`, `document_number`.
+- **Arguments are named once there are two**: `payment.request(to: merchant,
+  amount: 12000)`. One argument may be positional.
+- **Keywords are reserved.** A dot is always field access.
+
+---
+
+## Types
+
+| type | notes |
+| --- | --- |
+| `int` | 64-bit signed. Traps on overflow and on division by zero |
+| `string` | compared and passed, never built |
+| `bool` | `true`, `false` |
+| `date`, `datetime` | compared as integers; add a `duration` to get the same type back |
+| `bytes` | |
+| `List<T>` | no index; use the combinators |
+| `T?` | optional; narrow it with `exists` in `require` |
+| `Credential<T>` | held but unverified — its claims are out of reach |
+| `Verified<P>` | what `verify` produces. `P` is the **policy**, not the credential |
+| `Proof<bool>` | what `prove` produces |
+
+### Declaring data
+
+```val
+enum Tier { bronze, silver, gold }
+
+credential PurchaseReceipt {      // signed by somebody else
+  merchant:     string
+  amount:       int               // satang
+  purchased_at: datetime
+}
+
+type Quote {                      // a plain record; nobody signed it
+  symbol: string
+  price:  int
+}
+
 state {
   member:         LoyaltyMember?
   lifetimePoints: int default 0
 }
 ```
 
-`=` appears nowhere in this language, and one exception in the declaration of
-persistent state is the worst place to keep it.
+State fields use `default`, not `=`. There is no assignment anywhere in the
+language.
 
-Local bindings use `const`. There is no `var` and no assignment: every binding
-is final, and a record is derived rather than changed.
+### Working with values
 
-`const` and not `let`, even though nothing here is mutable and the distinction
-`const` usually marks does not exist. The word is chosen for the reader: to
-anyone arriving from TypeScript, `let` announces a variable that will be
-reassigned, which is the opposite of what every binding in this language is.
+```val
+const bumped = { ...member, points: member.points + earned }   // derive, never mutate
+const fee    = amount > 100_000 ? 0 : 20                       // conditional expression
 
-### The library is closed
-
-There is a fixed set of builtins — durations, the list combinators of §6, string
-comparison — implemented by the host, and **an application cannot add to it.**
-
-Totality is the reason it has to be closed rather than merely small: a builtin
-is the one place a non-terminating operation could enter a language that has
-otherwise proved it cannot have one. The other reason is that a DSL with an
-extensible prelude is a general-purpose language that has not admitted it yet.
-
-If a helper is common enough that three applications write it, that is an
-argument for adding it to the set, not for opening the set.
-
-### Records are derived, never mutated
-
-```
-const bumped = { ...member, points: member.points + earned }
-```
-
-Spread produces a new value with the named fields replaced. It is typed: the
-result is the same record type as the value spread, so spreading cannot invent a
-field or drop one.
-
-This is how a record is derived **in an expression**. State is not derived this
-way: `update` is a patch table (§5), because nested spreads are the shape of
-this language that a non-programmer stops being able to follow first.
-
-Either way there is no `a.b.c = v` anywhere in the language, in any phase.
-
-### Enums are switched exhaustively
-
-```
 const discount = switch (tier) {
   Tier.bronze => 0,
   Tier.silver => 5,
@@ -342,51 +133,28 @@ const discount = switch (tier) {
 }
 ```
 
-**A `switch` over an enum may not use a default arm.** Adding `Tier.platinum`
-must break every program that decides something per tier — that is the entire
-value of having enums rather than strings. Switches over open domains (`int`,
-`string`) require a `default` instead, because they cannot be exhaustive.
-
-### Conditionals
-
-`if` is a statement. The expression form is the conditional operator, as in
-TypeScript and Dart:
-
-```
-const fee = amount > 100_000 ? 0 : 20
-```
-
-A block-bodied `if` that evaluates to a value is Rust's shape, not this
-language's, and mixing the two gives two ways to write one thing.
+A `switch` over an enum **may not have a `default`**, so adding `Tier.platinum`
+breaks every program that decides something per tier. A `switch` over `int` or
+`string` requires one. An arm that can never be reached is an error.
 
 ---
 
-## 4. Verification
+## Credentials and trust
 
-### `verify` is the only way to obtain a `Verified<P>`
+Every credential has the same four faces:
 
-There is no cast, no constructor, no runtime assertion that leaves the type
-unchanged. A function that demands verified data cannot be handed anything else,
-so the check cannot be forgotten: forgetting it does not compile.
-
-### Every credential has the same four faces
-
-```
-receipt.claims        // what the issuer said — the vocabulary, typed
+```val
+receipt.claims        // what the issuer said — your declared fields
 receipt.signature     // .valid
-receipt.status        // .active, and why it is not
+receipt.status        // .active
 receipt.holder        // .bound — is this the person in front of us
 ```
 
-`claims` is the credential's own type; the other three are the same on every
-credential in the language, because they are what a trust policy is written
-about. They are readable in `trust` and in `verify`, and nowhere else: an
-application deciding for itself whether a signature is good enough is the thing
-`trust` exists to stop.
+The last three are readable only inside `trust` and `verify`.
 
-### A policy is part of the type
+### Write a policy
 
-```
+```val
 trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
   anchor: "th.co.codefin.merchants"
   require {
@@ -398,161 +166,161 @@ trust ReceiptFromMerchant(receipt: PurchaseReceipt) {
 }
 ```
 
-The result of verifying against that policy has type
-**`Verified<ReceiptFromMerchant>`** — the policy, not the credential type.
+`anchor` names a root the certificate chain resolves against, so adding a
+merchant to your scheme does not mean shipping a new version of your app.
 
-This is the correction that matters most in the language. `Verified<Employee>`
-would be nearly worthless: data checked against a strict policy and data checked
-against `{ signature.valid }` would share a type, so a function demanding
-`Verified<Employee>` would silently accept the weaker one, and the guarantee
-would be decorative. Naming the policy in the type is what makes it real.
+Put freshness in the policy. A valuation from last week is signed, unrevoked and
+correctly bound — and wrong:
 
-The credential type is not named alongside it because the policy already
-determines it. Two parameters that cannot disagree are two parameters that will
-eventually be written as if they could.
-
-**Policies are nominal.** `Verified<A>` is not `Verified<B>` even if A's
-predicates imply B's. Deciding implication between arbitrary predicates is not
-something a compiler should attempt, and a relationship that matters can be
-declared (§11.4).
-
-**The subject is bound explicitly.** `receipt.signature.valid`, never a bare
-`signature.valid`: an implicit receiver is unambiguous exactly until a second
-credential is in scope.
-
-### Provenance travels with the value
-
-`Verified<P>` covers the credential. It does not cover what is computed from it,
-and without that the paradigm stops at the edge: `amount / 100` is an `int` like
-any other, and the credential this application signs afterwards says nothing
-about where its numbers came from.
-
-So **every value carries the set of trust policies it descends from**, the
-compiler propagates it, and nobody writes it by hand except at two boundaries.
-
+```val
+holding.claims.valued_at > context.time.now - duration(hours: 24)
 ```
+
+### Use it
+
+```val
+verify {
+  const checked = receipt with ReceiptFromMerchant
+}
+
+compute {
+  const earned = checked.claims.amount / 100
+}
+```
+
+`checked` has type `Verified<ReceiptFromMerchant>`. There is no cast that
+produces one and no way to reach `.claims` without it.
+
+**The type names the policy.** `Verified<SignatureOnly>` and
+`Verified<ReceiptFromMerchant>` are different types, and a function that wants
+the second will not take the first. If one policy really does subsume another,
+declare it:
+
+```val
+trust StrictReceipt(r: PurchaseReceipt) refines ReceiptFromMerchant { … }
+```
+
+### Provenance
+
+Every value remembers which policies it descends from, and the compiler
+propagates that. You write it in one place — on a claim you issue:
+
+```val
 credential.issue(LoyaltyMember {
   points: next.member.points from { ReceiptFromMerchant }
 })
 ```
 
-The `from` clause is a requirement, not an annotation: this claim may be
-computed only from data verified under that policy, and mixing in anything
-unverified — or verified under something else — does not compile. The issued
-credential then carries the provenance of each claim, machine-checkable by
-whoever receives it next. They do not have to take our signature's word for how
-the number was reached.
+`from` is a requirement: this claim may be computed only from data verified
+under that policy. Mix in anything else and it does not compile. Whoever
+receives the credential can then check how the number was reached instead of
+taking your signature's word for it.
 
-The second boundary is `prove`, where the clause says what is in the witness.
+---
 
-**This stays tractable because the lattice is small.** It is not a hierarchy of
-secrecy levels; it is a set of policy names, and the language is total, with no
-recursion and no loops, so propagation is set union in a single pass.
+## Actions
 
-**It stays usable because it is inferred everywhere else.** An error points at
-the line where an unverified value entered, not at the line where it was finally
-used — the latter is what makes information-flow types notorious.
-
-This is the riskiest piece of the type system, and it has an ordered retreat: do
-it in the execution record first and in the types later. Strengthening a type
-does not break a program that was already correct.
-
-## 5. Actions
-
-An action is the only executable thing, and it is a function:
+An action is the only executable thing:
 
 ```
 (previous state, input, runtime context, code) → (new state, output, effects)
 ```
 
-Replay, audit and state hashing all follow from that signature. Nothing else in
-this document is worth much without it.
-
 ```
 input → require → verify → compute → update → execute
 ```
 
-Phases may be omitted but not reordered.
+Omit any phase; never reorder them.
 
-| phase | |
+| phase | what goes in it |
 | --- | --- |
-| **`input`** | what the action is given |
-| **`require`** | preconditions and narrowing |
-| **`verify`** | trust policies |
-| **`compute`** | pure calculation |
-| **`update`** | the next state |
-| **`execute`** | effects — the only phase where any appear |
+| `input` | what the action is given |
+| `require` | preconditions, and narrowing `T?` with `exists` |
+| `verify` | trust policies |
+| `compute` | pure calculation, and `refuse` |
+| `update` | the next state, as a patch |
+| `execute` | effects — the only phase where any may appear |
 
-### Errors are outcomes, not values
+```val
+action ScanToEarn {
+  input {
+    receipt: Credential<PurchaseReceipt>
+  }
 
-There is no `Result<T, E>` and no propagation. An action has nowhere to
-propagate to: it is a transaction, and it either happens or it does not — so an
-error type would need early return everywhere, which is a second control flow
-for a language that has one.
+  require {
+    state.member exists
+  }
 
-What an application does need is a way to decline **for its own reasons**, which
-is neither of the two failures above:
+  verify {
+    const checked = receipt with ReceiptFromMerchant
+    checked.claims.purchased_at > context.time.now - duration(days: 30)
+  }
 
-```
-compute {
-  if (checked.claims.amount < 2_000) { refuse "tooSmallToEarn" }
+  compute {
+    if (checked.claims.amount < 2_000) { refuse "tooSmallToEarn" }
+
+    const earned = checked.claims.amount / 100
+    const total  = state.lifetimePoints + earned
+  }
+
+  update {
+    lifetimePoints: total
+    member.points:  state.member.points + earned
+  }
+
+  execute {
+    credential.issue(LoyaltyMember {
+      member_id: next.member.member_id,
+      points:    next.member.points,
+    })
+  }
 }
 ```
 
-`refuse` names a key in the text bundle, never a sentence. The person being
-declined reads it, so it comes from something signed — the same rule as every
-other line of text a screen shows, and the reason it is checkable at build time.
+Names from `input` are in scope everywhere after it, bare. The prefixed roots
+are `state.`, `context.`, and `next.` inside `execute`.
 
-**It belongs before `execute`.** By there the batch is built and the host is
-about to be offered it; declining then is a decision taken too late to be one.
+### The four ways an action does not commit
 
-So there are four ways for an action not to commit, and they are different
-things to different people:
+Pick the right one — this is the most common mistake in a first app.
 
-| | who sees it | what it means |
+| | who sees it | use it for |
 | --- | --- | --- |
-| `require` fails | nobody | a defect: the application asked for something it had no business asking |
-| `verify` fails | the person | the credential was forged, stale, or outside the anchor |
-| `refuse` | the person | the application declined, for a reason it named |
-| the host refuses the batch | the person | consent was not given, and nothing went wrong |
+| `require` fails | nobody | something that should never be false. If it is, you have a bug |
+| `verify` fails | the person | a forged, expired or out-of-anchor credential |
+| `refuse "key"` | the person | your own rule: too small, too soon, already claimed |
+| the host refuses | the person | they said no |
 
-### `require` and `verify` fail differently, and that is why there are two
-
-Both refuse to continue and both narrow types. Splitting them on how they *read*
-would be a matter of taste; splitting them on how they *fail* is a real
-distinction that the host and the person both need:
-
-- **`require` failing is a defect.** The application asked to spend points it had
-  already established it might not have. Nobody should see a message about it;
-  the action aborts, nothing commits, and it belongs in a bug report.
-- **`verify` failing is an ordinary outcome.** The receipt was forged, expired,
-  or issued by somebody outside the anchor. The person is told, plainly, and the
-  application has not done anything wrong.
-
-An application that puts a business rule in `require` gets a crash where it
-wanted a message, and the error should say so.
-
-Names declared in `input` are in scope for every later phase, bare — `receipt`,
-not `input.receipt`, the way a function's parameters are. The prefixed roots are
-the ones that come from somewhere else: `state.`, `context.`, and `next.` in
+`refuse` takes a key from `text.json`, never a sentence, and must appear before
 `execute`.
 
-Narrowing lives in `require`, and it is spelled in words:
+### `update` is a patch
 
-```
-require {
-  state.member exists
-  amount > 0
+```val
+update {
+  lifetimePoints: total
+  member.points:  state.member.points + earned
 }
 ```
 
-`exists` rather than `!= null`, because the people who most need to read this
-block are the ones for whom `null` is jargon. It is a shell keyword, and the
-shell is allowed to invent.
+Each line is `path: value`; anything unnamed is unchanged. Paths may nest but
+may not contain a list index — build a new list in `compute` and name it here in
+one line. The result is bound as `next` for `execute` to read.
 
-### `compute` is pure, and so is every function
+### `execute` is one batch
 
-```
+The host takes every effect or none, and your state commits only if it took
+them. No effect can read another's result: if one depends on another's outcome,
+that is two actions.
+
+- **At most one disclosure per action.** A disclosure cannot be undone, so a
+  second one could not depend on a batch the first has already completed. Two
+  disclosures need two consents, which means two actions.
+- **Irreversible effects run last.** The compiler orders them for you.
+
+### Functions are pure
+
+```val
 function tierFor(points: int): Tier {
   return switch (points) {
     >= 10000 => Tier.gold,
@@ -562,75 +330,129 @@ function tierFor(points: int): Tier {
 }
 ```
 
-A `switch` arm may be a comparison, so a lookup reads as a table rather than as
-a chain of `?:`. The conditional operator stays for the two-way case, where a
-table would be heavier than what it replaces.
+There are no effectful functions, so an effect cannot hide behind a call.
 
-**Arms are tried in order, and an arm that can never be reached is an error.**
+Note: a sequence of effects used by three actions has to be written out three
+times. In exchange, everything an action can do is in its `execute` block, with
+no call graph to follow.
 
-```
-switch (points) {
-  >= 2000  => Tier.silver,
-  >= 10000 => Tier.gold,      // error: unreachable
-  default  => Tier.bronze,
+---
+
+## Screens
+
+You declare a screen; the wallet draws it.
+
+```val
+screen Wallet {
+  data {
+    receipts: credentials of PurchaseReceipt verified with ReceiptFromMerchant
+      order by purchased_at desc
+      limit 50
+  }
+
+  compute {
+    const totalValue = receipts.fold(0) { sum, r -> sum + r.claims.amount }
+  }
+
+  column {
+    card(text: "balance", points: state.member.points)
+    section(text: "history")
+    list(receipts) { r ->
+      row(text: "receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at)
+    }
+    button(text: "scan", emphasis: primary, onTap: ScanToEarn)
+  }
 }
 ```
 
-A language that refuses `default` over an enum for safety cannot then let a dead
-arm through in silence. Order-dependence is fine; order-dependence nobody can
-see is not.
+**Declare data; do not fetch it.** The host resolves the `data` block before
+anything is drawn. `verified with` means a credential that fails the policy
+cannot appear — not "is filtered out".
 
-**Functions are always pure. There is no effect polymorphism, because there are
-no effectful functions to be polymorphic over.** Effects are syntax, permitted
-only inside `execute`, and they cannot hide behind a call.
+`limit` is required on a list you compute over. It bounds the work, which is
+what lets a total over the list compile to a circuit.
 
-The cost is real and is accepted: a sequence of effects used by three actions
-cannot be factored into a helper, and must be written out three times. In
-exchange, "what can this action do" is answerable by reading one block, by a
-person and by a tool, without following a call graph. For a language whose
-purpose is that question, the trade is not close.
+**A press names an action.** `onTap` is the only kind of handler, so everything
+a screen can start goes through the six phases with the same consent and the
+same record.
 
-### `update` describes the next state
+**A screen may derive, and may not act.** Its `compute` block follows an
+action's rules: pure, no effects.
 
+Note: keep totals in `compute`, not in `state`. A value you can compute from
+what is already on the screen does not need to be stored, hashed and replayed.
+
+**Interaction state belongs to the host.** Which tab is open, scroll position,
+what is typed but not submitted. An action receives what the form held at the
+moment it was submitted, through `input`.
+
+### Components
+
+What the wallet ships, not what the language defines:
+
+```val
+column { … }
+section(text: "key")
+card(text: "key", slot: value)
+row(text: "key", slot: value, onTap: Action)
+list(binding) { item -> … }
+button(text: "key", emphasis: primary, onTap: Action)
 ```
-update {
-  lifetimePoints: total
-  member.points:  state.member.points + earned
-  member.tier:    tier
+
+Props are semantic — `text`, `icon`, `emphasis`, `state`, `onTap`. No colours,
+no fonts, no pixel sizes. Asking for a component the catalogue does not have is
+reported, not approximated. Your package records the catalogue version it was
+built against, and a host renders those semantics or refuses to run it.
+
+### Text
+
+```json
+"balance": { "en": "You have {points} points", "th": "คุณมี {points} แต้ม" }
+```
+
+```val
+card(text: "balance", points: state.member.points)
+```
+
+You supply the slots; the host formats numbers, dates and currency per locale.
+A missing key, a missing slot, a slot of the wrong type or an untranslated
+locale is a failed build.
+
+### Data that is not a credential
+
+Prices, news, a catalogue. Fetch it through the host:
+
+```val
+data {
+  holdings: credentials of Holding verified with FromLicensedBroker
+  prices:   query broker.quotes(symbols: holdings.symbols) as List<Quote>
 }
 ```
 
-**`update` is a patch, not an expression.** Each line names a field of the state
-and the value it takes; everything not named is unchanged. It reads as a table
-of what this action changes, which is exactly the question somebody reviewing
-the app is asking.
+Your app authenticates by presenting a credential and **never touches the
+token**. The host presents, gets the access token, makes the request and returns
+the rows.
 
-`:` and not `=`, because nothing is being assigned: the block describes the next
-state, and the previous one is still readable as `state.…` on the right of every
-line. A path may name nested fields, and may not contain a list index — that is
-where a patch would need an optics story, and the answer is to compute the new
-list in `compute` and name it here in one line.
+- The audience is fixed in your manifest, never built at runtime.
+- Getting access is a disclosure: declare `disclosure.present`.
+- The person consents once per app and audience, not per refresh.
+- The host caches the answer and displays its age.
+- A failure tells you the query did not answer, not why.
 
-**Only paths, never a record literal.** `member: { ...state.member, tier: tier }`
-says the same thing as `member.tier: tier` and is the second way to do one thing,
-which is what this language spends its budget avoiding. Build the record in
-`compute` and name it here if it is genuinely a whole new record.
+The wallet shows three grades of data differently, and you cannot choose how:
 
-The block produces the next state and binds it as **`next`**, which `execute`
-reads. Without that binding an application recomputes the same arithmetic in
-both phases, they drift the day somebody edits one of them, and the execution
-record proves the disagreement faithfully.
+| grade | source |
+| --- | --- |
+| issuer-backed | a claim in a credential |
+| self-asserted | your own `state` |
+| origin-asserted | a query answered by an authenticated API |
 
-The host commits the next state **only if the effects in `execute` succeed** —
-the alternative is a state that records something that did not happen. What that
-sentence requires of `execute` is below.
+---
 
-### `execute` is where effects appear, disclosure included
+## Disclosing and proving
 
-```
+```val
 execute {
-  credential.issue(LoyaltyMember { points: next.member.points, … })
-
   present {
     disclose checked.claims.country
     prove checked.claims.birthdate <= context.time.now - duration(years: 20)
@@ -638,665 +460,267 @@ execute {
 }
 ```
 
-**Disclosure is an effect.** It hands a person's data to somebody else, which in
-a system built around privacy is the most consequential thing an application can
-do. It therefore requires a declared capability, appears in `execute` with the
-rest, and lands in the execution record as an effect — not as a footnote.
+`disclose` hands over a value. `prove` hands over an answer — the verifier
+learns that somebody is over twenty and cannot work out the birthday.
 
-### `execute` requests a set, not a sequence
+`prove` produces a `Proof<bool>` and nothing weaker. Where a real zero-knowledge
+proof cannot be produced, **your app does not build**; it never falls back to
+disclosing and comparing.
 
-The effects in `execute` are **one batch, offered together**. The host approves
-the whole batch or refuses the whole batch, and the state from `update` is
-committed only if the batch ran. No effect may read the result of another: if
-one genuinely depends on another's outcome, that is two actions, and the person
-gets to see both.
+### What can be proved
 
-This is not a convenience. Without it, "the state commits only if the effects
-succeed" is a sentence that cannot be kept: issue a credential, then fail to
-disclose, and the credential is already out.
+`prove` compiles to a circuit, and only part of the language does. The compiler
+tells you when you leave it.
 
-**Some effects cannot be taken back at all.** A disclosure is the clearest —
-there is no operation that un-tells somebody a postcode. So:
+Inside: integers with a declared width (`int<32>`), dates and times compared as
+integers, string equality, `switch` and `?:`, list combinators with a
+compile-time length, a nullifier computed from the holder's secret, and Merkle
+inclusion against the state root.
 
-- **an action performs at most one disclosure.** Two disclosures in one batch
-  cannot both be conditional on the whole batch succeeding, because the first
-  has already happened by the time the second is refused.
-- **irreversible effects run last in the batch**, after everything the host can
-  still walk back. The compiler orders them; the author does not have to know.
+Outside: effects, and anything whose size is not known statically.
 
-An application that wants to disclose twice wants two consents, which is what
-two actions give it.
+Two things to know before writing one:
 
-`disclose` hands over a value; `prove` hands over an answer. `prove` produces a
-`Proof<bool>` and nothing weaker: **where the host cannot produce a real
-zero-knowledge proof, the compiler must refuse to build the application** rather
-than fall back to disclosing the birthdate and comparing it. The author wrote
-`prove` and would never learn it had not happened.
+- **Every branch costs.** A circuit pays for both sides of a conditional.
+- **It pays for the bound, not the data.** A proof over a list of at most 200
+  costs 200 additions whether the person holds two positions or two hundred —
+  which is also why it does not leak how many they hold.
 
-### Capabilities name types, not strings
+### Proving things about your own state
 
-```
-capabilities {
-  credential.read(PurchaseReceipt)
-  credential.issue(LoyaltyMember)
-  disclosure.present
-}
-```
+State is a Merkle tree, so one field can be shown without opening the rest:
 
-The credential type is declared in the same program. A string here would be an
-unchecked second copy of a name, and the first typo would be found by a customer.
-
----
-
-## 6. Totality
-
-**Every VAL program halts.** There is no recursion — the call graph must be
-acyclic, and the compiler checks it — and there are no unbounded loops. `List<T>`
-is consumed by bounded combinators only:
-
-```
-map · filter · fold · any · all · count · first
-```
-
-each of which visits a list that already exists and cannot extend it. Input list
-lengths are bounded by the host.
-
-This is a deliberate position, not a missing feature. What it buys:
-
-- **Termination without fuel.** Wasm's fuel limit (§8) becomes a second belt
-  rather than the only one.
-- **A cost bound before running.** Tooling can price an action, and a preview
-  cannot hang.
-- **Purity that is worth something.** A pure function that might not return is
-  only half a guarantee.
-
-What it costs: the day somebody genuinely needs unbounded iteration, the answer
-is that they are writing a service, not a VAL application. That answer needs to
-stay true, which means watching what people reach for.
-
----
-
-## 7. Execution and its record
-
-```
-                        .val sources  (a package: several files, one scope)
-                              │
-        ┌─────────────────────┴─────────────────────┐
-        │  the front end — the host runs all of it  │
-        │                                           │
-        │   lexer ─ parser ─ AST                    │
-        │   semantic analysis                       │
-        │   type checking      Verified<P>, T?, provenance
-        │   capability analysis                     │
-        │   trust analysis                          │
-        │   determinism + totality                  │
-        │   policy validation                       │
-        └─────────────────────┬─────────────────────┘
-                              │
-                    typed AST ┼ capability report   ← derived, not declared
-                              │
-                     IR ──────┴────── (v1 skips this)
-                      │
-        ┌─────────────┴──────────────┐
-        │  evaluator (v1)            │   walks the typed AST
-        │  Wasm back end (later)     │   only when fuel limits are worth it
-        └─────────────┬──────────────┘
-                      │
-        sources + manifest + text bundle + report + assets
-                      │
-             integrity hashes ─ signature
-                      │
-                   .va package
-                      │
-              host runtime ─ platform
-```
-
-**The sources travel in the package.** Not "the sources or the bytecode" —
-both, when there is bytecode at all. A package the host cannot re-check from
-first principles puts the publisher back in the position of trust that §1
-removes, and a hash over a blob only proves it is the blob somebody signed, not
-that it is the program somebody read.
-
-Two stages are not in this drawing on purpose. **There is no bytecode of our
-own**: Wasm or the AST, and nothing in between (§8). And optimisation has no box
-because a total language with no allocation has little to optimise and every
-pass is another thing the host must reproduce exactly.
-
-### Determinism is a language property, not a runtime one
-
-There is no `Date.now()`, no `random()`, no `fetch()` and no filesystem **in the
-language**. Nondeterministic values arrive from the host in an explicit runtime
-context — `context.time.now`, `context.random.uuid` — and are recorded with
-everything else.
-
-### Canonical encoding
-
-State, input and code hashes need one canonical encoding, and it must be the
-same one everywhere: a second canonicalisation is a second thing to get subtly
-wrong. Deterministic CBOR (dCBOR) is the intended shape. A host that already has
-one supplies it through the interface rather than the language carrying a rival.
-
-### State is a Merkle tree, not a blob
-
-The execution record carries a **root**, not a hash of the whole state.
-
-Leaves are `(path, value)` pairs — the same paths `update` patches,
-`member.tier` and `lifetimePoints` — each encoded canonically, sorted by path,
-built into a binary tree with a defined shape. dCBOR already fixes the encoding
-of a value and the ordering of fields, so nothing new has to be invented to make
-two implementations agree.
-
-A single hash would have meant that proving anything about state requires
-opening all of it. That is the opposite of what the rest of this language does:
-a credential can disclose one claim and prove another, while the application's
-own state — which is where "gold tier" and "portfolio total" actually live — was
-a solid block.
-
-With a root:
-
-```
+```val
 disclose state.member.tier
 prove state.lifetimePoints >= 10_000
 ```
 
-Each is an inclusion proof against the root that is already in the record, and
-Merkle inclusion inside a circuit is a well-worn gadget, so this composes with
-§10 rather than needing anything of its own.
+Know what you are claiming. A credential claim is backed by an issuer's
+signature. A state field is backed by the chain of records that produced it —
+correct by rules anyone can re-run, but with no third party behind the input.
+The verifier is told which it is looking at.
 
-**A proof about state is not a proof about a credential, and the difference must
-reach the verifier.** A credential claim is backed by an issuer who signed it. A
-state field is backed only by the chain of records that produced it — the
-application asserted it, correctly, by rules anybody can re-run, but no third
-party stood behind the input. Provenance (§4) carries this without new
-machinery: a value derived from state has no trust policy in its provenance set,
-and a verifier reading a proof over an empty provenance set is being told, in
-the type, that this is self-asserted.
+**Anything from an API cannot be proved.** A query answer is somebody's word,
+not somebody's signature. The compiler refuses it; disclose the number and say
+where it came from.
 
-**A list is one leaf per element**, so a single entry can be proved without
-revealing its neighbours. That reveals the length, which is usually harmless and
-occasionally is not — a count of prescriptions, a number of accounts. Where the
-length is itself sensitive, the field declares a bound and the tree is padded to
-it, so the leaf count says only "at most this many".
+---
 
-### Package
+## State and the execution record
 
-Manifest, code, types, credentials, capabilities, assets, runtime version,
-integrity, signature — signed. It answers who published this, which version is
-running, whether it was modified, what it may do, and what is executing.
+`state` is yours, on their device, changed only by `update`.
 
-### The package reports on itself, and the report is derived
+After every action the host builds a Merkle tree over your state's
+`(path, value)` leaves and records the **root**. The next record carries the
+previous root, so the two chain.
 
-Compiling produces a **capability report**: what this application can do to the
-person, computed from the code rather than written by its author.
+This is tamper-**evident**, not tamper-proof: the state is on somebody's device
+and they can discard it. What the chain gives is detection, to anyone who kept
+an earlier record — which is why a verifier remembers the last root it saw, and
+why an issued credential records the root it was derived from.
 
-The distinction is the whole value. A mobile permission list is a declaration —
-the developer writes it, it is coarse, and inside it the application may do
-anything. This is derived by the checker, so a publisher cannot understate it,
-and it is precise in a way a declaration cannot be:
+A credential is spent once. Rolling back and rescanning the same receipt is a
+double-spend, and the issuer refuses it by recording a **nullifier** — computed
+inside the proof from the holder's secret and the scheme's identifier, so it is
+the same value every time for that pair and unrelated for any other.
+
+### What a record contains
+
+App id and version, publisher, code hash, action, input hash, previous and new
+state roots, policies used, capabilities used, effects requested and executed
+(disclosures among them), runtime context, timestamp, signature.
+
+### Keep state small
+
+- **No derived values.** Screens have `compute`.
+- **No interaction state.** That is the host's.
+- Sizes are bounded by the host, and the limit is checked before the state
+  commits.
+
+### Changing the shape is a new version
+
+**A change to the shape of `state` starts that version's state empty.** There is
+no migration, no compatibility shim and no dual reader — a migration is code
+that runs against data the current version never produced and cannot be replayed
+from a record, because no action performed it.
+
+Anything you cannot afford to lose belongs in a credential you issued, or on
+your own backend.
+
+---
+
+## Determinism
+
+There is no `Date.now()`, no `random()`, no `fetch()` and no filesystem in the
+language. Nondeterministic values arrive from the host and are recorded:
+
+```val
+context.time.now      context.random.uuid
+```
+
+A query answer that crosses into `compute`, `update`, `issue` or `prove` is
+recorded in the runtime context too, so the run can still be replayed.
+
+Every program halts: the call graph must be acyclic, and lists are consumed by
+bounded combinators only.
+
+---
+
+## Packaging
+
+```bash
+valc    file.val …             # diagnostics, then the capability report
+valrun  file.val ActionName    # run one action, print the execution record
+valpack build  ./dir -o app.va
+valpack verify app.va
+```
+
+A `.va` is one signed document: your sources, the manifest, the text bundle, the
+derived capability report, a hash per file, and a signature over all of it. The
+same inputs produce the same bytes.
+
+**The sources travel in the package**, so the host can check it from first
+principles rather than trusting your build.
+
+### The capability report
+
+The compiler derives it from your code; you cannot write or edit it.
 
 ```
 reads          PurchaseReceipt.amount, PurchaseReceipt.purchased_at
                under ReceiptFromMerchant
-discloses      nothing
-proves         sum(Holding.market_value) >= 5_000_000_00   to broker.co.th
-issues         LoyaltyMember, signed by th.co.codefin
+discloses      NationalId.country
+proves         birthdate <= now - 20 years
+issues         LoyaltyMember
 talks to       broker.co.th
-writes state   member, lifetimePoints
-irreversible   none
+writes state   member.points
+irreversible   one disclosure
 ```
 
-Every line of that is answerable statically because of decisions taken for other
-reasons: effects appear only in `execute`, provenance follows values, strings
-cannot be assembled, audiences are fixed in the manifest, and the language is
-total. **A language where this report is computable is the point; the report is
-just where it becomes visible.**
+The consent sheet the person approves is a rendering of this report. Read it as
+they would: if it says something you did not intend, your code says it.
 
-Two rules keep it honest:
+### What the host checks before admitting your package
 
-- **The host recomputes it and refuses on mismatch.** The publisher ships a copy
-  for review and for a store listing, and it is evidence of nothing on its own —
-  the host owns the checker (§1).
-- **The report states facts; the host does the judging.** No risk score comes
-  from the package. How a disclosure is described, how loudly, in what words and
-  in which language, is host chrome, for the same reason the consent sheet is.
+1. Every source hashes to what integrity says.
+2. The signature is over these bytes, by the key your manifest names.
+3. It compiles — checked there, not taken from your build.
+4. The report it ships is the report its code produces.
+5. Every locale your manifest promises has every key.
 
-**The consent sheet is a rendering of this report**, not a separate document
-somebody writes and keeps in sync. What the person approves and what the checker
-verified are the same object.
+Then its own policy: whether an app of your kind may hold those capabilities,
+and whether it can render your catalogue version.
 
-An application that declares a capability the report shows it never uses is a
-build failure, not a warning. Consent asked for something unused is consent
-spent on nothing, and it trains people to say yes.
+### Who signs the credentials you issue
 
-### State outlives the code that wrote it
+Not your app. It has no issuer key and must not have one.
 
-`version` is on the first line of every program, and a published application
-will be replaced by a later version while somebody's `state` sits on a device
-written by the earlier one.
+```
+device        runs the action, signs the execution record
+   ↓
+your backend  verifies that record, signs the credential with your issuer key
+   ↓
+device        stores the credential
+```
 
-**A change to the shape of `state` is a new version, and its state starts
-empty.** No migration, no compatibility shim, no dual reader. This is the same
-rule that already governs an app's kind and its capabilities: the person
-consented to a description, the description changed, so they are asked again —
-and what they are asked is legible precisely because there is no third state
-that is half of each.
+Your server does not run VAL, hold state, or see it. It checks the signature,
+resolves the code hash to a version you published, checks the trust chains,
+verifies any proof — the verification key comes from the compiled circuit, so it
+knows which predicate was proved — and then signs, or refuses.
 
-The alternative is worse than it looks. A migration is code that runs against
-data the current version never produced, is exercised by nobody, and cannot be
-replayed from an execution record, because no action performed it. In a language
-whose entire claim is that what ran can be proved, an unprovable step at the
-boundary between versions is not a small exception.
-
-An application that cannot afford to lose state should keep it where state
-belongs — in a credential it issued, or on its own backend — rather than in a
-field it can silently rename.
-
-### Nothing here is consensus
-
-This resembles a smart contract and differs in the one way that matters: state
-lives on one device and no network agrees about it. The chain of roots is
-**tamper-evident, not tamper-proof** — a person can discard the whole chain and
-start again, and nothing stops them. What the chain gives is detection, and only
-to somebody who kept an earlier record.
-
-That is not a defect to be engineered away; it is the consequence of the state
-being the person's own. Two things make it enough in practice, and neither
-requires new infrastructure:
-
-- **A verifier remembers the last root it saw** from this person, and refuses a
-  record that reaches back behind it. This catches rollback inside a
-  relationship, which is where the value is: the loyalty scheme that would be
-  defrauded is the one that has been talking to this wallet all along.
-- **An issued credential records the root it was derived from.** Rolling back
-  then leaves a signed credential pointing at a state that no longer exists in
-  the chain, which the issuer can see. The issuer becomes a witness to time
-  without being told what the state contained.
-
-**And a credential is spent once.** Rolling back and rescanning the same receipt
-is a double-spend, and it has exactly one party entitled to care — the scheme
-that issued the points. So the answer is not a ledger but a **nullifier** the
-issuer records and refuses a second time.
-
-It must not be the credential's identifier. A list of used identifiers links
-every presentation to the one before it and undoes the unlinkability a proof
-system was bought for. The nullifier is instead **computed inside the proof**
-from the holder's secret and the scheme's identifier: deterministic, so the same
-credential in the same scheme always yields the same value; and unlinkable, so
-the same credential in a different scheme yields an unrelated one. It costs one
-hash gadget in the provable subset, not an architecture.
-
-A transparency log for the wallet's whole chain would catch the rest. It is a
-component to run and a way to leak metadata, and it waits for somebody who needs
-it.
-
-### Who signs a credential an application issues
-
-An application has no issuer key and must not have one. `credential.issue`
-therefore does not sign anything: it produces an effect request, the device
-signs the execution record, and **the publisher's backend verifies that record
-and signs the credential with its own key**.
-
-This is why a publisher has a server at all, and it is the whole of what the
-server does: it does not run VAL, does not hold state, and does not see it. It
-checks the signature, resolves the code hash to a version it published, checks
-the trust chains, verifies any proof — the verification key derives from the
-compiled circuit, so it knows which predicate was proved rather than being told
-— and then either signs or refuses.
-
-Refusing is the point. A person holding the device can rewrite their state; they
-cannot make the publisher sign a credential for a run that does not verify.
-
-Where a credential carries no value, the weaker form is available: the device
-signs it as "this application, this version, on this device", which is checkable
-and self-asserted, and says so.
-
-### Execution record
-
-Application id and version, publisher, code hash, action, input hash, previous
-and new state **roots**, policies used, capabilities used, effects requested and
-effects executed — **disclosures among them** — runtime context, timestamp,
-signature.
+Somebody holding the device can rewrite their own state. They cannot make your
+server sign a credential for a run that does not verify.
 
 ---
 
-## 8. Compilation target
+## How it runs
 
-**No bespoke VM, now or later.** Everything a hand-built VM would provide —
-sandboxing, resource limits, determinism, portability — Wasm already provides,
-and maintaining one is a multi-year commitment to the part of the system that is
-not the point.
+```
+.val sources
+     │
+     ├─ lexer → parser → typed AST
+     ├─ type checking          Verified<P>, T?, provenance
+     ├─ capability and trust analysis
+     ├─ determinism and totality
+     │
+     ├─ evaluator              walks the typed AST
+     └─ Wasm back end          for hard fuel limits and signed bytecode
+```
 
-**v1 does not compile at all.** It walks the typed AST in Rust: a few hundred
-lines, deterministic, and by far the easiest thing to instrument for an
-execution record.
+Both back ends read the same typed AST; there is no intermediate representation
+between them. The Wasm back end keeps values host-side and passes `i32` handles,
+so no allocator is needed, and trapping integer overflow maps to Wasm traps
+directly. iOS forbids JIT, so the runtime interprets.
 
-Keeping the source in the package is not optional when this happens — see §1,
-*Who is trusted*. Bytecode alone would mean the host verifying a blob whose
-correspondence to reviewed source only the publisher can attest.
+### What the host supplies
 
-**Both tails read the typed AST.** There is no IR between them, and adding one
-would be adding a second thing to keep faithful to the first. A second back end
-is checked one way only: it must compute what the first computes, over the same
-source.
+VAL has no I/O. Where an effect is called for it emits a description:
 
-**Wasm is the destination, reached when there is a reason** — untrusted
-third-party code needing hard fuel limits and signed bytecode. The front end
-does not change; only the back end.
+```
+EffectRequest { capability, operation, payload }
+```
 
-- Wasm core has only `i32`/`i64`/`f32`/`f64`. Avoid the allocator problem by
-  keeping values **host-side and passing `i32` handles**, with imported helpers
-  (`val_field`, `val_add`, …). The compiler then emits calls and control flow
-  and nothing else, which `wasm-encoder` makes mechanical.
-- The no-floats rule in §3 exists mostly for this.
-- Trapping integer overflow maps to Wasm traps directly.
-- **iOS forbids JIT**, so an interpreting runtime is required. `wasmi` or `wasm3`
-  inside a Rust core covers iOS, Android and desktop from one integration;
-  browsers come free. Check the state of those runtimes and of WasmGC before
-  committing — this moves faster than a specification does.
+The host decides, in order: is the capability declared · did the person consent ·
+does host policy allow it · is the app trusted · is the operation in scope.
+
+It also supplies the canonical encoding (deterministic CBOR), the clock and
+randomness, trust resolution, the component catalogue, session and token
+handling, and the bounds on value sizes.
 
 ---
 
-## 9. User interface
+## Reference
 
-An application declares its screens. **It does not implement them.** The host
-ships the components, their behaviour and their state; VAL says which ones,
-arranged how, bound to what, and which action a press calls.
+### Builtins
 
+A closed set. An application cannot add to it.
+
+```val
+duration(days: 30)  duration(hours: 24)  duration(years: 20)
+min  max  abs
 ```
-screen Wallet {
-  data {
-    receipts: credentials of PurchaseReceipt verified with ReceiptFromMerchant
-  }
 
-  column {
-    card(text: "balance", points: state.member.points)
-    tabs {
-      tab("history") { list(receipts) { r -> row(text: "receipt", at: r.claims.purchased_at) } }
-      tab("rewards") { … }
-    }
-    button(text: "scan", emphasis: primary, onTap: ScanToEarn)
-  }
+### List combinators
+
+```val
+map  filter  fold  any  all  count  first
+```
+
+### Effects
+
+Only in `execute`, never behind a function, offered as one batch.
+
+```val
+credential.issue(Type { … })
+payment.request(to: …, amount: …)
+storage.write(scope: …, id: …, value: …)
+message.send(to: …)
+network.request(…)
+present { disclose … / prove … }
+navigate Screen
+```
+
+### Expressions
+
+```val
+const x = …                      // no var, no assignment
+a ? b : c                        // if is a statement; this is the expression
+if (cond) { … } else { … }
+switch (x) { A => 1, B => 2, }   // no default over an enum
+{ ...record, field: value }      // derive; never mutate
+x with Policy                    // the only way to get Verified<P>
+x exists                         // narrowing, in require
+value from { Policy }            // provenance, on an issued claim
+```
+
+### Screen data
+
+```val
+data {
+  name: credentials of Type verified with Policy
+    order by field desc
+    limit 50
+
+  other: query audience.operation(…) as List<Type>
 }
 ```
-
-### A screen may derive, and may not act
-
-Between `data` and the layout, a screen has a **`compute`** block with an
-action's rules: pure, no effects, no reaching a capability.
-
-It is needed because a total is a function of what is already on the screen, and
-without it every screen with a sum would have to keep that sum in `state` —
-hashed, signed, replayed and recomputable from data the screen already holds.
-Persisting a derived value is how two copies of one number start disagreeing.
-
-```
-compute {
-  const totalValue = holdings.fold(0) { sum, h -> sum + h.claims.market_value }
-}
-```
-
-### A press calls an action, and nothing else
-
-`onTap` names a declared action. Every press therefore goes through
-`input → require → verify → compute → update → execute`, the same consent, the
-same execution record. **The interface adds no path to an effect** — there is
-nothing a screen can do that an action could not have done, which is what keeps
-§5 true once there is a screen at all.
-
-### The host owns interaction state, all of it
-
-Which tab is selected, where the list is scrolled, what is typed in a field that
-has not been submitted: none of it is application state. It is not hashed, not
-committed, not in the execution record.
-
-The rule that forces this is not tidiness. `state` in this language is hashed,
-signed and replayable, and if a scroll position enters it then "provable" is
-diluted by every press. An action receives what a form collected **at the moment
-it was submitted**, through `input`, which is the mechanism that already exists.
-
-The cost is that an application cannot drive its own interface — it cannot
-switch tabs, clear a field, or scroll — except through a declared `navigate`.
-That is the same trade as never drawing: control given up in exchange for
-behaviour that is correct everywhere without each application getting it right
-separately.
-
-### Not everything on a screen is a credential
-
-Prices, news, a catalogue, a transaction history — data that is fetched to be
-looked at. Issuing a credential for each of them would be absurd, and the volume
-and volatility is exactly why this tier exists.
-
-```
-screen Portfolio {
-  data {
-    holdings: credentials of Holding verified with FromLicensedBroker
-    prices:   query broker.quotes(symbols: holdings.symbols) as List<Quote>
-  }
-}
-```
-
-**The application authenticates by presenting a credential, and never touches
-the token.** The host performs the presentation, obtains the access token, makes
-the request and returns the rows. An application that held a bearer token could
-send it somewhere else, and the person consented to it being used, not to it
-being had.
-
-What that requires:
-
-- **the audience is in the signed manifest**, never assembled at runtime — which
-  strings could not do anyway (§3)
-- **obtaining access is a disclosure**, so it declares `disclosure.present`,
-  appears in the consent the person gave, and is in the execution record. The
-  rows that come back are not the disclosure; the credential handed over to get
-  them is.
-- consent is once per application and audience — "this app may act as you at
-  broker.co.th, showing it your brokerage account credential" — not once per
-  screen refresh.
-
-### The host holds the session, and everything that follows from that
-
-The token is the host's, and so is everything around it. Stated, because each of
-these is somewhere an application would otherwise be trusted to behave:
-
-- **Scoped to one application and one audience.** Two applications talking to the
-  same broker hold nothing in common, and one application's access to two
-  audiences is two grants.
-- **Refreshed without asking again.** The person is asked once for what is
-  disclosed; a refresh discloses nothing new. They are asked again only when what
-  must be presented changes, which is a change to the manifest and therefore a
-  new version anyway.
-- **Stored where the host stores secrets** — never in application state, never in
-  the package, and **never in the execution record.** A record is made to be
-  shown to somebody; a token in it is a credential handed to whoever reads it.
-  What the record carries is that a presentation to that audience happened.
-- **Revocable by the person, per application and audience**, from outside the
-  application, in host chrome the application cannot draw or reach.
-- **A failure is the host's to report.** The application sees that the query did
-  not answer, not why — an expired grant and a rejected one look the same to it,
-  because an application that could tell them apart would learn something about
-  the person's relationship with somebody else.
-
-### The host caches, and says how old it is
-
-A query answer may be held for offline use. **The host caches it and the host
-displays its age**; the application chooses neither.
-
-The reasoning is the one already applied to a stale valuation in a trust policy:
-a price from three hours ago and a live price must not look the same, and the
-application is the party with an interest in not mentioning the difference.
-
-### Three grades of data, and the host draws the difference
-
-| grade | where it came from | provenance |
-| --- | --- | --- |
-| **issuer-backed** | a claim in a credential | the trust policy it was verified under |
-| **self-asserted** | the application's own `state` | empty, but anchored to the chain of roots |
-| **origin-asserted** | a query answered by an authenticated API | the audience that answered |
-
-The third is not nothing — the host knows exactly which origin it authenticated
-to, so it can say "from broker.co.th, unsigned" rather than "unverified". But it
-is not a signature, and the person must be able to see which numbers on a screen
-somebody stood behind.
-
-**The host renders the difference, and the application cannot choose how.** Same
-rule as consent chrome: an application that could make fetched figures look
-issuer-backed would break the one promise the wallet makes.
-
-### Fetched data and the record
-
-Query results are **not** recorded — an execution record full of news headlines
-buries what it exists to prove.
-
-But the moment such a value crosses into `compute`, `update`, `issue` or
-`prove`, the state depends on something that cannot be replayed, and the chain
-is worth nothing. So: **a value that crosses that line is recorded in the
-runtime context**, the way an oracle input is, and replay works again.
-
-The compiler can tell which is which, because provenance already tracks it —
-and `from { … }` on an issued claim (§4) rejects the crossing outright where the
-claim declared a policy no query can satisfy.
-
-### Presets and free composition are one system
-
-The host ships **archetypes** — a list screen, a detail screen, a form screen, a
-tabbed screen — and an application may use one, or compose its own from the same
-primitives.
-
-They are not two mechanisms. **An archetype is a composition the host wrote**,
-in the same data, rendered by the same renderer, versioned the same way. One
-semantics, and the host is using the thing it ships.
-
-Composing freely is allowed because otherwise every application looks identical
-and the catalogue's authors become the bottleneck on everybody else's product.
-
-### The catalogue is versioned, and the package names its version
-
-An application signed against catalogue v1 will run on a host shipping v3.
-**The package records the catalogue version it was built against, and the host
-renders those semantics or refuses to run it.**
-
-This is affordable only because the interface is data: keeping the meaning of an
-old component is a rendering decision, where keeping old code would be a
-maintenance burden without end. It is not free — every version is one more
-rendering path — and the catalogue's authors should feel that cost, since they
-are the ones who decide how often it changes.
-
-### Freedom in composition, not in geometry
-
-- **Semantic props only** — `text:` (a manifest key), `icon:` (from the
-  catalogue), `emphasis:`, `state:`, `onTap:`. No colours, no fonts, no pixel
-  sizes. Spacing comes from a scale.
-- **No absolute positioning.** A container owns its own overflow.
-- **Text is measured and wrapped by the host**, because it came from the
-  manifest and because Thai runs about a third longer than English.
-
-Free composition is where a design system usually starts breaking on small
-screens, long text and dark mode. The answer is not to forbid it:
-
-### Layout is checked at build time
-
-The interface is data and the language is total, so tooling renders every screen
-at every size, locale and theme **before it ships**, and a build fails on
-anything that overflows or falls below contrast.
-
-An application that composes its own screens and looks unlike the others is
-working as intended. One that composes its own screens and breaks on a small
-phone in Thai does not get published.
-
-"At build time" means the host's build, not the publisher's. A publisher who
-skips our tooling has skipped nothing: the interface is data in the package, and
-the check is re-run before the application is admitted.
-
-### Text comes from the manifest, checked by the compiler
-
-```
-"balance": { th: "คุณมี {points} แต้ม", en: "You have {points} points" }
-
-card(text: "balance", points: state.member.points)
-```
-
-The compiler reads the manifest — they are signed as one package, so checking
-them apart would mean signing a pairing nobody verified — and rejects a missing
-key, a missing slot, a slot of the wrong type, **and a locale that is not
-translated.** A market's language missing is a build failure, not a bug report.
-
-Numbers, dates and currency are formatted by the host per locale. An application
-cannot get Thai numerals or Buddhist-era dates wrong, because it never touches
-them.
-
-### What holds regardless
-
-- **Consent is host chrome.** No application draws it, covers it, or imitates
-  it.
-- **Branding comes from the signed manifest**, never from styling.
-- **UI is data, not code** — signed, diffed and audited with the same canonical
-  encoding as the execution record.
-- **Never arbitrary drawing.** A publisher who needs pixels wants the webview
-  tier, and pays for it with the capabilities that tier cannot have.
-
----
-
-## 10. Proofs
-
-`prove` compiles to a circuit. That is only possible for a fragment of the
-language, and **the compiler must know which fragment**, because the rule in §5
-— that a proof may never quietly degrade into a disclosure — cannot be kept by a
-compiler that finds out at proving time.
-
-So there is a **provable subset**, checked statically, and leaving it is an
-error with a message that says which line and why.
-
-Inside it:
-
-- integers with a declared width — `int<32>` — because range checks are the
-  dominant cost and they scale with bits
-- `date` and `datetime` as integers, compared
-- string equality; no construction, which §3 already forbids everywhere
-- `switch` and `?:`, with the cost of **every** branch, not the taken one — this
-  has to be stated or nobody will understand why a proof is slow
-- list combinators where the length is known at compile time
-- **a nullifier**, computed from the holder's secret and the scheme's identifier
-  — see §7
-- **Merkle inclusion against the state root**, so a proof may be about state as
-  well as about claims — with the provenance distinction of §7 reaching the
-  verifier rather than being flattened into "verified"
-
-Outside it: effects, and anything whose size is not statically known.
-
-What the host supplies, and what VAL does not: the circuit proving that the
-claims came from a credential an anchor-resolvable issuer signed. VAL provides
-the predicate over those claims, and the two compose over the witness.
-`disclose` marks a public input; everything else the proof touches is witness.
-Proving randomness never enters the execution record — the statement and the
-verdict do.
-
----
-
-## 11. Open questions
-
-1. **What exactly must a host provide?** Named throughout this document and
-   specified nowhere, and it now covers five things rather than one:
-   capabilities, the text bundle, the component catalogue, session and token
-   handling, and the bounds on value sizes that totality does not cover.
-   Writing it down is the honest test of whether the first host has leaked into
-   the language, and nothing about a second host is real until it exists.
-2. **`type` is declared in §2 and specified nowhere.** Plain records exist. What
-   is unsettled is whether one may hold verified and unverified fields side by
-   side, which is a provenance question (§4) rather than a syntax one.
-Everything else that was numbered here has been settled and moved into the body.
-
----
-
-## 12. Order of work
-
-1. Parser and typed AST for the shell plus expressions.
-2. Type checker: `Verified<P>`, nullability, exhaustive switching, trapping
-   arithmetic, effect placement, acyclic call graph.
-3. Capability and trust analysis over the typed AST.
-4. Tree-walking evaluator, effect requests, execution records — provenance in
-   the record first, in the types after.
-5. The host interface (§11.1), and one capability wired end to end.
-6. Screens: the archetypes that exist as host UI already, then composition, then
-   the build-time layout check.
-7. Everything else — Wasm back end, the provable subset, packaging — after a
-   real application exists and pushes on it.

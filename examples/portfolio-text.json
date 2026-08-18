@@ -1,5 +1,5 @@
 {
-  "_comment": "The portfolio package's own bundle. Each package carries its own: they are signed together, and a shared one would be a sentence somebody else's application is responsible for — spec §9.",
+  "_comment": "The portfolio package's own bundle. Each package carries its own: they are signed together, and a shared one would be a sentence somebody else's application is responsible for — the specification, User interface.",
   "locales": ["en", "th"],
   "keys": {
     "portfolioTotal": {

@@ -1,5 +1,5 @@
 {
-  "_comment": "The text bundle, signed with the package. Code names a key and supplies slot values; it never assembles a sentence. A locale missing a key is a failed build, not a bug report — spec §9. English is listed first because it is the base a reader arrives in; the order carries no meaning to the compiler, which requires every locale the manifest promises.",
+  "_comment": "The text bundle, signed with the package. Code names a key and supplies slot values; it never assembles a sentence. A locale missing a key is a failed build, not a bug report — the specification, User interface. English is listed first because it is the base a reader arrives in; the order carries no meaning to the compiler, which requires every locale the manifest promises.",
   "locales": [
     "en",
     "th"
