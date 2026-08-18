@@ -86,6 +86,16 @@
           "expires_at": "2026-12-31T00:00:00Z"
         }
       ]
+    },
+    "UnitOwnership": {
+      "verified": "FromJuristicPerson",
+      "rows": [
+        {
+          "building_id": "TH-BKK-0421",
+          "unit": "12/34",
+          "ratio_bp": 1250
+        }
+      ]
     }
   },
   "queries": {

@@ -1,0 +1,91 @@
+// Every component the wallet ships, on one screen.
+//
+// The catalogue is small on purpose: a Micro App declares what a thing is, and
+// the wallet decides what it looks like. Asking for something that is not here
+// is reported rather than approximated — try adding `tabs { … }` and read what
+// the compiler says.
+
+app "id.vaulet.example.catalogue"
+version 1
+
+capabilities {
+  credential.read(PurchaseReceipt)
+}
+
+credential PurchaseReceipt {
+  merchant:     string
+  amount:       int
+  purchased_at: datetime
+}
+
+trust AnyReceipt(receipt: PurchaseReceipt) {
+  anchor: "th.co.codefin.merchants"
+  require {
+    receipt.signature.valid
+    receipt.status.active
+    receipt.holder.bound
+  }
+}
+
+state {
+  presses: int default 0
+}
+
+// Two actions, so a primary and a secondary button each have somewhere to go.
+// A button with no action is a button nobody can press.
+action Press {
+  compute {
+    const next_count = state.presses + 1
+  }
+
+  update {
+    presses: next_count
+  }
+}
+
+action Reset {
+  update {
+    presses: 0
+  }
+}
+
+screen Catalogue {
+  // What this screen sees of the wallet, resolved before anything is drawn.
+  data {
+    receipts: credentials of PurchaseReceipt verified with AnyReceipt
+      order by purchased_at desc
+      limit 5
+  }
+
+  // Pure, an action's rules, no effects. A total kept here rather than in
+  // `state` is a total that cannot disagree with what is on the screen.
+  compute {
+    const spent = receipts.fold(0) { sum, r -> sum + r.claims.amount }
+  }
+
+  column {
+    // `card` — a heading with values in it.
+    card(text: "summary", presses: state.presses, spent: spent)
+
+    // `section` — a subhead, which is how this wallet groups what follows.
+    section(text: "rows")
+
+    // `row` — a line with a leading icon. With `onTap` it gains a chevron and
+    // becomes pressable; without one it is a line of text.
+    row(text: "plainRow")
+    row(text: "pressableRow", onTap: Press)
+
+    // `list` — one row per element, with each element's slots resolved. An
+    // empty list draws the wallet's own empty state, never yours.
+    section(text: "fromTheWallet")
+    list(receipts) { r ->
+      row(text: "receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at)
+    }
+
+    // `button` — `emphasis: primary` is the one that docks to the bottom of the
+    // screen. Anything else is an outlined button in the flow of the column.
+    section(text: "buttons")
+    button(text: "secondary", emphasis: secondary, onTap: Reset)
+    button(text: "primary", emphasis: primary, onTap: Press)
+  }
+}

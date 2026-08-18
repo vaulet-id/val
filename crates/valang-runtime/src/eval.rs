@@ -341,6 +341,31 @@ impl<'a> Eval<'a> {
             return Ok(Value::Int(n.checked_mul(ms).ok_or_else(|| Trap::Overflow("duration".into()))?));
         }
 
+        // The rest of the closed set. The type checker knows their arity and
+        // their types; without them here a program it accepted stopped at run
+        // time with `no function named min`, which is the two halves of one
+        // compiler disagreeing about what the language has.
+        if matches!(name.as_str(), "min" | "max" | "abs") {
+            let mut ns = Vec::new();
+            for a in args {
+                let v = self.expr(&a.value, state)?;
+                ns.push(v.as_int().ok_or_else(|| {
+                    Trap::Unsupported(format!("`{name}` takes whole numbers"))
+                })?);
+            }
+            return match (name.as_str(), ns.as_slice()) {
+                ("min", [a, b]) => Ok(Value::Int(*a.min(b))),
+                ("max", [a, b]) => Ok(Value::Int(*a.max(b))),
+                // Trapping rather than wrapping, as every other arithmetic here
+                // does: the absolute value of the smallest i64 is not an i64.
+                ("abs", [a]) => a
+                    .checked_abs()
+                    .map(Value::Int)
+                    .ok_or_else(|| Trap::Overflow("abs".into())),
+                _ => Err(Trap::Unsupported(format!("`{name}` was given {} arguments", ns.len()))),
+            };
+        }
+
         if let Some(f) = self.program.functions.iter().find(|f| f.name == name).cloned() {
             self.push();
             for (param, arg) in f.params.iter().zip(args) {

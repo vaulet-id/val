@@ -439,6 +439,15 @@ export default function App() {
                   <TabsTrigger value="screen">Preview</TabsTrigger>
                   <TabsTrigger value="report">Report</TabsTrigger>
                 </TabsList>
+                {/* An action is running because somebody pressed something on
+                    the screen, so it says so next to the screen. Build & Run is
+                    a different act and does not borrow this. */}
+                {running && (
+                  <span className="flex items-center gap-1.5 text-[10px] text-[var(--color-muted-foreground)]">
+                    <Loader2 className="size-3 animate-spin" />
+                    running the action
+                  </span>
+                )}
                 {!ready ? (
                   <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">loading the compiler…</span>
                 ) : (
@@ -446,10 +455,10 @@ export default function App() {
                     size="sm"
                     className="ml-auto"
                     onClick={build}
-                    disabled={!analysis || running}
+                    disabled={!analysis}
                     title="checks the package, then shows it running — pressing something is what runs an action"
                   >
-                    {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+                    <Play className="size-3" />
                     Build &amp; Run
                   </Button>
                 )}

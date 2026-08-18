@@ -1,0 +1,134 @@
+// Voting at a condominium's general meeting.
+//
+// A co-owner's vote is weighted by their share of the building, and Thai
+// condominium law caps any one owner at a third of the total however much they
+// own. The app applies the cap; the Python server beside this refuses to record
+// a vote that did not.
+//
+// Ratios are in basis points, because there is no floating point here. 1_250 is
+// 12.5% of the building.
+
+app "th.co.condo.meeting"
+version 1
+
+capabilities {
+  credential.read(UnitOwnership)
+  credential.issue(VoteCounted)
+  disclosure.present
+}
+
+credential UnitOwnership {
+  building_id: string
+  unit:        string
+  ratio_bp:    int
+}
+
+// What the meeting records, and what the owner keeps: which unit voted, with
+// how much weight, on which resolution.
+credential VoteCounted {
+  resolution: string
+  unit:       string
+  weight_bp:  int
+  cast_at:    datetime
+}
+
+trust FromJuristicPerson(deed: UnitOwnership) {
+  anchor: "th.co.condo.registrar"
+  require {
+    deed.signature.valid
+    deed.status.active
+    deed.holder.bound
+    deed.claims.ratio_bp > 0
+  }
+}
+
+state {
+  voted: bool default false
+}
+
+// A third of the building, in basis points. Section 45 of the Condominium Act:
+// one owner's votes count for no more than this, however many units they hold.
+function cappedWeight(ratio: int): int {
+  return min(a: ratio, b: 3_333)
+}
+
+action VoteFor {
+  input {
+    deed: Credential<UnitOwnership>
+  }
+
+  require {
+    state.voted == false
+  }
+
+  verify {
+    const checked = deed with FromJuristicPerson
+  }
+
+  compute {
+    const weight = cappedWeight(checked.claims.ratio_bp)
+  }
+
+  update {
+    voted: true
+  }
+
+  execute {
+    // A condominium vote is recorded by unit rather than in secret — the
+    // register is what an owner disputing the outcome reads.
+    present {
+      disclose checked.claims.unit
+    }
+
+    credential.issue(VoteCounted {
+      resolution: "budget-2027",
+      unit:       checked.claims.unit,
+      weight_bp:  weight,
+      cast_at:    context.time.now,
+    })
+  }
+}
+
+action VoteAgainst {
+  input {
+    deed: Credential<UnitOwnership>
+  }
+
+  require {
+    state.voted == false
+  }
+
+  verify {
+    const checked = deed with FromJuristicPerson
+  }
+
+  compute {
+    const weight = cappedWeight(checked.claims.ratio_bp)
+  }
+
+  update {
+    voted: true
+  }
+
+  execute {
+    present {
+      disclose checked.claims.unit
+    }
+
+    credential.issue(VoteCounted {
+      resolution: "budget-2027",
+      unit:       checked.claims.unit,
+      weight_bp:  weight,
+      cast_at:    context.time.now,
+    })
+  }
+}
+
+screen Meeting {
+  column {
+    card(text: "resolution")
+    section(text: "yourWeight")
+    button(text: "approve", emphasis: primary, onTap: VoteFor)
+    button(text: "reject", emphasis: secondary, onTap: VoteAgainst)
+  }
+}

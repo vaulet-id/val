@@ -2,7 +2,6 @@ import loyalty from '../../examples/loyalty.val?raw'
 import portfolio from '../../examples/portfolio.val?raw'
 import wallet from '../../examples/wallet.val?raw'
 import door from '../../examples/door.val?raw'
-import rejected from '../../examples/rejected.val?raw'
 import textBundle from '../../examples/text.json?raw'
 import portfolioText from '../../examples/portfolio-text.json?raw'
 import referendum from '../../examples/referendum.val?raw'
@@ -11,6 +10,11 @@ import referendumHandler from '../../examples/referendum-handler.rs?raw'
 import transit from '../../examples/transit.val?raw'
 import transitText from '../../examples/transit-text.json?raw'
 import transitHandler from '../../examples/transit-handler.go?raw'
+import catalogue from '../../examples/catalogue.val?raw'
+import catalogueText from '../../examples/catalogue-text.json?raw'
+import condo from '../../examples/condo.val?raw'
+import condoText from '../../examples/condo-text.json?raw'
+import condoHandler from '../../examples/condo-handler.py?raw'
 import walletFixture from '../../fixtures/wallet.json?raw'
 
 /// The one wallet. Every project previews against the same phone, because a
@@ -45,13 +49,16 @@ export const files: SourceFile[] = [
   { path: 'examples/portfolio.val', pkg: 'portfolio', name: 'portfolio.val', source: portfolio, note: 'no state, no issuance, a proof that discloses nothing' },
   { path: 'examples/wallet.val', pkg: 'loyalty', name: 'wallet.val', source: wallet, note: 'a screen — the second file of the loyalty package' },
   { path: 'examples/door.val', pkg: 'door', name: 'door.val', source: door, note: 'prove an age, disclose nothing' },
-  { path: 'examples/rejected.val', pkg: 'rejected', name: 'rejected.val', source: rejected, note: 'programs that must not compile' },
   { path: 'examples/text.json', pkg: 'loyalty', name: 'text.json', source: textBundle, note: 'the signed text bundle' },
   { path: 'examples/portfolio-text.json', pkg: 'portfolio', name: 'text.json', source: portfolioText, note: 'the signed text bundle' },
   { path: 'examples/referendum.val', pkg: 'referendum', name: 'referendum.val', source: referendum, note: 'prove you may vote, disclose nothing else' },
   { path: 'examples/referendum-text.json', pkg: 'referendum', name: 'text.json', source: referendumText, note: 'the signed text bundle' },
   { path: 'examples/transit.val', pkg: 'transit', name: 'transit.val', source: transit, note: 'a pass that stays in the wallet' },
   { path: 'examples/transit-text.json', pkg: 'transit', name: 'text.json', source: transitText, note: 'the signed text bundle' },
+  { path: 'examples/catalogue.val', pkg: 'catalogue', name: 'catalogue.val', source: catalogue, note: 'every component the wallet ships' },
+  { path: 'examples/catalogue-text.json', pkg: 'catalogue', name: 'text.json', source: catalogueText, note: 'the signed text bundle' },
+  { path: 'examples/condo.val', pkg: 'condo', name: 'condo.val', source: condo, note: 'a vote weighted by a share of the building' },
+  { path: 'examples/condo-text.json', pkg: 'condo', name: 'text.json', source: condoText, note: 'the signed text bundle' },
 ]
 
 /// Not part of any package: a `.va` never carries somebody's wallet. It is the
@@ -109,11 +116,14 @@ export const examples: Project[] = [
     files.filter((f) => f.pkg === 'portfolio')),
   example('door', 'Door', 'prove an age, disclose nothing else',
     files.filter((f) => f.pkg === 'door')),
-  example('rejected', 'Refused programs', 'twelve programs and the error each one is owed',
-    files.filter((f) => f.pkg === 'rejected')),
   example('referendum', 'Referendum', 'one ballot per voter, counted without a list of who voted',
     files.filter((f) => f.pkg === 'referendum'),
     { name: 'handler.rs', source: referendumHandler }),
+  example('catalogue', 'Component catalogue', 'every component on one screen, and what each prop does',
+    files.filter((f) => f.pkg === 'catalogue')),
+  example('condo', 'Condominium meeting', 'a vote weighted by ownership, with the statutory cap checked on the server',
+    files.filter((f) => f.pkg === 'condo'),
+    { name: 'handler.py', source: condoHandler }),
   example('transit', 'Transit pass', 'tap to ride, with the fare cap on the operator\'s server',
     files.filter((f) => f.pkg === 'transit'),
     { name: 'handler.go', source: transitHandler }),
