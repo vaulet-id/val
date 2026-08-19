@@ -70,10 +70,13 @@ screen Catalogue start: true {
     // `section` — a subhead, which is how this wallet groups what follows.
     section(text: "rows")
 
-    // `row` — a line with a leading icon. With `onTap` it gains a chevron and
-    // becomes pressable; without one it is a line of text.
-    tile(text: phrase("plainRow"))
-    tile(text: phrase("pressableRow"), onTap: Press)
+    // `tile` — a line with a leading icon, a supporting line under it, and
+    // whatever sits at the end: a chevron, a badge, or nothing. `trailing` is
+    // read where it is given; a chevron is the default only where there is an
+    // action to go to.
+    tile(text: phrase("plainRow"), detail: phrase("plainDetail"))
+    tile(text: phrase("pressableRow"), icon: check, onTap: Press)
+    tile(text: phrase("badgeRow"), detail: phrase("badgeCount"), trailing: badge, icon: money)
 
     // `list` — one row per element, with each element's slots resolved. An
     // empty list draws the wallet's own empty state, never yours.
@@ -87,6 +90,8 @@ screen Catalogue start: true {
     // screen. Anything else is an outlined button in the flow of the column.
     section(text: "buttons")
     button(text: "secondary", emphasis: secondary, onTap: Reset)
+    button(text: phrase("working"), emphasis: secondary, state: busy, onTap: Press)
+    button(text: phrase("notNow"), emphasis: secondary, state: disabled, onTap: Press)
     button(text: "primary", emphasis: primary, onTap: Press)
   }
 }

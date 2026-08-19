@@ -793,6 +793,15 @@ class _NodeState extends State<_Node> {
     return entry?[widget.incoming.locale] as String? ?? key;
   }
 
+  /// The supporting line, resolved the same way the title is: words written in
+  /// place, or a key where the package has a bundle.
+  String _detail() {
+    final key = args['detail'] as String?;
+    if (key == null) return '';
+    final entry = (widget.incoming.text[key] as Map?)?.cast<String, dynamic>();
+    return entry?[widget.incoming.locale] as String? ?? key;
+  }
+
   Widget _text({TextStyle? style, bool upper = false}) {
     final key = args['text'] as String?;
     if (key == null) return const SizedBox.shrink();
@@ -881,14 +890,42 @@ class _NodeState extends State<_Node> {
       // the phone.
       case 'tile':
         final action = (args['onTap'] as String?)?.trim();
+        final scheme = Theme.of(context).colorScheme;
+        // What the screen asked for, and a chevron where it asked for nothing
+        // and there is somewhere to go. A default is a rule somebody can read;
+        // ignoring the prop and guessing was neither.
+        final trailing = (args['trailing'] as String?)?.trim() ??
+            (action == null ? 'none' : 'chevron');
         return Card(
           child: ListTile(
-            leading: Icon(Icons.receipt_long_outlined, size: 28,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            leading: Icon(_iconOf(args['icon']), size: 28, color: scheme.onSurfaceVariant),
             title: _text(),
-            trailing: action == null
+            // The supporting line, capped at two — one long translation
+            // otherwise turns a row into five lines and the list stops being
+            // something anybody can scan. `TileSubtitle` in the wallet.
+            subtitle: args['detail'] == null
                 ? null
-                : Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                : Text(
+                    _detail(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  ),
+            trailing: switch (trailing) {
+              'chevron' => Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+              'badge' => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: scheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _detail(),
+                    style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer),
+                  ),
+                ),
+              _ => null,
+            },
             onTap: action == null ? null : () => _tap(action),
           ),
         );
@@ -987,14 +1024,26 @@ class _NodeState extends State<_Node> {
       case 'button':
         final emphasis = (args['emphasis'] as String?)?.trim();
         final action = (args['onTap'] as String?)?.trim();
-        final child = _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600));
+        final state = (args['state'] as String?)?.trim();
+        // A button that is working says so, and one that cannot be pressed does
+        // not look pressable. An action through the runner takes seconds, and a
+        // button that looked idle through all of them was the screen lying.
+        final busy = state == 'busy';
+        final child = busy
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600));
+        final press = (state == 'disabled' || busy) ? null : () => _tap(action);
         return Tooltip(
           message: action == null
               ? ''
               : 'calls $action, through require → verify → compute → update → execute',
           child: emphasis == 'primary'
-              ? FilledButton(onPressed: () => _tap(action), child: child)
-              : OutlinedButton(onPressed: () => _tap(action), child: child),
+              ? FilledButton(onPressed: press, child: child)
+              : OutlinedButton(onPressed: press, child: child),
         );
 
       // Not a component this host ships. Drawing something approximate would be

@@ -48,6 +48,26 @@
     "receiptDetail": {
       "en": "{merchant} · {amount}",
       "th": "{merchant} · {amount}"
+    },
+    "plainDetail": {
+      "en": "And its supporting line",
+      "th": "พร้อมบรรทัดรองของมัน"
+    },
+    "badgeRow": {
+      "en": "A row with a badge",
+      "th": "แถวที่มีป้าย"
+    },
+    "badgeCount": {
+      "en": "3",
+      "th": "3"
+    },
+    "working": {
+      "en": "Working…",
+      "th": "กำลังทำงาน…"
+    },
+    "notNow": {
+      "en": "Not now",
+      "th": "ยังไม่ได้"
     }
   }
 }
