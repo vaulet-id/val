@@ -18,6 +18,7 @@ const RESERVED: &[&str] = &[
     // Expressions.
     "const", "let", "var", "if", "else", "switch", "default", "return", "with",
     "exists", "from", "of", "as", "order", "by", "limit", "desc", "asc", "in",
+    "for",
     // Effects written as syntax rather than as calls.
     "disclose", "prove",
     // Types.
@@ -1050,6 +1051,34 @@ impl Parser {
             });
         }
 
+        // `for (r in rows) { … }` — the body once per item, and nothing drawn
+        // around them. `list(rows) { r -> … }` is the wallet's list, with its
+        // separators and its empty state; this is repetition and no more.
+        if self.at("for") && self.peek_at(1).is("(") {
+            self.bump();
+            self.expect("(");
+            let bind = self.ident();
+            if !self.eat("in") {
+                let bad = self.peek().clone();
+                self.diagnostics.push(Diagnostic::error(
+                    bad.span,
+                    format!("a loop reads `for (row in rows)`, and this says `{}`", bad.text),
+                ));
+            }
+            let over = self.expr(0);
+            self.expect(")");
+            let children = self.ui_block();
+            return Some(UiNode {
+                kind: "for".to_string(),
+                args: vec![Arg { name: None, value: over, spread: false, span }],
+                lambda: Some(bind),
+                children,
+                slots: Vec::new(),
+                otherwise: Vec::new(),
+                span,
+            });
+        }
+
         // `wallet.avatar` — a host's own component, written under the host's
         // name. One token would have made it two nodes, the second of which is
         // not a component anybody declared.
@@ -1159,10 +1188,14 @@ impl Parser {
         Some(match op {
             "||" => 1,
             "&&" => 2,
-            "==" | "!=" => 3,
-            "<" | "<=" | ">" | ">=" => 4,
-            "+" | "-" => 5,
-            "*" | "/" | "%" => 6,
+            // `0...10`. Below the comparisons so that `0...n` reads as the
+            // range of `n`, and above them nothing — a range of a comparison is
+            // not a thing anybody means.
+            "..." => 3,
+            "==" | "!=" => 4,
+            "<" | "<=" | ">" | ">=" => 5,
+            "+" | "-" => 6,
+            "*" | "/" | "%" => 7,
             _ => return None,
         })
     }

@@ -484,6 +484,13 @@ fn render(e: &Expr) -> String {
     }
 }
 
+/// How long a range may be.
+///
+/// Every other list in this language came from the host and carries a `limit`.
+/// A range is written, so its bound is written here — and totality is the one
+/// promise the language does not bend.
+const RANGE_LIMIT: i64 = 10_000;
+
 fn binary(op: &str, a: Value, b: Value) -> R<Value> {
     use Value::*;
     Ok(match (op, &a, &b) {
@@ -496,6 +503,25 @@ fn binary(op: &str, a: Value, b: Value) -> R<Value> {
         ("/", Int(x), Int(y)) => Int(x / y),
         ("%", Int(_), Int(0)) => return Err(Trap::DivideByZero),
         ("%", Int(x), Int(y)) => Int(x % y),
+        // `0...10` — both ends included, as the punctuation says in every
+        // language that spells it this way. Bounded here rather than trusted,
+        // because a range is the one expression whose size is not a property of
+        // the data the host handed over: it is whatever the arithmetic said.
+        ("...", Int(x), Int(y)) => {
+            if y < x {
+                List(Vec::new())
+            } else {
+                let count = y.checked_sub(*x).and_then(|n| n.checked_add(1));
+                match count {
+                    Some(n) if n <= RANGE_LIMIT => List((*x..=*y).map(Int).collect()),
+                    _ => {
+                        return Err(Trap::Failed(format!(
+                            "a range of {x} to {y} is more steps than a screen can be made of. The limit is {RANGE_LIMIT}"
+                        )))
+                    }
+                }
+            }
+        }
         ("<", Int(x), Int(y)) => Bool(x < y),
         ("<=", Int(x), Int(y)) => Bool(x <= y),
         (">", Int(x), Int(y)) => Bool(x > y),

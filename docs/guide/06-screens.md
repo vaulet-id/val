@@ -59,6 +59,28 @@ nobody took today is still a capability the person consented to.
 The wallet never sees the condition. It is settled while the screen is being
 resolved, so what arrives to be drawn is one tree with the choice already made.
 
+## Repeating without a list around it
+
+```val
+for (r in receipts) {
+  tile(text: r.claims.merchant)
+}
+
+for (i in 1...3) {
+  section(text: i)
+}
+```
+
+`list(receipts) { r -> … }` draws the wallet's list — its separators, its empty
+state, its scrolling. `for` draws the body and nothing else, once per item,
+spliced where the loop was written. Use the first when you mean a list and the
+second when you mean repetition.
+
+A range includes both ends, and is bounded: `1...10` is ten items, and a range
+longer than ten thousand is refused. Every other list in this language came from
+the wallet and carries a `limit`; a range is written, so its bound is written
+too.
+
 ## Declare your data; do not fetch it
 
 The wallet resolves the `data` block before anything is drawn. No half-drawn

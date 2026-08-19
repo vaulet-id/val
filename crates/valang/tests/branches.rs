@@ -248,3 +248,23 @@ fn a_parameter_that_is_neither_a_name_nor_a_type_reports() {
     let e = errors(src);
     assert!(!e.is_empty(), "a malformed parameter list said nothing at all");
 }
+
+/// The same limit the runtime holds, said where it can name the line rather
+/// than at the moment somebody's screen fails to draw.
+#[test]
+fn a_range_longer_than_a_screen_is_refused_at_the_line() {
+    let e = errors(&program("  for (i in 1...999999) {\n    text(i)\n  }"));
+    assert!(e.iter().any(|m| m.contains("more steps than a screen can be made of")), "{e:?}");
+}
+
+#[test]
+fn a_range_runs_between_integers() {
+    let e = errors(&program("  for (i in 1...\"ten\") {\n    text(i)\n  }"));
+    assert!(e.iter().any(|m| m.contains("a range runs between integers")), "{e:?}");
+}
+
+#[test]
+fn a_loop_says_what_it_reads_over() {
+    let e = errors(&program("  for (i of 1...3) {\n    text(i)\n  }"));
+    assert!(e.iter().any(|m| m.contains("a loop reads `for (row in rows)`")), "{e:?}");
+}

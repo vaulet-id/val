@@ -276,9 +276,9 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
 
     for tree in &trees {
         walk_ui(tree, &mut |node| {
-            // `if` is the language's, not a host's: it chooses between two
-            // trees and draws nothing itself.
-            if node.kind == "if" {
+            // The language's own, not a host's: one chooses between two trees
+            // and the other repeats one, and neither draws anything itself.
+            if node.kind == "if" || node.kind == "for" {
                 return;
             }
             let Some((_, cap)) = usable.find(&node.kind) else {

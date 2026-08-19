@@ -166,6 +166,28 @@ fn components(
 ) -> Result<Vec<Component>, Trap> {
     let mut out = Vec::new();
     for n in nodes {
+        // `for (r in rows) { … }` — the body once per item, spliced where the
+        // loop was written. Resolved here for the same reason `if` is: what a
+        // host receives is a tree, and a host that had to implement a loop
+        // would be a host implementing the language.
+        if n.kind == "for" {
+            let items = match n.args.first() {
+                Some(a) => match ev.expr(&a.value, state)? {
+                    Value::List(items) => items,
+                    Value::Null => Vec::new(),
+                    one => vec![one],
+                },
+                None => Vec::new(),
+            };
+            for item in items {
+                if let Some(bind) = &n.lambda {
+                    ev.bind(bind, item);
+                }
+                out.extend(components(ev, &n.children, state)?);
+            }
+            continue;
+        }
+
         if n.kind == "if" {
             let taken = match n.args.first() {
                 Some(a) => matches!(ev.expr(&a.value, state)?, Value::Bool(true)),

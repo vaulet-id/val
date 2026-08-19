@@ -19,6 +19,10 @@ use crate::types::{Provenance, Ty, Typed};
 /// and the parameter it filled is gone with it. This runs over the program as
 /// it was written, and reports only the call — everything else about it is
 /// checked after expansion, once.
+/// How long a range may be. The runtime holds the same number and traps on it;
+/// this is the same limit said early, where it can name the line.
+const RANGE_LIMIT: i64 = 10_000;
+
 pub fn check_component_calls(p: &Program) -> Vec<Diagnostic> {
     let mut cx = Cx::new(p);
     for s in &p.screens {
@@ -703,6 +707,32 @@ impl<'a> Cx<'a> {
                             (Ty::Date, _) | (_, Ty::Date) => Ty::Date,
                             _ => Ty::Int,
                         }
+                    }
+                    // `0...10` is the integers from one to the other.
+                    "..." => {
+                        for (t, e) in [(&a, lhs.as_ref()), (&b, rhs.as_ref())] {
+                            if !t.ty.is_unknown() && !matches!(t.ty, Ty::Int) {
+                                self.err(
+                                    e.span(),
+                                    format!("a range runs between integers, and this is `{}`", t.ty),
+                                );
+                            }
+                        }
+                        // A range written out is the one list whose length is
+                        // on the page, so the limit that the runtime enforces
+                        // is worth saying here instead of at the moment
+                        // somebody's screen fails to draw.
+                        if let (Expr::Num { value: from, .. }, Expr::Num { value: to, .. }) =
+                            (lhs.as_ref(), rhs.as_ref())
+                        {
+                            if to.saturating_sub(*from).saturating_add(1) > RANGE_LIMIT {
+                                self.err(
+                                    *span,
+                                    format!("a range of {from} to {to} is more steps than a screen can be made of. The limit is {RANGE_LIMIT}"),
+                                );
+                            }
+                        }
+                        Ty::List(Box::new(Ty::Int))
                     }
                     "<" | "<=" | ">" | ">=" => {
                         if !a.ty.accepts(&b.ty) && !b.ty.accepts(&a.ty) {
