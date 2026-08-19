@@ -61,12 +61,14 @@ pub fn analyse_fully(
     // else looks at a screen, so every later pass — the checks, the capability
     // report, the renderer — sees one kind of node.
     diagnostics.extend(expand::expand(&mut program));
+    // Before `check`, which asks whether a declared capability goes unused and
+    // needs to know that drawing a video is a use of `media.video`.
+    diagnostics.extend(capability::check(&mut program, hosts));
     diagnostics.extend(check::check(&program));
     diagnostics.extend(typeck::check_types(&program));
     if let Some((bundle, locales)) = bundle {
         diagnostics.extend(check::check_bundle(&program, bundle, locales));
     }
-    diagnostics.extend(capability::check(&mut program, hosts));
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
     // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:

@@ -40,3 +40,50 @@ fn an_unclosed_string_of_wide_characters_still_terminates() {
     let msgs = analyse("app \"x\"\nversion 1\nstate { s: string default \"— ไทย");
     assert!(msgs.iter().any(|m| m.contains("never closed")), "{msgs:?}");
 }
+
+/// A list written out. A table's columns and a picker's options are lists
+/// somebody types, and every list used to come from the wallet or from a
+/// combinator over one.
+#[test]
+fn a_list_may_be_written_out() {
+    let msgs = analyse(
+        r#"
+app "example.list"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+screen Home {
+  column {
+    select("Shop") { of: ["Codefin", "Siam"], into: shop }
+    button("Pick") { onTap: Pick }
+  }
+}
+
+action Pick {
+  input {
+    shop: string
+  }
+
+  update {
+    n: 1
+  }
+}
+"#,
+    );
+    assert!(msgs.is_empty(), "{msgs:?}");
+}
+
+/// It is still not a way to reach into one.
+#[test]
+fn a_list_still_has_no_index() {
+    let msgs = analyse(
+        "app \"x\"\nversion 1\ncapabilities { }\nfunction f(xs: List<int>): int { return xs[0] }",
+    );
+    assert!(msgs.iter().any(|m| m.contains("no index")), "{msgs:?}");
+}

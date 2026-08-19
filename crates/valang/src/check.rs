@@ -680,6 +680,12 @@ fn capabilities_declared_and_used(p: &Program, d: &mut Vec<Diagnostic>) {
         }
     }
 
+    // Drawing something privileged is a use of the capability it needs, so a
+    // package that declares `media.video` because a screen shows a video is not
+    // declaring something it never uses. Which component needs what is the
+    // host's document, read by the pass that has it.
+    used.extend(p.uses.iter().cloned());
+
     let declared: HashMap<String, &Capability> = p
         .capabilities
         .iter()

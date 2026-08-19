@@ -1064,6 +1064,28 @@ impl Parser {
         self.skip_newlines();
         let t = self.peek().clone();
 
+        // `["merchant", "amount"]` — a list written out. A list still has no
+        // index; this is how one is said, not a way to reach into it.
+        if t.is("[") {
+            self.bump();
+            let mut items = Vec::new();
+            loop {
+                self.skip_newlines();
+                if self.eof() || self.eat("]") {
+                    break;
+                }
+                if self.eat(",") {
+                    continue;
+                }
+                let before = self.i;
+                items.push(self.expr(0));
+                if self.i == before {
+                    self.bump();
+                }
+            }
+            return Expr::List { items, span: t.span };
+        }
+
         match t.kind {
             Kind::Num => {
                 self.bump();

@@ -27,6 +27,10 @@ pub struct Program {
     /// host that does not provide one refuses the package rather than
     /// approximating it.
     pub hosts: Vec<String>,
+    /// Capabilities used by drawing something that needs them — `video` needs
+    /// `media.video`. Filled in by the pass that reads the host's registry, and
+    /// read by the one that asks whether a declared capability goes unused.
+    pub uses: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +277,11 @@ pub enum Expr {
     With { subject: Box<Expr>, policy: String, span: Span },
     Exists { subject: Box<Expr>, span: Span },
     Record { spread: Option<Box<Expr>>, fields: Vec<(String, Expr)>, span: Span },
+    /// `["merchant", "amount"]` — a list written out. The columns of a table
+    /// and the options of a picker are lists somebody types, and the language
+    /// had no way to say one: every list came from the wallet or from a
+    /// combinator over one.
+    List { items: Vec<Expr>, span: Span },
     Switch { subject: Box<Expr>, arms: Vec<SwitchArm>, span: Span },
     Lambda { params: Vec<String>, body: Box<Expr>, span: Span },
     /// `points: … from { Policy }`
@@ -304,6 +313,7 @@ impl Expr {
             Num { span, .. } | Float { span, .. } | Str { span, .. } | Bool { span, .. } | Ident { span, .. }
             | Member { span, .. } | Call { span, .. } | Unary { span, .. } | Binary { span, .. }
             | Ternary { span, .. } | With { span, .. } | Exists { span, .. } | Record { span, .. }
+            | List { span, .. }
             | Switch { span, .. } | Lambda { span, .. } | From { span, .. } | Error { span } => *span,
         }
     }
@@ -343,6 +353,11 @@ impl Expr {
                 other.walk(f)
             }
             With { subject, .. } | Exists { subject, .. } => subject.walk(f),
+            List { items, .. } => {
+                for i in items {
+                    i.walk(f);
+                }
+            }
             Record { spread, fields, .. } => {
                 if let Some(s) = spread {
                     s.walk(f)

@@ -385,6 +385,16 @@ impl<'a> Cx<'a> {
     fn expr(&mut self, e: &Expr) -> Typed {
         match e {
             Expr::Num { .. } => Typed::plain(Ty::Int),
+            // A list written out. Every element is checked; what the list is a
+            // list *of* is left alone, because the first use of one is a table's
+            // columns and a picker's options, where the elements are strings and
+            // the check that matters is the one on each of them.
+            Expr::List { items, .. } => {
+                for i in items {
+                    self.expr(i);
+                }
+                Typed::unknown()
+            }
             Expr::Float { .. } => Typed::unknown(),
             Expr::Str { .. } => Typed::plain(Ty::Str),
             Expr::Bool { .. } => Typed::plain(Ty::Bool),

@@ -1359,6 +1359,203 @@ class _NodeState extends State<_Node> {
           ),
         );
 
+      case 'radioGroup': {
+        final into = (args['into'] as String?)?.trim();
+        final options = ((args['of'] as List?) ?? const []).map((o) => '$o').toList();
+        final held = into == null ? null : _Form.of(context)[into] as String?;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _text(style: const TextStyle(fontSize: 13)),
+            for (final o in options)
+              RadioListTile<String>(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(o, style: const TextStyle(fontSize: 15)),
+                value: o,
+                groupValue: held,
+                onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+              ),
+          ],
+        );
+      }
+
+      case 'datePicker': {
+        final scheme = Theme.of(context).colorScheme;
+        final into = (args['into'] as String?)?.trim();
+        final held = into == null ? null : _Form.of(context)[into] as String?;
+        return InkWell(
+          // The wheel belongs to the wallet. An application asks for a date and
+          // is handed one; it never draws a calendar of its own, which is how
+          // every date in the wallet is picked the same way.
+          onTap: into == null
+              ? null
+              : () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                    initialDate: DateTime(2026, 8, 20),
+                  );
+                  if (picked != null && context.mounted) {
+                    _Form.set(context, into,
+                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
+                  }
+                },
+          child: Row(
+            children: [
+              SizedBox(
+                width: 40,
+                child: Icon(Icons.calendar_today_outlined, size: 22, color: scheme.onSurfaceVariant),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DefaultTextStyle(
+                      style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                      child: _text(),
+                    ),
+                    Text(held ?? 'Choose a date', style: const TextStyle(fontSize: 15)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        );
+      }
+
+      // A table of what a list holds. Scrolls sideways on its own, because a
+      // table that made the screen scroll sideways would take everything else
+      // with it.
+      case 'dataTable': {
+        final scheme = Theme.of(context).colorScheme;
+        final rows = ((args['of'] as List?) ?? const []).toList();
+        final columns = ((args['columns'] as List?) ?? const []).map((c) => '$c').toList();
+        if (rows.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: Vaulet.xxl),
+            child: Center(
+              child: Text('Nothing to show',
+                  style: TextStyle(color: scheme.outline, fontSize: 13)),
+            ),
+          );
+        }
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columnSpacing: Vaulet.xxl,
+            headingRowHeight: 36,
+            dataRowMinHeight: 36,
+            dataRowMaxHeight: 44,
+            columns: [
+              for (final c in columns)
+                DataColumn(label: Text(c, style: const TextStyle(fontSize: 12))),
+            ],
+            rows: [
+              for (final r in rows)
+                DataRow(cells: [
+                  for (final c in columns)
+                    DataCell(Text(
+                      '${(r is Map ? r[c] : r) ?? ''}',
+                      style: const TextStyle(fontSize: 13),
+                    )),
+                ]),
+            ],
+          ),
+        );
+      }
+
+      case 'timeline':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final c in children) _Node(node: c, incoming: widget.incoming),
+          ],
+        );
+
+      case 'timelineItem': {
+        final scheme = Theme.of(context).colorScheme;
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    height: 10,
+                    width: 10,
+                    decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
+                  ),
+                  Expanded(child: Container(width: 1, color: scheme.outlineVariant)),
+                ],
+              ),
+              const SizedBox(width: Vaulet.md),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: Vaulet.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      if (args['at'] != null)
+                        Text('${args['at']}',
+                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                      if (args['detail'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(_detail(),
+                              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // The privileged three. What is drawn here is the frame the host puts
+      // around them; the file, the stream and the page are the host's to fetch,
+      // and the application declared the capability to have them at all.
+      case 'filePicker':
+      case 'video':
+      case 'audio':
+      case 'webContent': {
+        final scheme = Theme.of(context).colorScheme;
+        final kind = n['kind'] as String? ?? '';
+        final (icon, what) = switch (kind) {
+          'video' => (Icons.play_circle_outline, 'video'),
+          'audio' => (Icons.graphic_eq, 'audio'),
+          'webContent' => (Icons.public, 'page'),
+          _ => (Icons.attach_file, 'file'),
+        };
+        return Container(
+          height: kind == 'filePicker' ? 64 : 150,
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: scheme.onSurfaceVariant),
+                const SizedBox(height: 4),
+                Text(
+                  'the host fetches the $what',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       // A screen's own sentence, drawn as the bar's title.
       case 'title':
         return _text(style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700));

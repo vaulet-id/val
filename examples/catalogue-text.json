@@ -1,105 +1,80 @@
 {
-  "_comment": "The catalogue package's own bundle. Every slot a component takes is filled here, which is the point: code supplies values and the wallet formats them.",
+  "_comment": "One language, so the words on this screen are the words. The keys that remain are here to show that a key still resolves beside them — which is what a package looks like on the day it adds a second language.",
   "locales": [
-    "en",
-    "th"
+    "en"
   ],
   "keys": {
     "summary": {
-      "en": "{presses} presses · {spent} spent",
-      "th": "กด {presses} ครั้ง · ใช้ไป {spent}"
+      "en": "{presses} presses · {spent} spent"
     },
     "rows": {
-      "en": "Rows",
-      "th": "แถว"
+      "en": "Rows"
     },
     "plainRow": {
-      "en": "A row with no action",
-      "th": "แถวที่ไม่มี action"
+      "en": "A row with no action"
     },
     "pressableRow": {
-      "en": "A row that calls Press",
-      "th": "แถวที่เรียก Press"
+      "en": "A row that calls Press"
     },
     "fromTheWallet": {
-      "en": "From the wallet",
-      "th": "จาก wallet"
+      "en": "From the wallet"
     },
     "receiptRow": {
-      "en": "{merchant} · {at}",
-      "th": "{merchant} · {at}"
+      "en": "{merchant} · {at}"
     },
     "buttons": {
-      "en": "Buttons",
-      "th": "ปุ่ม"
+      "en": "Buttons"
     },
     "secondary": {
-      "en": "Reset",
-      "th": "เริ่มใหม่"
+      "en": "Reset"
     },
     "primary": {
-      "en": "Press",
-      "th": "กด"
+      "en": "Press"
     },
     "receiptTitle": {
-      "en": "Receipt",
-      "th": "ใบเสร็จ"
+      "en": "Receipt"
     },
     "receiptDetail": {
-      "en": "{merchant} · {amount}",
-      "th": "{merchant} · {amount}"
+      "en": "{merchant} · {amount}"
     },
     "plainDetail": {
-      "en": "And its supporting line",
-      "th": "พร้อมบรรทัดรองของมัน"
+      "en": "And its supporting line"
     },
     "badgeRow": {
-      "en": "A row with a badge",
-      "th": "แถวที่มีป้าย"
+      "en": "A row with a badge"
     },
     "badgeCount": {
-      "en": "3",
-      "th": "3"
+      "en": "3"
     },
     "working": {
-      "en": "Working…",
-      "th": "กำลังทำงาน…"
+      "en": "Working…"
     },
     "notNow": {
-      "en": "Not now",
-      "th": "ยังไม่ได้"
+      "en": "Not now"
     },
     "bannerOne": {
-      "en": "Double points this week",
-      "th": "สัปดาห์นี้แต้มคูณสอง"
+      "en": "Double points this week"
     },
     "bannerOneDetail": {
-      "en": "On every receipt over ฿200",
-      "th": "ทุกใบเสร็จตั้งแต่ 200 บาท"
+      "en": "On every receipt over ฿200"
     },
     "bannerTwo": {
-      "en": "Your data stays yours",
-      "th": "ข้อมูลของคุณยังเป็นของคุณ"
+      "en": "Your data stays yours"
     },
     "bannerTwoDetail": {
-      "en": "Nothing here leaves the wallet",
-      "th": "ไม่มีอะไรออกจากกระเป๋า"
+      "en": "Nothing here leaves the wallet"
     },
     "categories": {
-      "en": "Categories",
-      "th": "หมวด"
+      "en": "Categories"
     },
     "catFood": {
-      "en": "Food",
-      "th": "อาหาร"
+      "en": "Food"
     },
     "catTravel": {
-      "en": "Travel",
-      "th": "เดินทาง"
+      "en": "Travel"
     },
     "catBills": {
-      "en": "Bills",
-      "th": "บิล"
+      "en": "Bills"
     }
   }
 }

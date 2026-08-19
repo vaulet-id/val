@@ -19,6 +19,14 @@
       },
       "primary": "text"
     },
+    "audio": {
+      "draws": true,
+      "props": {
+        "of": "string"
+      },
+      "primary": "of",
+      "requires": "media.audio"
+    },
     "avatar": {
       "draws": true,
       "props": {
@@ -116,6 +124,22 @@
       },
       "primary": "of"
     },
+    "dataTable": {
+      "draws": true,
+      "props": {
+        "of": "List<T>",
+        "columns": "List<T>?"
+      },
+      "primary": "of"
+    },
+    "datePicker": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "into": "Name"
+      },
+      "primary": "text"
+    },
     "disclosure.present": {
       "consent": true,
       "props": {},
@@ -152,6 +176,22 @@
         "into": "Name"
       },
       "primary": "text"
+    },
+    "file.pick": {
+      "consent": true,
+      "props": {
+        "kind": "FileKind?"
+      }
+    },
+    "filePicker": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "kind": "FileKind?",
+        "into": "Name"
+      },
+      "primary": "text",
+      "requires": "file.pick"
     },
     "grid": {
       "draws": true,
@@ -193,6 +233,18 @@
       },
       "children": true,
       "primary": "of"
+    },
+    "media.audio": {
+      "consent": true,
+      "props": {
+        "of": "string"
+      }
+    },
+    "media.video": {
+      "consent": true,
+      "props": {
+        "of": "string"
+      }
     },
     "message.send": {
       "consent": true,
@@ -260,6 +312,15 @@
         "of": "Presentation"
       },
       "primary": "of"
+    },
+    "radioGroup": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "of": "List<T>",
+        "into": "Name"
+      },
+      "primary": "text"
     },
     "row": {
       "draws": true,
@@ -343,6 +404,20 @@
       },
       "primary": "text"
     },
+    "timeline": {
+      "draws": true,
+      "children": true,
+      "props": {}
+    },
+    "timelineItem": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "detail": "Text?",
+        "at": "Text?"
+      },
+      "primary": "text"
+    },
     "toggle": {
       "draws": true,
       "props": {
@@ -350,6 +425,29 @@
         "into": "Name"
       },
       "primary": "text"
+    },
+    "video": {
+      "draws": true,
+      "props": {
+        "of": "string"
+      },
+      "primary": "of",
+      "requires": "media.video"
+    },
+    "web.content": {
+      "consent": true,
+      "props": {
+        "of": "string"
+      },
+      "reversible": false
+    },
+    "webContent": {
+      "draws": true,
+      "props": {
+        "of": "string"
+      },
+      "primary": "of",
+      "requires": "web.content"
     }
   },
   "vocabularies": {
@@ -585,6 +683,14 @@
         "success"
       ],
       "open": true
+    },
+    "fileKind": {
+      "words": [
+        "image",
+        "document",
+        "any"
+      ],
+      "open": false
     }
   },
   "common": {

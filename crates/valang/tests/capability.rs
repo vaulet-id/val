@@ -199,3 +199,19 @@ fn two_screens_may_not_both_start() {
     let msgs = errors(&src, false);
     assert!(msgs.iter().any(|m| m.contains("a package opens at one")), "got {msgs:?}");
 }
+
+/// Drawing something privileged is not permission to do it. A person consents
+/// to a list of capabilities, and a component that quietly carried one would be
+/// a way to have that list say less than the application does.
+#[test]
+fn drawing_something_privileged_needs_the_capability_declared() {
+    let src = BASE.replace("tile(text: phrase(\"row\"), onTap: Go)", "video(\"intro.mp4\")");
+    let msgs = errors(&src, false);
+    assert!(
+        msgs.iter().any(|m| m.contains("needs `media.video`") && m.contains("not the same as being allowed to")),
+        "got {msgs:?}"
+    );
+
+    let allowed = src.replace("capabilities {\n}", "capabilities {\n  media.video\n}");
+    assert!(errors(&allowed, false).is_empty(), "{:?}", errors(&allowed, false));
+}

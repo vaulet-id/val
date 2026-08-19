@@ -145,6 +145,14 @@ screen Catalogue start: true {
     select("Favourite shop") { of: merchants, into: shop }
     slider("How many points to spend") { min: 0, max: 100, into: spend }
 
+    // Data, laid out as data.
+    section("Data")
+    dataTable(receipts) { columns: ["merchant", "amount"] }
+    timeline {
+      timelineItem("Scanned a receipt") { at: "16 Aug", detail: "Codefin Coffee" }
+      timelineItem("Reached bronze") { at: "11 Aug" }
+    }
+
     accordion("What is a Micro App?") {
       detail: "Tap to read"
       text("It runs inside somebody's wallet, reads credentials they already hold, and asks the wallet to act.")

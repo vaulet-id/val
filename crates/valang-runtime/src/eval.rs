@@ -233,6 +233,13 @@ impl<'a> Eval<'a> {
 
             Expr::From { value, .. } => self.expr(value, state)?,
 
+            Expr::List { items, .. } => {
+                let mut out = Vec::new();
+                for i in items {
+                    out.push(self.expr(i, state)?);
+                }
+                Value::List(out)
+            }
             Expr::Record { spread, fields, .. } => {
                 let mut m = match spread {
                     Some(s) => match self.expr(s, state)? {

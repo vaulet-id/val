@@ -72,6 +72,13 @@ pub struct Capability {
     /// far more often than written, and the first argument of a card is not in
     /// doubt.
     pub primary: Option<String>,
+    /// The capability drawing this one needs, where drawing it does something
+    /// privileged: `video` needs `media.video`.
+    ///
+    /// Drawing is not permission. A person consents to a list of capabilities,
+    /// and a component that quietly carried one would be a way to have the
+    /// list say less than the application does.
+    pub requires: Option<String>,
 }
 
 impl Host {
@@ -106,6 +113,7 @@ impl Host {
                     reversible: spec["reversible"].as_bool().unwrap_or(true),
                     props: props(&spec["props"]),
                     primary: spec["primary"].as_str().map(str::to_string),
+                    requires: spec["requires"].as_str().map(str::to_string),
                 },
             );
         }
@@ -250,6 +258,9 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
     program.screens = screens;
 
     let common = usable.common();
+    let declared_capabilities: Vec<String> =
+        program.capabilities.iter().map(|c| c.name.clone()).collect();
+    let mut uses: Vec<String> = Vec::new();
 
     // Drawn capabilities, in the tree.
     for screen in &program.screens {
@@ -266,6 +277,21 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
                 ));
                 return;
             };
+
+            // Drawing something privileged needs the capability declared, and
+            // the person consented to that list rather than to a component.
+            if let Some(needs) = &cap.requires {
+                uses.push(needs.clone());
+                if !declared_capabilities.iter().any(|c| c == needs) {
+                    d.push(Diagnostic::error(
+                        node.span,
+                        format!(
+                            "`{}` needs `{needs}`, and drawing it is not the same as being allowed to",
+                            node.kind
+                        ),
+                    ));
+                }
+            }
 
             if !cap.draws {
                 d.push(Diagnostic::error(
@@ -400,6 +426,8 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
             "two screens say `start: true`, and a package opens at one".to_string(),
         ));
     }
+
+    program.uses = uses;
 
     for id in &program.hosts {
         if !hosts.loaded.iter().any(|h| &h.id() == id) {
