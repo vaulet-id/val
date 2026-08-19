@@ -84,6 +84,22 @@
     "bannerTwoDetail": {
       "en": "Nothing here leaves the wallet",
       "th": "ไม่มีอะไรออกจากกระเป๋า"
+    },
+    "categories": {
+      "en": "Categories",
+      "th": "หมวด"
+    },
+    "catFood": {
+      "en": "Food",
+      "th": "อาหาร"
+    },
+    "catTravel": {
+      "en": "Travel",
+      "th": "เดินทาง"
+    },
+    "catBills": {
+      "en": "Bills",
+      "th": "บิล"
     }
   }
 }

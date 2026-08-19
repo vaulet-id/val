@@ -144,6 +144,13 @@
         "of": "List<T>?"
       },
       "children": true
+    },
+    "grid": {
+      "props": {
+        "of": "List<T>?",
+        "columns": "int?"
+      },
+      "children": true
     }
   },
   "vocabularies": {

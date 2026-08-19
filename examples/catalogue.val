@@ -71,6 +71,14 @@ screen Catalogue start: true {
       banner(text: phrase("bannerTwo"), detail: phrase("bannerTwoDetail"), icon: shield)
     }
 
+    // `grid` — across and down, at however many columns are asked for.
+    section(text: phrase("categories"))
+    grid(columns: 3) {
+      card(text: phrase("catFood"))
+      card(text: phrase("catTravel"))
+      card(text: phrase("catBills"))
+    }
+
     // `card` — a heading with values in it.
     card(text: phrase("summary", presses: state.presses, spent: spent))
 

@@ -461,6 +461,8 @@ class _Phone extends StatelessWidget {
 bool _isInput(Map<String, dynamic> n) =>
     const {'field', 'toggle', 'pick'}.contains(n['kind']);
 
+bool _isButton(Map<String, dynamic> n) => n['kind'] == 'button';
+
 /// Consecutive inputs, gathered. Runs of one non-input are left alone.
 ///
 /// The application never declares a group: it lists the fields it needs and the
@@ -948,15 +950,25 @@ class _NodeState extends State<_Node> {
   Widget build(BuildContext context) {
     switch (n['kind'] as String? ?? '') {
       case 'column':
+        final runs = _group(children);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final run in _group(children))
+            for (var i = 0; i < runs.length; i++)
               Padding(
-                padding: const EdgeInsets.only(bottom: Vaulet.sm),
-                child: run.length == 1 && !_isInput(run.first)
-                    ? _Node(node: run.first, incoming: widget.incoming)
-                    : _InputGroup(rows: run, incoming: widget.incoming),
+                // Buttons stacked on each other get more room than cards do:
+                // they are targets somebody aims at, and two 52pt ones eight
+                // points apart invite the mis-tap.
+                padding: EdgeInsets.only(
+                  bottom: _isButton(runs[i].first) &&
+                          i + 1 < runs.length &&
+                          _isButton(runs[i + 1].first)
+                      ? Vaulet.md
+                      : Vaulet.sm,
+                ),
+                child: runs[i].length == 1 && !_isInput(runs[i].first)
+                    ? _Node(node: runs[i].first, incoming: widget.incoming)
+                    : _InputGroup(rows: runs[i], incoming: widget.incoming),
               ),
           ],
         );
@@ -1118,6 +1130,27 @@ class _NodeState extends State<_Node> {
               ),
             ),
           ),
+        );
+
+      // Across and down. The wallet's own home screen puts its mini apps in
+      // one; a screen of reward tiles or categories wants the same shape.
+      case 'grid':
+        final columns = switch (args['columns']) {
+          final int n when n > 0 => n,
+          _ => 2,
+        };
+        return GridView.count(
+          crossAxisCount: columns,
+          shrinkWrap: true,
+          // The screen scrolls; a grid inside it that scrolled as well would be
+          // two scrollbars for one gesture.
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: Vaulet.sm,
+          mainAxisSpacing: Vaulet.sm,
+          childAspectRatio: 1.1,
+          children: [
+            for (final c in children) _Node(node: c, incoming: widget.incoming),
+          ],
         );
 
       // Sideways, with the dots the wallet's own home screen has.
