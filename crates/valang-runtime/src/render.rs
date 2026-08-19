@@ -154,6 +154,12 @@ pub fn render_with(
     Ok(Screen { name: screen.name.clone(), start, title, data: resolved, derived, tree })
 }
 
+/// Whether a path starts at something the runtime binds. Everything else that
+/// resolves to nothing is a word from the host's vocabulary.
+fn is_bound_root(path: &str) -> bool {
+    matches!(path.split('.').next(), Some("state" | "context" | "next"))
+}
+
 fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Result<Component, Trap> {
     let mut args = BTreeMap::new();
     for (i, a) in n.args.iter().enumerate() {
@@ -167,7 +173,13 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
         let evaluated = ev.expr(&a.value, state).unwrap_or(Value::Null);
         let value = match (&key[..], a.value.path(), &evaluated) {
             ("onTap", Some(name), _) => Value::Str(name),
-            (_, Some(name), Value::Null) if !name.contains('.') => Value::Str(name),
+            // A name that resolves to nothing is a word rather than a value:
+            // `emphasis: primary` and `color: foreground.primary` are both the
+            // catalogue's own vocabulary, which the language does not define and
+            // cannot evaluate. Dotted ones count — a token is one word with a
+            // dot in it — except where the root is something the runtime binds,
+            // because `state.missing` resolving to a word would hide a mistake.
+            (_, Some(name), Value::Null) if !is_bound_root(&name) => Value::Str(name),
             _ => evaluated,
         };
         args.insert(key.clone(), value);

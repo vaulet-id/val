@@ -831,7 +831,7 @@ impl Parser {
             kind.push('.');
             kind.push_str(&self.bump().text);
         }
-        let args = if self.at("(") { self.args() } else { Vec::new() };
+        let mut args = if self.at("(") { self.args() } else { Vec::new() };
         let mut children = Vec::new();
         let mut lambda = None;
         if self.at("{") {
@@ -845,6 +845,20 @@ impl Parser {
                 self.skip_newlines();
                 if self.eof() || self.eat("}") {
                     break;
+                }
+                // A block holds both: `name: value` is a prop of this node, and
+                // anything else is a child. One block rather than a bracket for
+                // props and a brace for children, because a screen is read far
+                // more often than it is written and two grouping characters on
+                // one line is one more thing to hold.
+                if self.peek().kind == Kind::Ident && self.peek_at(1).is(":") {
+                    let at = self.peek().span;
+                    let name = self.bump().text;
+                    self.bump();
+                    let value = self.expr(0);
+                    args.push(Arg { name: Some(name), value, spread: false, span: at });
+                    self.eat(",");
+                    continue;
                 }
                 let before = self.i;
                 if let Some(c) = self.ui_node() {

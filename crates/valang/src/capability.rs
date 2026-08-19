@@ -31,9 +31,25 @@ pub struct Host {
     /// Props a screen may carry — where a package opens, how it is presented,
     /// what address reaches it.
     pub screen: BTreeMap<String, String>,
-    /// Prop name to the words it accepts. An application cannot add a word,
-    /// which is what makes "not one of these" something the compiler can say.
-    pub vocabularies: BTreeMap<String, Vec<String>>,
+    /// Layout, accessibility and style, on everything this host draws. Held
+    /// once rather than repeated on every capability, and a renderer reads one
+    /// set.
+    pub common: BTreeMap<String, String>,
+    /// Prop name to the words it accepts.
+    pub vocabularies: BTreeMap<String, Vocabulary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vocabulary {
+    pub words: Vec<String>,
+    /// Whether a value of one's own is allowed beside the words.
+    ///
+    /// Closed where the host has to know what the word means — a transition, a
+    /// field's kind, an icon it draws. Open where the words are this design
+    /// system's and the application is somebody's own product: a token is what
+    /// makes it look like it belongs on this phone, and a Micro App that wants
+    /// its own colour is a customer, not an attack.
+    pub open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +67,11 @@ pub struct Capability {
     /// Prop name to its type, as written in the document: `Text`, `Text?`,
     /// `Action?`, `List<T>`. A `?` means the prop may be left out.
     pub props: BTreeMap<String, String>,
+    /// Which prop a positional first argument fills, where there is an obvious
+    /// one: `card("Profile")` is `card(text: "Profile")`. A call site is read
+    /// far more often than written, and the first argument of a card is not in
+    /// doubt.
+    pub primary: Option<String>,
 }
 
 impl Host {
@@ -84,24 +105,45 @@ impl Host {
                     consent: spec["consent"].as_bool().unwrap_or(false),
                     reversible: spec["reversible"].as_bool().unwrap_or(true),
                     props: props(&spec["props"]),
+                    primary: spec["primary"].as_str().map(str::to_string),
                 },
             );
         }
 
         let mut vocabularies = BTreeMap::new();
         if let Some(map) = json["vocabularies"].as_object() {
-            for (prop, words) in map {
+            for (prop, spec) in map {
+                // A bare array is closed; `{ words, open }` says which.
+                let (list, open) = match spec {
+                    Json::Array(a) => (a.clone(), false),
+                    other => (
+                        other["words"].as_array().cloned().unwrap_or_default(),
+                        other["open"].as_bool().unwrap_or(false),
+                    ),
+                };
                 vocabularies.insert(
                     prop.clone(),
-                    words
-                        .as_array()
-                        .map(|a| a.iter().filter_map(|w| w.as_str().map(str::to_string)).collect())
-                        .unwrap_or_default(),
+                    Vocabulary {
+                        words: list.iter().filter_map(|w| w.as_str().map(str::to_string)).collect(),
+                        open,
+                    },
                 );
             }
         }
 
-        Ok(Host { name, version, capabilities, screen: props(&json["screen"]["props"]), vocabularies })
+        let mut common = BTreeMap::new();
+        for group in ["layout", "accessibility", "style"] {
+            common.extend(props(&json["common"][group]));
+        }
+
+        Ok(Host {
+            name,
+            version,
+            capabilities,
+            screen: props(&json["screen"]["props"]),
+            common,
+            vocabularies,
+        })
     }
 }
 
@@ -153,8 +195,17 @@ impl Hosts {
     /// The words a prop accepts, from whichever registry defines them. Shared
     /// across a host's registries rather than repeated, because `emphasis`
     /// meaning two things on one phone is worse than a duplicate.
-    pub fn words(&self, prop: &str) -> Option<&[String]> {
-        self.loaded.iter().find_map(|h| h.vocabularies.get(prop).map(|v| v.as_slice()))
+    pub fn vocabulary(&self, prop: &str) -> Option<&Vocabulary> {
+        self.loaded.iter().find_map(|h| h.vocabularies.get(prop))
+    }
+
+    /// Layout, accessibility and style, from every registry that defines any.
+    pub fn common(&self) -> BTreeMap<String, String> {
+        let mut out = BTreeMap::new();
+        for h in &self.loaded {
+            out.extend(h.common.clone());
+        }
+        out
     }
 
     pub fn screen_props(&self) -> BTreeMap<String, String> {
@@ -170,7 +221,7 @@ impl Hosts {
 ///
 /// Without a registry there is nothing to check against, and a front end that
 /// guessed would be a front end with a favourite host. It says nothing instead.
-pub fn check(program: &crate::ast::Program, hosts: &Hosts) -> Vec<crate::diag::Diagnostic> {
+pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::diag::Diagnostic> {
     use crate::ast::{Expr, Phase, Stmt};
     use crate::diag::Diagnostic;
 
@@ -188,6 +239,17 @@ pub fn check(program: &crate::ast::Program, hosts: &Hosts) -> Vec<crate::diag::D
             .cloned()
             .collect(),
     );
+
+    // `card("Profile")` is `card(text: "Profile")`. Named here, where the
+    // registry says which prop it is, so nothing downstream — the renderer
+    // included — has to know a positional argument was ever written.
+    let mut screens = std::mem::take(&mut program.screens);
+    for screen in &mut screens {
+        name_primary(&mut screen.tree, &usable);
+    }
+    program.screens = screens;
+
+    let common = usable.common();
 
     // Drawn capabilities, in the tree.
     for screen in &program.screens {
@@ -216,18 +278,33 @@ pub fn check(program: &crate::ast::Program, hosts: &Hosts) -> Vec<crate::diag::D
                 d.push(Diagnostic::error(node.span, format!("`{}` holds no children", node.kind)));
             }
 
-            for a in &node.args {
-                let Some(name) = &a.name else { continue };
+            for (i, a) in node.args.iter().enumerate() {
+                let Some(name) = &a.name else {
+                    // A positional first argument fills the capability's
+                    // primary prop, where it declares one.
+                    if i == 0 && cap.primary.is_some() {
+                        continue;
+                    }
+                    if node.kind == "list" || node.kind == "grid" {
+                        continue;
+                    }
+                    d.push(Diagnostic::error(
+                        a.span,
+                        format!("`{}` takes named arguments", node.kind),
+                    ));
+                    continue;
+                };
                 // A value filled into a phrase is checked against the words,
                 // not against the registry: they are the package's own.
                 if node.slots.contains(name) {
                     continue;
                 }
-                if !cap.props.contains_key(name) {
+                let ty = cap.props.get(name).or_else(|| common.get(name));
+                let Some(ty) = ty else {
                     d.push(Diagnostic::error(a.span, format!("`{}` has no `{name}`", node.kind)));
                     continue;
-                }
-                check_word(&usable, &cap.props[name], &a.value, a.span, &mut d);
+                };
+                check_word(&usable, ty, &a.value, a.span, &mut d);
             }
         });
     }
@@ -336,7 +413,12 @@ pub fn check(program: &crate::ast::Program, hosts: &Hosts) -> Vec<crate::diag::D
     d
 }
 
-/// A prop whose type names a vocabulary takes one of its words.
+/// A prop whose type names a vocabulary takes one of its words — and, where the
+/// vocabulary is open, a value of the application's own.
+///
+/// A word is checked because a misspelt one would otherwise be a value nobody
+/// notices; a number or a string is not, because that is the application saying
+/// what it wants rather than naming something this host knows.
 fn check_word(
     hosts: &Hosts,
     ty: &str,
@@ -346,15 +428,34 @@ fn check_word(
 ) {
     use crate::ast::Expr;
     let key = lower_first(ty.trim_end_matches('?'));
-    let (Some(words), Expr::Ident { name: word, .. }) = (hosts.words(&key), value) else {
-        return;
+    let Some(vocab) = hosts.vocabulary(&key) else { return };
+
+    // `foreground.primary` is one word with a dot in it, not a field access.
+    let named = match value {
+        Expr::Ident { name, .. } => Some(name.clone()),
+        Expr::Member { .. } => value.path(),
+        _ => None,
     };
-    if !words.contains(word) {
-        d.push(crate::diag::Diagnostic::error(
-            span,
-            format!("`{word}` is not one of {key}: {}", words.join(", ")),
-        ));
+    let Some(word) = named else { return };
+
+    if vocab.words.contains(&word) {
+        return;
     }
+    if vocab.open {
+        // An open vocabulary still catches a misspelt token: a dotted name that
+        // is not one of them is not something an application meant to invent.
+        if word.contains('.') {
+            d.push(crate::diag::Diagnostic::error(
+                span,
+                format!("`{word}` is not a {key} this host has: {}", vocab.words.join(", ")),
+            ));
+        }
+        return;
+    }
+    d.push(crate::diag::Diagnostic::error(
+        span,
+        format!("`{word}` is not one of {key}: {}", vocab.words.join(", ")),
+    ));
 }
 
 fn lower_first(s: &str) -> String {
@@ -384,5 +485,21 @@ fn walk_stmts(stmts: &[crate::ast::Stmt], f: &mut impl FnMut(&crate::ast::Stmt))
             }
             _ => {}
         }
+    }
+}
+
+/// Give the positional first argument the name the registry says it has.
+fn name_primary(nodes: &mut [crate::ast::UiNode], hosts: &Hosts) {
+    for n in nodes {
+        if let Some((_, cap)) = hosts.find(&n.kind) {
+            if let Some(primary) = &cap.primary {
+                if let Some(first) = n.args.first_mut() {
+                    if first.name.is_none() {
+                        first.name = Some(primary.clone());
+                    }
+                }
+            }
+        }
+        name_primary(&mut n.children, hosts);
     }
 }

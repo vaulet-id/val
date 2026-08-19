@@ -124,12 +124,38 @@ fn a_prop_it_does_not_take_is_reported() {
     assert!(msgs.iter().any(|m| m.contains("has no `colour`")), "got {msgs:?}");
 }
 
+/// A closed vocabulary is one the host has to understand — an icon it draws, a
+/// transition it performs. A word outside it is a mistake, not a preference.
 #[test]
-fn a_word_outside_a_vocabulary_is_reported_with_the_words() {
-    let src = BASE.replace("emphasis: primary", "emphasis: shouty");
+fn a_word_outside_a_closed_vocabulary_is_reported_with_the_words() {
+    let src = BASE.replace("emphasis: primary", "state: shouty");
     let msgs = errors(&src, false);
     assert!(
-        msgs.iter().any(|m| m.contains("is not one of emphasis") && m.contains("primary")),
+        msgs.iter().any(|m| m.contains("is not one of state") && m.contains("busy")),
+        "got {msgs:?}"
+    );
+}
+
+/// An open vocabulary is this design system's suggestion. A Micro App is
+/// somebody's own product, and a value of its own is a customer rather than an
+/// attack — so a token guides and does not fence.
+#[test]
+fn an_open_vocabulary_takes_a_value_of_your_own() {
+    let src = BASE.replace(
+        "emphasis: primary",
+        "emphasis: primary, background: \"#EEF7F1\", padding: 24",
+    );
+    assert!(errors(&src, false).is_empty(), "{:?}", errors(&src, false));
+}
+
+/// It still catches a misspelt token: a dotted name that is not one of them is
+/// not something an application meant to invent.
+#[test]
+fn a_misspelt_token_is_reported_even_where_the_vocabulary_is_open() {
+    let src = BASE.replace("emphasis: primary", "color: foreground.primry");
+    let msgs = errors(&src, false);
+    assert!(
+        msgs.iter().any(|m| m.contains("is not a colorToken this host has")),
         "got {msgs:?}"
     );
 }

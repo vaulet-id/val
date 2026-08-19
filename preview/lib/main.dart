@@ -868,6 +868,25 @@ class _HomeIndicator extends StatelessWidget {
   );
 }
 
+/// A size the interface asked for: a word, or a number of its own.
+double? _sizeOf(Object? v) => switch (v) {
+      final int n => n.toDouble(),
+      'fill' => double.infinity,
+      _ => null,
+    };
+
+/// Space from the scale, or a number of its own. The scale is what makes an
+/// application look like it belongs here; a number is the application saying
+/// what it wants, which is allowed.
+double _spaceOf(Object? v, {double fallback = Vaulet.md}) => switch (v) {
+      final int n => n.toDouble(),
+      'none' => 0,
+      'tight' => Vaulet.sm,
+      'normal' => Vaulet.md,
+      'loose' => Vaulet.xxl,
+      _ => fallback,
+    };
+
 class _Node extends StatefulWidget {
   const _Node({required this.node, required this.incoming});
 
@@ -947,7 +966,48 @@ class _NodeState extends State<_Node> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _common(_draw(context));
+
+  /// Layout, accessibility and style, applied to whatever the node drew.
+  ///
+  /// Held here rather than inside each case, so a capability added later takes
+  /// them without being asked and a renderer for another platform has one place
+  /// to look.
+  Widget _common(Widget child) {
+    var out = child;
+
+    if (args['flex'] case final int flex) out = Expanded(flex: flex, child: out);
+
+    final w = _sizeOf(args['width']);
+    final h = _sizeOf(args['height']);
+    if (w != null || h != null) {
+      out = SizedBox(width: w, height: h, child: out);
+    }
+    if (args['padding'] != null) {
+      out = Padding(padding: EdgeInsets.all(_spaceOf(args['padding'])), child: out);
+    }
+    if (args['opacity'] case final int o) out = Opacity(opacity: o / 100, child: out);
+    if (args['visible'] == false) return const SizedBox.shrink();
+
+    // What a screen reader is told. The words are the application's; the
+    // mapping to VoiceOver or TalkBack is the platform renderer's, and never
+    // something a Micro App reaches.
+    final label = args['label'];
+    if (label != null || args['role'] != null) {
+      out = Semantics(
+        label: label is String ? label : null,
+        button: args['role'] == 'button',
+        header: args['role'] == 'heading',
+        image: args['role'] == 'image',
+        enabled: args['disabled'] != true,
+        selected: args['selected'] == true,
+        child: out,
+      );
+    }
+    return out;
+  }
+
+  Widget _draw(BuildContext context) {
     switch (n['kind'] as String? ?? '') {
       case 'column':
         final runs = _group(children);
@@ -960,11 +1020,13 @@ class _NodeState extends State<_Node> {
                 // they are targets somebody aims at, and two 52pt ones eight
                 // points apart invite the mis-tap.
                 padding: EdgeInsets.only(
-                  bottom: _isButton(runs[i].first) &&
-                          i + 1 < runs.length &&
-                          _isButton(runs[i + 1].first)
-                      ? Vaulet.md
-                      : Vaulet.sm,
+                  bottom: args['gap'] != null
+                      ? _spaceOf(args['gap'])
+                      : _isButton(runs[i].first) &&
+                              i + 1 < runs.length &&
+                              _isButton(runs[i + 1].first)
+                          ? Vaulet.md
+                          : Vaulet.sm,
                 ),
                 child: runs[i].length == 1 && !_isInput(runs[i].first)
                     ? _Node(node: runs[i].first, incoming: widget.incoming)

@@ -37,7 +37,8 @@
       "props": {
         "text": "Text",
         "style": "SectionStyle?"
-      }
+      },
+      "primary": "text"
     },
     "card": {
       "draws": true,
@@ -45,7 +46,8 @@
         "text": "Text",
         "onTap": "Action?"
       },
-      "children": true
+      "children": true,
+      "primary": "text"
     },
     "tile": {
       "draws": true,
@@ -55,7 +57,8 @@
         "icon": "Icon?",
         "trailing": "Trailing?",
         "onTap": "Action?"
-      }
+      },
+      "primary": "text"
     },
     "list": {
       "draws": true,
@@ -63,13 +66,15 @@
         "of": "List<T>",
         "onRemove": "Action?"
       },
-      "children": true
+      "children": true,
+      "primary": "of"
     },
     "image": {
       "draws": true,
       "props": {
         "asset": "Asset"
-      }
+      },
+      "primary": "asset"
     },
     "button": {
       "draws": true,
@@ -79,7 +84,8 @@
         "icon": "Icon?",
         "state": "State?",
         "onTap": "Action"
-      }
+      },
+      "primary": "text"
     },
     "field": {
       "draws": true,
@@ -88,7 +94,8 @@
         "kind": "FieldKind?",
         "icon": "Icon?",
         "into": "Name"
-      }
+      },
+      "primary": "text"
     },
     "pick": {
       "draws": true,
@@ -97,14 +104,16 @@
         "of": "List<T>?",
         "kind": "PickKind?",
         "into": "Name"
-      }
+      },
+      "primary": "text"
     },
     "toggle": {
       "draws": true,
       "props": {
         "text": "Text",
         "into": "Name"
-      }
+      },
+      "primary": "text"
     },
     "progress": {
       "draws": true,
@@ -112,33 +121,38 @@
         "text": "Text?",
         "value": "int",
         "of": "int"
-      }
+      },
+      "primary": "text"
     },
     "credentialCard": {
       "draws": true,
       "props": {
         "of": "Verified"
-      }
+      },
+      "primary": "of"
     },
     "claim": {
       "draws": true,
       "props": {
         "text": "Text",
         "of": "Claim"
-      }
+      },
+      "primary": "text"
     },
     "qr": {
       "draws": true,
       "props": {
         "of": "Presentation"
-      }
+      },
+      "primary": "of"
     },
     "notice": {
       "draws": true,
       "props": {
         "text": "Text",
         "tone": "Tone?"
-      }
+      },
+      "primary": "text"
     },
     "banner": {
       "draws": true,
@@ -148,7 +162,8 @@
         "image": "Asset?",
         "icon": "Icon?",
         "onTap": "Action?"
-      }
+      },
+      "primary": "text"
     },
     "carousel": {
       "draws": true,
@@ -163,7 +178,8 @@
         "of": "List<T>?",
         "columns": "int?"
       },
-      "children": true
+      "children": true,
+      "primary": "of"
     },
     "credential.read": {
       "consent": true,
@@ -225,76 +241,294 @@
     }
   },
   "vocabularies": {
-    "gap": [
-      "tight",
-      "normal",
-      "loose"
-    ],
-    "align": [
-      "start",
-      "center",
-      "end"
-    ],
-    "dividerStyle": [
-      "section",
-      "row"
-    ],
-    "sectionStyle": [
-      "label",
-      "title"
-    ],
-    "trailing": [
-      "chevron",
-      "badge",
-      "none"
-    ],
-    "emphasis": [
-      "primary",
-      "secondary",
-      "quiet"
-    ],
-    "state": [
-      "enabled",
-      "disabled",
-      "busy"
-    ],
-    "tone": [
-      "info",
-      "warning",
-      "danger"
-    ],
-    "fieldKind": [
-      "text",
-      "number",
-      "email",
-      "phone"
-    ],
-    "pickKind": [
-      "date",
-      "choice"
-    ],
-    "icon": [
-      "receipt",
-      "wallet",
-      "shield",
-      "person",
-      "card",
-      "calendar",
-      "location",
-      "money",
-      "check",
-      "warning",
-      "document",
-      "key"
-    ],
-    "transition": [
-      "push",
-      "replace",
-      "root"
-    ],
-    "present": [
-      "full",
-      "sheet"
-    ]
+    "dividerStyle": {
+      "words": [
+        "section",
+        "row"
+      ],
+      "open": false
+    },
+    "sectionStyle": {
+      "words": [
+        "label",
+        "title"
+      ],
+      "open": false
+    },
+    "trailing": {
+      "words": [
+        "chevron",
+        "badge",
+        "none"
+      ],
+      "open": false
+    },
+    "state": {
+      "words": [
+        "enabled",
+        "disabled",
+        "busy"
+      ],
+      "open": false
+    },
+    "tone": {
+      "words": [
+        "info",
+        "warning",
+        "danger"
+      ],
+      "open": false
+    },
+    "fieldKind": {
+      "words": [
+        "text",
+        "number",
+        "email",
+        "phone"
+      ],
+      "open": false
+    },
+    "pickKind": {
+      "words": [
+        "date",
+        "choice"
+      ],
+      "open": false
+    },
+    "icon": {
+      "words": [
+        "receipt",
+        "wallet",
+        "shield",
+        "person",
+        "card",
+        "calendar",
+        "location",
+        "money",
+        "check",
+        "warning",
+        "document",
+        "key"
+      ],
+      "open": false
+    },
+    "transition": {
+      "words": [
+        "push",
+        "replace",
+        "root"
+      ],
+      "open": false
+    },
+    "present": {
+      "words": [
+        "full",
+        "sheet"
+      ],
+      "open": false
+    },
+    "role": {
+      "words": [
+        "heading",
+        "button",
+        "link",
+        "image",
+        "list",
+        "listItem",
+        "form",
+        "field",
+        "status",
+        "alert"
+      ],
+      "open": false
+    },
+    "emphasis": {
+      "words": [
+        "primary",
+        "secondary",
+        "quiet"
+      ],
+      "open": true
+    },
+    "gap": {
+      "words": [
+        "none",
+        "tight",
+        "normal",
+        "loose"
+      ],
+      "open": true
+    },
+    "space": {
+      "words": [
+        "none",
+        "tight",
+        "normal",
+        "loose"
+      ],
+      "open": true
+    },
+    "size": {
+      "words": [
+        "fill",
+        "fit",
+        "auto"
+      ],
+      "open": true
+    },
+    "align": {
+      "words": [
+        "start",
+        "center",
+        "end",
+        "stretch"
+      ],
+      "open": true
+    },
+    "justify": {
+      "words": [
+        "start",
+        "center",
+        "end",
+        "between"
+      ],
+      "open": true
+    },
+    "direction": {
+      "words": [
+        "row",
+        "column"
+      ],
+      "open": true
+    },
+    "position": {
+      "words": [
+        "flow",
+        "absolute",
+        "sticky"
+      ],
+      "open": true
+    },
+    "overflow": {
+      "words": [
+        "visible",
+        "clip",
+        "scroll"
+      ],
+      "open": true
+    },
+    "textAlign": {
+      "words": [
+        "start",
+        "center",
+        "end"
+      ],
+      "open": true
+    },
+    "weight": {
+      "words": [
+        "regular",
+        "medium",
+        "bold"
+      ],
+      "open": true
+    },
+    "variant": {
+      "words": [
+        "primary",
+        "secondary",
+        "quiet",
+        "danger"
+      ],
+      "open": true
+    },
+    "typeToken": {
+      "words": [
+        "title",
+        "heading",
+        "body",
+        "caption",
+        "mono"
+      ],
+      "open": true
+    },
+    "shadowToken": {
+      "words": [
+        "none",
+        "raised",
+        "floating"
+      ],
+      "open": true
+    },
+    "colorToken": {
+      "words": [
+        "foreground.primary",
+        "foreground.secondary",
+        "foreground.muted",
+        "background.primary",
+        "background.raised",
+        "accent",
+        "danger",
+        "warning",
+        "success"
+      ],
+      "open": true
+    }
+  },
+  "common": {
+    "_comment": "Layout, accessibility and style, on everything this host draws. A capability does not repeat them and a renderer reads one set. The style props take a token — which is what makes an application look like it belongs on this phone — or a value of its own, because a Micro App is somebody's own product and the tokens are guidance rather than a fence.",
+    "layout": {
+      "width": "Size?",
+      "height": "Size?",
+      "minWidth": "Size?",
+      "maxWidth": "Size?",
+      "minHeight": "Size?",
+      "maxHeight": "Size?",
+      "padding": "Space?",
+      "margin": "Space?",
+      "gap": "Space?",
+      "align": "Align?",
+      "justify": "Justify?",
+      "direction": "Direction?",
+      "flex": "int?",
+      "grow": "int?",
+      "shrink": "int?",
+      "aspectRatio": "int?",
+      "wrap": "bool?",
+      "position": "Position?",
+      "top": "Size?",
+      "right": "Size?",
+      "bottom": "Size?",
+      "left": "Size?",
+      "zIndex": "int?",
+      "overflow": "Overflow?",
+      "clip": "bool?",
+      "visible": "bool?"
+    },
+    "accessibility": {
+      "role": "Role?",
+      "label": "Text?",
+      "hint": "Text?",
+      "disabled": "bool?",
+      "selected": "bool?",
+      "expanded": "bool?",
+      "required": "bool?"
+    },
+    "style": {
+      "color": "ColorToken?",
+      "background": "ColorToken?",
+      "border": "ColorToken?",
+      "borderRadius": "Size?",
+      "shadow": "ShadowToken?",
+      "opacity": "int?",
+      "style": "TypeToken?",
+      "variant": "Variant?",
+      "font": "string?",
+      "fontSize": "Size?",
+      "fontWeight": "Weight?",
+      "lineHeight": "Size?",
+      "letterSpacing": "Size?",
+      "textAlign": "TextAlign?"
+    }
   }
 }

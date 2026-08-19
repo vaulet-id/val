@@ -66,7 +66,7 @@ pub fn analyse_fully(
     if let Some((bundle, locales)) = bundle {
         diagnostics.extend(check::check_bundle(&program, bundle, locales));
     }
-    diagnostics.extend(capability::check(&program, hosts));
+    diagnostics.extend(capability::check(&mut program, hosts));
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
     // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:
