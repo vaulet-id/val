@@ -188,7 +188,21 @@ impl<'a> Eval<'a> {
                 },
             },
 
-            Expr::Member { obj, name, .. } => self.member(obj, name, state)?,
+            // `a?.b` stops at the first thing that is not there, rather than
+            // failing on it. `a.b` still fails, because a path that is not
+            // optional was written by somebody who believed it was there.
+            Expr::Member { obj, name, optional, .. } => {
+                if *optional && matches!(self.expr(obj, state)?, Value::Null) {
+                    Value::Null
+                } else {
+                    self.member(obj, name, state)?
+                }
+            }
+
+            Expr::Elvis { subject, other, .. } => match self.expr(subject, state)? {
+                Value::Null => self.expr(other, state)?,
+                v => v,
+            },
 
             Expr::Unary { op, rhs, .. } => {
                 let v = self.expr(rhs, state)?;
@@ -305,6 +319,15 @@ impl<'a> Eval<'a> {
             },
             Value::Map(m) => m.get(name).cloned().unwrap_or(Value::Null),
             Value::Enum(e, _) => Value::Enum(e, name.to_string()),
+            // A path through nothing. Answering with nothing again is how a
+            // screen came to draw a blank where a name belonged and nobody was
+            // told: the author wrote `member.tier` believing there was a
+            // member. `?.` is how they say there might not be.
+            Value::Null => {
+                return Err(Trap::Defect(format!(
+                    "`{name}` was read from nothing. Write `?.` where the left side may be missing"
+                )))
+            }
             _ => Value::Null,
         })
     }

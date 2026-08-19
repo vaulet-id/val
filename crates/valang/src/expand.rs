@@ -381,6 +381,7 @@ fn spread_args(
             value: Expr::Member {
                 obj: Box::new(a.value.clone()),
                 name: f.name.clone(),
+                optional: false,
                 span: a.span,
             },
             spread: false,
@@ -509,7 +510,9 @@ fn replace(e: Expr, bound: &BTreeMap<String, Expr>) -> Expr {
     let go = |x: Box<Expr>| Box::new(replace(*x, bound));
     match e {
         Expr::Ident { ref name, .. } => bound.get(name).cloned().unwrap_or(e),
-        Expr::Member { obj, name, span } => Expr::Member { obj: go(obj), name, span },
+        Expr::Member { obj, name, optional, span } => {
+            Expr::Member { obj: go(obj), name, optional, span }
+        }
         Expr::Record { spread, fields, span } => Expr::Record {
             spread: spread.map(go),
             fields: fields.into_iter().map(|(k, v)| (k, replace(v, bound))).collect(),
@@ -531,6 +534,9 @@ fn replace(e: Expr, bound: &BTreeMap<String, Expr>) -> Expr {
             Expr::With { subject: go(subject), policy, span }
         }
         Expr::Exists { subject, span } => Expr::Exists { subject: go(subject), span },
+        Expr::Elvis { subject, other, span } => {
+            Expr::Elvis { subject: go(subject), other: go(other), span }
+        }
         Expr::List { items, span } => {
             Expr::List { items: items.into_iter().map(|i| replace(i, bound)).collect(), span }
         }

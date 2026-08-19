@@ -1257,6 +1257,14 @@ impl Parser {
             lhs = Expr::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), span };
         }
 
+        // `a ?: b`. Before the ternary, which is the same first token.
+        if min_bp == 0 && self.at("?") && self.peek_at(1).is(":") {
+            let span = self.bump().span;
+            self.bump();
+            let other = self.expr(0);
+            return Expr::Elvis { subject: Box::new(lhs), other: Box::new(other), span };
+        }
+
         if min_bp == 0 && self.at("?") {
             let span = self.bump().span;
             let then = self.expr(0);
@@ -1280,10 +1288,18 @@ impl Parser {
 
     fn postfix(&mut self, mut base: Expr) -> Expr {
         loop {
+            // `a.b`, and `a?.b` — the whole path is nothing when the left
+            // side is. Written as one token pair rather than as a check the
+            // author repeats, because the check somebody forgets is the one
+            // that matters.
+            let optional = self.at("?") && self.peek_at(1).is(".") && self.peek_at(2).kind == Kind::Ident;
+            if optional {
+                self.bump();
+            }
             if self.at(".") && self.peek_at(1).kind == Kind::Ident {
                 let span = self.bump().span;
                 let name = self.bump().text;
-                base = Expr::Member { obj: Box::new(base), name, span };
+                base = Expr::Member { obj: Box::new(base), name, optional, span };
                 continue;
             }
             if self.at("(") {

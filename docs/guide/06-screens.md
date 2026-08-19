@@ -116,6 +116,18 @@ reported, not approximated.
 
 If you need pixels, use the webview tier and its lower capability ceiling.
 
+## When something may not be there
+
+```val
+state.member?.points          // nothing, if there is no member
+state.member?.points ?: 0     // nothing becomes zero
+```
+
+`.` through nothing is a defect, not a blank: an application that wrote
+`state.member.points` did so believing there was a member, and drawing an empty
+card instead of saying so is how that belief survives. `?.` is how you say there
+might not be one, and `?:` is what to use instead.
+
 ## Sharing a component with another package
 
 A component is visible to every file in your package. To let another package

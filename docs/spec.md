@@ -419,6 +419,19 @@ what is already on the screen does not need to be stored, hashed and replayed.
 what is typed but not submitted. An action receives what the form held at the
 moment it was submitted, through `input`.
 
+### When something may not be there
+
+```val
+state.member?.points          // nothing, if there is no member
+state.member?.points ?: 0     // nothing becomes zero
+```
+
+Reading a field of nothing is a defect. An application that wrote
+`state.member.points` wrote it believing there was a member, and answering with
+nothing again is how that belief reaches a person as a blank card. `?.` says
+there might not be one, and makes the whole path optional; `?: ` supplies what
+to use instead. Neither evaluates its left side twice.
+
 ### Across packages
 
 A component is visible to every file in its package — a package's files share

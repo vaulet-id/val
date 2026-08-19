@@ -686,7 +686,16 @@ impl<'a> Cx<'a> {
                 Typed::unknown()
             }
 
-            Expr::Member { obj, name, span } => self.member(obj, name, *span),
+            Expr::Member { obj, name, optional, span } => {
+                let t = self.member(obj, name, *span);
+                // `a?.b` is nothing when `a` is, so the path is optional
+                // whatever the field was declared as.
+                if *optional {
+                    Typed { ty: Ty::Optional(Box::new(t.ty.inner().clone())), ..t }
+                } else {
+                    t
+                }
+            }
 
             Expr::Unary { rhs, .. } => self.expr(rhs),
 
@@ -760,6 +769,19 @@ impl<'a> Cx<'a> {
                 let o = self.expr(other);
                 let ty = if t.ty.accepts(&o.ty) { t.ty.clone() } else { o.ty.clone() };
                 Typed::join(&t, &o, ty)
+            }
+
+            // `a ?: b` — the left side unless it is nothing, so the type is the
+            // left side with its optionality removed, or the right side's.
+            Expr::Elvis { subject, other, .. } => {
+                let a = self.expr(subject);
+                let b = self.expr(other);
+                let mut from = a.from.clone();
+                from.extend(b.from.clone());
+                let mut origins = a.origins.clone();
+                origins.extend(b.origins.clone());
+                let ty = if a.ty.is_unknown() { b.ty.clone() } else { a.ty.inner().clone() };
+                Typed { ty, from, origins }
             }
 
             Expr::Exists { subject, .. } => {

@@ -346,7 +346,9 @@ pub enum Expr {
     Str { value: String, span: Span },
     Bool { value: bool, span: Span },
     Ident { name: String, span: Span },
-    Member { obj: Box<Expr>, name: String, span: Span },
+    /// `a.b`, and `a?.b` where `optional` is set: the whole path is nothing when
+    /// the left side is, rather than a failure.
+    Member { obj: Box<Expr>, name: String, optional: bool, span: Span },
     Call { callee: Box<Expr>, args: Vec<Arg>, span: Span },
     Unary { op: String, rhs: Box<Expr>, span: Span },
     Binary { op: String, lhs: Box<Expr>, rhs: Box<Expr>, span: Span },
@@ -354,6 +356,12 @@ pub enum Expr {
     /// `receipt with ReceiptFromMerchant` — the only introduction of Verified<P>
     With { subject: Box<Expr>, policy: String, span: Span },
     Exists { subject: Box<Expr>, span: Span },
+    /// `a ?: b` — the left side unless it is nothing.
+    ///
+    /// Not a ternary over `exists`, which would evaluate the left side twice —
+    /// once to ask and once to answer — and in a language where a path may
+    /// reach into a credential that is a second lookup nobody wrote.
+    Elvis { subject: Box<Expr>, other: Box<Expr>, span: Span },
     Record { spread: Option<Box<Expr>>, fields: Vec<(String, Expr)>, span: Span },
     /// `["merchant", "amount"]` — a list written out. The columns of a table
     /// and the options of a picker are lists somebody types, and the language
@@ -390,7 +398,7 @@ impl Expr {
         match self {
             Num { span, .. } | Float { span, .. } | Str { span, .. } | Bool { span, .. } | Ident { span, .. }
             | Member { span, .. } | Call { span, .. } | Unary { span, .. } | Binary { span, .. }
-            | Ternary { span, .. } | With { span, .. } | Exists { span, .. } | Record { span, .. }
+            | Ternary { span, .. } | With { span, .. } | Exists { span, .. } | Elvis { span, .. } | Record { span, .. }
             | List { span, .. }
             | Switch { span, .. } | Lambda { span, .. } | From { span, .. } | Error { span } => *span,
         }
@@ -431,6 +439,10 @@ impl Expr {
                 other.walk(f)
             }
             With { subject, .. } | Exists { subject, .. } => subject.walk(f),
+            Elvis { subject, other, .. } => {
+                subject.walk(f);
+                other.walk(f)
+            }
             List { items, .. } => {
                 for i in items {
                     i.walk(f);
