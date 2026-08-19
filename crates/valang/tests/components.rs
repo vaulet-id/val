@@ -458,3 +458,89 @@ screen Home {
         .collect();
     assert!(msgs.is_empty(), "{msgs:?}");
 }
+
+/// `state.member?.name` is the author saying it may not be there, which is what
+/// the narrowing rule asks them to say. Refusing it as well left no way to say
+/// it at all outside `require`.
+#[test]
+fn optional_access_is_how_an_optional_is_read_outside_require() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+type Member { name: string }
+
+state {
+  member: Member?
+}
+
+action Go {
+  compute {
+    const who = state.member?.name ?: "guest"
+  }
+
+  update {
+    member: { name: who }
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(!msgs.iter().any(|m| m.contains("may not exist")), "{msgs:?}");
+}
+
+/// And a plain read of one is still refused, which is the rule's whole point.
+#[test]
+fn a_plain_read_of_an_optional_is_still_narrowed_first() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+type Member { name: string }
+
+state {
+  member: Member?
+}
+
+action Go {
+  compute {
+    const who = state.member.name
+  }
+
+  update {
+    member: { name: who }
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.iter().any(|m| m.contains("may not exist")), "{msgs:?}");
+}

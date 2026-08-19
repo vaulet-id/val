@@ -19,6 +19,7 @@ import condoText from '../../examples/condo-text.json?raw'
 import condoHandler from '../../examples/condo-handler.py?raw'
 import kit from '../../examples/kit.val?raw'
 import storefront from '../../examples/storefront.val?raw'
+import syntax from '../../examples/syntax.val?raw'
 import walletFixture from '../../fixtures/wallet.json?raw'
 
 /// The one wallet. Every project previews against the same phone, because a
@@ -66,6 +67,7 @@ export const files: SourceFile[] = [
   { path: 'examples/condo.val', pkg: 'condo', name: 'condo.val', source: condo, note: 'a vote weighted by a share of the building' },
   { path: 'examples/condo-text.json', pkg: 'condo', name: 'text.json', source: condoText, note: 'the signed text bundle' },
   { path: 'examples/kit.val', pkg: 'kit', name: 'kit.val', source: kit, note: 'components, and no application around them' },
+  { path: 'examples/syntax.val', pkg: 'syntax', name: 'syntax.val', source: syntax, note: 'loops, conditions, defaults, and what to do when something is missing' },
   { path: 'examples/storefront.val', pkg: 'storefront', name: 'storefront.val', source: storefront, note: 'draws the kit, and declares nothing about how it looks' },
 ]
 
@@ -131,6 +133,9 @@ export const examples: Project[] = [
     files.filter((f) => f.pkg === 'catalogue')),
   example('note', 'A note', 'a form: the wallet holds what is typed and the action is given it',
     files.filter((f) => f.pkg === 'note'),
+    { name: 'handler.ts', source: STARTER_HANDLER }),
+  example('syntax', 'Syntax', 'the parts of the language that are not about credentials',
+    files.filter((f) => f.pkg === 'syntax'),
     { name: 'handler.ts', source: STARTER_HANDLER }),
   example('kit', 'A UI kit', 'components published for another package to draw',
     files.filter((f) => f.pkg === 'kit')),

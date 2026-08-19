@@ -936,7 +936,14 @@ fn narrowing_before_use(p: &Program, d: &mut Vec<Diagnostic>) {
             walk_stmts(&block.stmts, &mut |s| {
                 let mut check_expr = |e: &Expr| {
                     e.walk(&mut |inner| {
-                        if let Expr::Member { obj, .. } = inner {
+                        // `state.member?.name` is the author saying it may
+                        // not be there, which is what the narrowing rule is
+                        // asking them to say. Refusing it too would leave them
+                        // no way to say it at all.
+                        if let Expr::Member { obj, optional: written, .. } = inner {
+                            if *written {
+                                return;
+                            }
                             if let Some(path) = obj.path() {
                                 if let Some(field) = path.strip_prefix("state.") {
                                     let head = field.split('.').next().unwrap_or(field);

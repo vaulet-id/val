@@ -1,0 +1,90 @@
+// The parts of the language that are not about credentials.
+//
+// Everything here is ordinary: a loop, a condition, a string with a value in
+// it, a record taken apart. It is one screen so that each one can be read
+// beside what it draws.
+
+app "org.vaulet.syntax"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 1240
+  profile: Profile?
+}
+
+type Profile {
+  name: string
+  since: string
+}
+
+// A pure function. `switch` is an expression, so this is one line of reasoning
+// rather than a variable assigned three times.
+function tier(points: int): string {
+  return switch (points) {
+    >= 1000 => "gold"
+    >= 100 => "silver"
+    default => "bronze"
+  }
+}
+
+function double(x: int): int {
+  return x * 2
+}
+
+// A parameter with a default is one the call site may leave out.
+component Row(label: string, tone: string default "quiet") {
+  keyValue {
+    text: label
+    value: tone
+  }
+}
+
+action Spend {
+  compute {
+    // A record, taken apart under its own field names.
+    const receipt = { merchant: "Codefin", amount: 120 }
+    const { merchant, amount } = receipt
+
+    // A function passed by name, not written out again.
+    const doubled = [1, 2, 3].map(double)
+
+    // Nothing, and what to use instead of it.
+    const who = state.profile?.name ?: "guest"
+  }
+
+  update {
+    points: state.points - 100
+  }
+}
+
+@main
+screen Home {
+  title: "Syntax"
+
+  column {
+    // The words and the value, written together.
+    text(`${tier(state.points)} — ${state.points} points`)
+
+    // Repetition, with nothing drawn around it.
+    for (i in 1...3) {
+      Row(label: `row ${i}`)
+    }
+
+    // One thing or the other, decided before anything is drawn.
+    if (state.profile exists) {
+      Row(label: `member since ${state.profile?.since}`, tone: "loud")
+    } else {
+      emptyState("Not a member yet") {
+        detail: "Join at the counter"
+      }
+    }
+
+    button("Spend 100") {
+      emphasis: primary
+      onTap: Spend
+    }
+  }
+}

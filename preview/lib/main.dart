@@ -957,7 +957,9 @@ class _NodeState extends State<_Node> {
     }
 
     final spans = <InlineSpan>[];
-    final pattern = RegExp(r'\{([a-zA-Z_]+)\}');
+    // A slot is named like an identifier, digits included: `{item2}` is a
+    // name somebody writes, and a template's fallback slots are `{v0}`, `{v1}`.
+    final pattern = RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}');
     var at = 0;
     for (final m in pattern.allMatches(template)) {
       if (m.start > at) spans.add(TextSpan(text: template.substring(at, m.start)));
