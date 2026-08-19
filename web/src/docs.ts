@@ -6,6 +6,7 @@ import specTh from '../../docs/th/spec.md?raw'
 // build a Micro App, not to argue about the language. The specification stays,
 // at the bottom, because a guide that answers most questions still has to
 // point at the thing that answers the rest exactly.
+import g00 from '../../docs/guide/00-why-a-new-language.md?raw'
 import g01 from '../../docs/guide/01-what-you-are-building.md?raw'
 import g02 from '../../docs/guide/02-your-first-application.md?raw'
 import g03 from '../../docs/guide/03-capabilities.md?raw'
@@ -20,6 +21,7 @@ import g10 from '../../docs/guide/10-reference.md?raw'
 // The same guide in Thai. A translation and not a second document: when the
 // English page changes, this one is wrong until it changes too, which is a
 // smaller problem than two guides that disagree about the language.
+import t00 from '../../docs/guide/th/00-why-a-new-language.md?raw'
 import t01 from '../../docs/guide/th/01-what-you-are-building.md?raw'
 import t02 from '../../docs/guide/th/02-your-first-application.md?raw'
 import t03 from '../../docs/guide/th/03-capabilities.md?raw'
@@ -179,9 +181,11 @@ export type Locale = keyof typeof GROUPS
 export function pagesFor(locale: Locale): Page[] {
   const g = GROUPS[locale]
   const guide = locale === 'th'
-    ? [t01, t02, t03, t04, t05, t06, t07, t08, t09, t10]
-    : [g01, g02, g03, g04, g05, g06, g07, g08, g09, g10]
-  const where = [g.start, g.start, g.build, g.build, g.build, g.build, g.build, g.build, g.ship, g.ship]
+    ? [t00, t01, t02, t03, t04, t05, t06, t07, t08, t09, t10]
+    : [g00, g01, g02, g03, g04, g05, g06, g07, g08, g09, g10]
+  // First, because it answers the question somebody has before they have
+  // decided to read any of the rest.
+  const where = [g.start, g.start, g.start, g.build, g.build, g.build, g.build, g.build, g.build, g.ship, g.ship]
   return [
     ...guide.map((md, i) => page(md, where[i])),
     ...grouped(locale === 'th' ? specTh : spec, g.spec).map((p) => ({ ...p, group: g.spec, section: g.spec })),
