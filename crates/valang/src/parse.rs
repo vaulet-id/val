@@ -1008,13 +1008,30 @@ impl Parser {
                 base = Expr::Error { span };
                 continue;
             }
-            // `xs.fold(0) { sum, x -> … }` — a trailing block is one more argument.
-            if self.at("{") && matches!(base, Expr::Call { .. }) {
+            // `xs.fold(0) { sum, x -> … }` — a trailing block is one more
+            // argument. `xs.map { x -> … }` too: a combinator that takes only a
+            // lambda has no parentheses to put it after, and requiring `map()`
+            // would be punctuation for the parser's benefit.
+            if self.at("{")
+                && self.peek_at(1).kind == Kind::Ident
+                && (self.peek_at(2).is("->") || self.peek_at(2).is(","))
+                && matches!(base, Expr::Call { .. } | Expr::Member { .. })
+            {
                 let lam = self.lambda();
-                if let Expr::Call { callee, mut args, span } = base {
-                    args.push(Arg { name: None, spread: false, span: lam.span(), value: lam });
-                    base = Expr::Call { callee, args, span };
-                }
+                base = match base {
+                    Expr::Call { callee, mut args, span } => {
+                        args.push(Arg { name: None, spread: false, span: lam.span(), value: lam });
+                        Expr::Call { callee, args, span }
+                    }
+                    member => {
+                        let span = member.span();
+                        Expr::Call {
+                            callee: Box::new(member),
+                            args: vec![Arg { name: None, spread: false, span: lam.span(), value: lam }],
+                            span,
+                        }
+                    }
+                };
                 continue;
             }
             break;

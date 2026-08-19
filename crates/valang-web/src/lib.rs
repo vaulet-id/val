@@ -216,8 +216,23 @@ pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
     let screens: Vec<Json> = program
         .screens
         .iter()
-        .filter_map(|s| resolve_screen(&program, &s.name, &state, &host).ok())
-        .map(|s| screen_json(&s))
+        .map(|s| match resolve_screen(&program, &s.name, &state, &host) {
+            Ok(resolved) => screen_json(&resolved),
+            // Said rather than dropped. A screen that threw used to vanish, and
+            // the next one took its place — which looks exactly like a screen
+            // somebody forgot to write.
+            Err(e) => json!({
+                "name": s.name,
+                "start": s.settings.iter().any(|a| {
+                    a.name.as_deref() == Some("start")
+                        && matches!(&a.value, valang::ast::Expr::Bool { value: true, .. })
+                }),
+                "error": format!("{e:?}"),
+                "data": Vec::<Json>::new(),
+                "derived": Json::Object(Map::new()),
+                "tree": Vec::<Json>::new(),
+            }),
+        })
         .collect();
 
     write(json!({ "screens": screens }).to_string())

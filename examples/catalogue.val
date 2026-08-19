@@ -43,6 +43,18 @@ action Press {
   }
 }
 
+action Answer {
+  input {
+    remind: bool
+    shop:   string
+    spend:  int
+  }
+
+  update {
+    presses: spend
+  }
+}
+
 action Reset {
   update {
     presses: 0
@@ -61,6 +73,7 @@ screen Catalogue start: true {
   // `state` is a total that cannot disagree with what is on the screen.
   compute {
     const spent = receipts.fold(0) { sum, r -> sum + r.claims.amount }
+    const merchants = receipts.map { r -> r.claims.merchant }
   }
 
   column {
@@ -101,13 +114,49 @@ screen Catalogue start: true {
            onTap: Receipt(merchant: r.claims.merchant, amount: r.claims.amount))
     }
 
+    // Content that is neither a row nor a card: prose, a number worth looking
+    // at, a label against a value, a mark on something.
+    section("Content")
+    text("A paragraph. Not a card and not a row — prose, which every About screen was faking with a card until this existed.")
+    row {
+      gap: 12
+      align: center
+      avatar("Somchai") { size: 44 }
+      column {
+        flex: 1
+        stat("Points this year") { value: "1,250" }
+      }
+      badge("Verified")
+    }
+    keyValue("Member since") { value: "2024" }
+    link("Read the terms") { to: "https://vaulet.id/terms" }
+
+    // While something is coming, and when nothing is there.
+    section("Waiting and empty")
+    skeleton { lines: 2 }
+    emptyState("Nothing here yet") {
+      detail: "Scan a receipt and it will show up"
+      icon: receipt
+    }
+
+    // More ways to answer than a line of text.
+    section("Answers")
+    checkbox("Send me reminders") { into: remind }
+    select("Favourite shop") { of: merchants, into: shop }
+    slider("How many points to spend") { min: 0, max: 100, into: spend }
+
+    accordion("What is a Micro App?") {
+      detail: "Tap to read"
+      text("It runs inside somebody's wallet, reads credentials they already hold, and asks the wallet to act.")
+    }
+
     // `button` — `emphasis: primary` is the one that docks to the bottom of the
     // screen. Anything else is an outlined button in the flow of the column.
     section(text: "buttons")
     button(text: "secondary", emphasis: secondary, onTap: Reset)
     button(text: phrase("working"), emphasis: secondary, state: busy, onTap: Press)
     button(text: phrase("notNow"), emphasis: secondary, state: disabled, onTap: Press)
-    button(text: "primary", emphasis: primary, onTap: Press)
+    button(text: "primary", emphasis: primary, onTap: Answer)
   }
 }
 

@@ -731,6 +731,20 @@ class _ScreenState extends State<_Screen> {
     final nodes = ((widget.screen['tree'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final docked = _flatten(nodes).where(_isPrimary).toList();
 
+    final failed = widget.screen['error'] as String?;
+    if (failed != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'This screen did not resolve.\n$failed',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13),
+          ),
+        ),
+      );
+    }
+
     return _Nav(
       back: (returned) => widget.onBack?.call(returned),
       go: (target, args) {
@@ -1055,8 +1069,14 @@ class _NodeState extends State<_Node> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              for (final child in children)
-                Expanded(child: _Node(node: child, incoming: widget.incoming)),
+              // Not wrapped in `Expanded` here: a child says `flex: 1` for
+              // itself and the common props do it once. Doing both put an
+              // Expanded inside an Expanded, which throws and takes the whole
+              // preview with it.
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) SizedBox(width: _spaceOf(args['gap'], fallback: Vaulet.sm)),
+                _Node(node: children[i], incoming: widget.incoming),
+              ],
             ],
           ),
         );
@@ -1104,6 +1124,238 @@ class _NodeState extends State<_Node> {
               _ => null,
             },
             onTap: action == null ? null : () => _tap(action),
+          ),
+        );
+
+      // A paragraph. Not a card, not a row — prose, which the catalogue had no
+      // way to say until now and every About screen was faking with a card.
+      case 'text':
+        return _text(style: TextStyle(fontSize: 15, height: 1.55));
+
+      case 'badge': {
+        final scheme = Theme.of(context).colorScheme;
+        final tone = (args['tone'] as String?)?.trim();
+        final (bg, fg) = switch (tone) {
+          'warning' => (scheme.tertiaryContainer, scheme.onTertiaryContainer),
+          'danger' => (scheme.errorContainer, scheme.onErrorContainer),
+          _ => (scheme.secondaryContainer, scheme.onSecondaryContainer),
+        };
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+            child: _text(style: TextStyle(fontSize: 12, color: fg)),
+          ),
+        );
+      }
+
+      case 'avatar': {
+        final scheme = Theme.of(context).colorScheme;
+        final size = _sizeOf(args['size']) ?? 44;
+        final initial = (args['of'] as String?)?.trim();
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: CircleAvatar(
+            radius: size / 2,
+            backgroundColor: scheme.secondaryContainer,
+            child: Text(
+              initial == null || initial.isEmpty ? '?' : initial.characters.first.toUpperCase(),
+              style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+            ),
+          ),
+        );
+      }
+
+      // A number worth looking at, with what it is under it.
+      case 'stat': {
+        final scheme = Theme.of(context).colorScheme;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${args['value'] ?? ''}',
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
+            ),
+            _text(style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          ],
+        );
+      }
+
+      case 'keyValue': {
+        final scheme = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _text(style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant)),
+              ),
+              Text('${args['value'] ?? ''}', style: const TextStyle(fontSize: 14)),
+            ],
+          ),
+        );
+      }
+
+      case 'link': {
+        final scheme = Theme.of(context).colorScheme;
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: _text(
+            style: TextStyle(
+              fontSize: 15,
+              color: scheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: scheme.primary,
+            ),
+          ),
+        );
+      }
+
+      case 'spinner':
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: Vaulet.lg),
+          child: Center(child: SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+        );
+
+      // The shape of what is coming, while it is coming. Not a spinner: a
+      // spinner says something is happening and a skeleton says what will be
+      // there, which is what stops the screen jumping when it arrives.
+      case 'skeleton': {
+        final scheme = Theme.of(context).colorScheme;
+        final lines = switch (args['lines']) {
+          final int n when n > 0 => n,
+          _ => 3,
+        };
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < lines; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Vaulet.sm),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: i == lines - 1 ? 0.6 : 1,
+                  child: Container(
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      }
+
+      // The wallet's own empty state, so an application never draws one and
+      // every list that has nothing in it says so the same way.
+      case 'emptyState': {
+        final scheme = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: Vaulet.xxl),
+          child: Column(
+            children: [
+              Icon(_iconOf(args['icon']), size: 40, color: scheme.outline),
+              const SizedBox(height: Vaulet.md),
+              _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              if (args['detail'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _detail(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  ),
+                ),
+            ],
+          ),
+        );
+      }
+
+      case 'checkbox': {
+        final into = (args['into'] as String?)?.trim();
+        return CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: _text(),
+          value: into == null ? false : _Form.of(context)[into] == true,
+          onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+        );
+      }
+
+      case 'select': {
+        final scheme = Theme.of(context).colorScheme;
+        final into = (args['into'] as String?)?.trim();
+        final options = ((args['of'] as List?) ?? const []).map((o) => '$o').toList();
+        final held = into == null ? null : _Form.of(context)[into] as String?;
+        return Row(
+          children: [
+            SizedBox(
+              width: 40,
+              child: Icon(_iconOf(args['icon']), size: 22, color: scheme.onSurfaceVariant),
+            ),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: held,
+                isDense: true,
+                decoration: InputDecoration(
+                  labelText: _label(),
+                  labelStyle: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                ),
+                items: [
+                  for (final o in options) DropdownMenuItem(value: o, child: Text(o)),
+                ],
+                onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+              ),
+            ),
+          ],
+        );
+      }
+
+      case 'slider': {
+        final into = (args['into'] as String?)?.trim();
+        final min = switch (args['min']) { final int n => n.toDouble(), _ => 0.0 };
+        final max = switch (args['max']) { final int n => n.toDouble(), _ => 100.0 };
+        final held = switch (into == null ? null : _Form.of(context)[into]) {
+          final int n => n.toDouble(),
+          _ => min,
+        };
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _text(style: const TextStyle(fontSize: 13)),
+            Slider(
+              min: min,
+              max: max,
+              value: held.clamp(min, max),
+              onChanged: into == null ? null : (v) => _Form.set(context, into, v.round()),
+            ),
+          ],
+        );
+      }
+
+      case 'accordion':
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: ExpansionTile(
+            title: _text(),
+            subtitle: args['detail'] == null ? null : Text(_detail()),
+            shape: const Border(),
+            children: [
+              for (final c in children)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Vaulet.lg, 0, Vaulet.lg, Vaulet.md),
+                  child: _Node(node: c, incoming: widget.incoming),
+                ),
+            ],
           ),
         );
 

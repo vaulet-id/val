@@ -135,8 +135,14 @@ impl<'a> Lexer<'a> {
                             }
                         }
                         _ => {
+                            // A whole character, not a byte. Advancing one byte
+                            // into `—` or a Thai vowel and then slicing there
+                            // panics the compiler on source that is perfectly
+                            // valid — and the language's strings are full UTF-8
+                            // on purpose.
                             let start = self.i;
-                            self.bump(1);
+                            let len = char_len(self.bytes[self.i]);
+                            self.bump(len);
                             text.push_str(&self.src[start..self.i]);
                         }
                     }
@@ -209,5 +215,18 @@ impl<'a> Lexer<'a> {
 
         out.push(Token { kind: Kind::Eof, text: String::new(), span: self.span(0) });
         (out, self.diagnostics)
+    }
+}
+
+/// How many bytes a UTF-8 character takes, from its leading byte.
+fn char_len(b: u8) -> usize {
+    match b {
+        0x00..=0x7F => 1,
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF7 => 4,
+        // A continuation byte on its own is not a start; treat it as one byte
+        // so the lexer moves rather than looping.
+        _ => 1,
     }
 }

@@ -10,143 +10,24 @@
     }
   },
   "capabilities": {
-    "column": {
+    "accordion": {
       "draws": true,
-      "props": {
-        "gap": "Gap?",
-        "align": "Align?"
-      },
-      "children": true
-    },
-    "row": {
-      "draws": true,
-      "props": {
-        "gap": "Gap?",
-        "align": "Align?"
-      },
-      "children": true
-    },
-    "divider": {
-      "draws": true,
-      "props": {
-        "style": "DividerStyle?"
-      }
-    },
-    "section": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "style": "SectionStyle?"
-      },
-      "primary": "text"
-    },
-    "card": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "onTap": "Action?"
-      },
       "children": true,
-      "primary": "text"
-    },
-    "tile": {
-      "draws": true,
       "props": {
         "text": "Text",
-        "detail": "Text?",
-        "icon": "Icon?",
-        "trailing": "Trailing?",
-        "onTap": "Action?"
+        "detail": "Text?"
       },
       "primary": "text"
     },
-    "list": {
+    "avatar": {
       "draws": true,
       "props": {
-        "of": "List<T>",
-        "onRemove": "Action?"
-      },
-      "children": true,
-      "primary": "of"
-    },
-    "image": {
-      "draws": true,
-      "props": {
-        "asset": "Asset"
-      },
-      "primary": "asset"
-    },
-    "button": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "emphasis": "Emphasis?",
-        "icon": "Icon?",
-        "state": "State?",
-        "onTap": "Action"
-      },
-      "primary": "text"
-    },
-    "field": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "kind": "FieldKind?",
-        "icon": "Icon?",
-        "into": "Name"
-      },
-      "primary": "text"
-    },
-    "pick": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "of": "List<T>?",
-        "kind": "PickKind?",
-        "into": "Name"
-      },
-      "primary": "text"
-    },
-    "toggle": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "into": "Name"
-      },
-      "primary": "text"
-    },
-    "progress": {
-      "draws": true,
-      "props": {
-        "text": "Text?",
-        "value": "int",
-        "of": "int"
-      },
-      "primary": "text"
-    },
-    "credentialCard": {
-      "draws": true,
-      "props": {
-        "of": "Verified"
+        "of": "Text?",
+        "size": "Size?"
       },
       "primary": "of"
     },
-    "claim": {
-      "draws": true,
-      "props": {
-        "text": "Text",
-        "of": "Claim"
-      },
-      "primary": "text"
-    },
-    "qr": {
-      "draws": true,
-      "props": {
-        "of": "Presentation"
-      },
-      "primary": "of"
-    },
-    "notice": {
+    "badge": {
       "draws": true,
       "props": {
         "text": "Text",
@@ -165,12 +46,112 @@
       },
       "primary": "text"
     },
+    "button": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "emphasis": "Emphasis?",
+        "icon": "Icon?",
+        "state": "State?",
+        "onTap": "Action"
+      },
+      "primary": "text"
+    },
+    "card": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "onTap": "Action?"
+      },
+      "children": true,
+      "primary": "text"
+    },
     "carousel": {
       "draws": true,
       "props": {
         "of": "List<T>?"
       },
       "children": true
+    },
+    "checkbox": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "into": "Name"
+      },
+      "primary": "text"
+    },
+    "claim": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "of": "Claim"
+      },
+      "primary": "text"
+    },
+    "column": {
+      "draws": true,
+      "props": {
+        "gap": "Gap?",
+        "align": "Align?"
+      },
+      "children": true
+    },
+    "credential.issue": {
+      "consent": true,
+      "props": {
+        "of": "Credential"
+      }
+    },
+    "credential.read": {
+      "consent": true,
+      "props": {
+        "of": "Type"
+      }
+    },
+    "credentialCard": {
+      "draws": true,
+      "props": {
+        "of": "Verified"
+      },
+      "primary": "of"
+    },
+    "disclosure.present": {
+      "consent": true,
+      "props": {},
+      "reversible": false
+    },
+    "divider": {
+      "draws": true,
+      "props": {
+        "style": "DividerStyle?"
+      }
+    },
+    "emptyState": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "detail": "Text?",
+        "icon": "Icon?"
+      },
+      "primary": "text"
+    },
+    "external.open": {
+      "consent": true,
+      "props": {
+        "to": "string"
+      },
+      "reversible": true
+    },
+    "field": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "kind": "FieldKind?",
+        "icon": "Icon?",
+        "into": "Name"
+      },
+      "primary": "text"
     },
     "grid": {
       "draws": true,
@@ -181,17 +162,70 @@
       "children": true,
       "primary": "of"
     },
-    "credential.read": {
+    "image": {
+      "draws": true,
+      "props": {
+        "asset": "Asset"
+      },
+      "primary": "asset"
+    },
+    "keyValue": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "value": "Text"
+      },
+      "primary": "text"
+    },
+    "link": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "to": "string"
+      },
+      "primary": "text"
+    },
+    "list": {
+      "draws": true,
+      "props": {
+        "of": "List<T>",
+        "onRemove": "Action?"
+      },
+      "children": true,
+      "primary": "of"
+    },
+    "message.send": {
       "consent": true,
       "props": {
-        "of": "Type"
+        "to": "string"
+      },
+      "reversible": false
+    },
+    "navigation.back": {
+      "props": {
+        "with": "Record?"
       }
     },
-    "credential.issue": {
+    "navigation.navigate": {
+      "props": {
+        "to": "Screen",
+        "as": "Transition?",
+        "present": "Present?"
+      }
+    },
+    "network.request": {
       "consent": true,
       "props": {
-        "of": "Credential"
+        "audience": "string"
       }
+    },
+    "notice": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "tone": "Tone?"
+      },
+      "primary": "text"
     },
     "payment.request": {
       "consent": true,
@@ -201,6 +235,88 @@
       },
       "reversible": false
     },
+    "pick": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "of": "List<T>?",
+        "kind": "PickKind?",
+        "into": "Name"
+      },
+      "primary": "text"
+    },
+    "progress": {
+      "draws": true,
+      "props": {
+        "text": "Text?",
+        "value": "int",
+        "of": "int"
+      },
+      "primary": "text"
+    },
+    "qr": {
+      "draws": true,
+      "props": {
+        "of": "Presentation"
+      },
+      "primary": "of"
+    },
+    "row": {
+      "draws": true,
+      "props": {
+        "gap": "Gap?",
+        "align": "Align?"
+      },
+      "children": true
+    },
+    "section": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "style": "SectionStyle?"
+      },
+      "primary": "text"
+    },
+    "select": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "of": "List<T>?",
+        "into": "Name"
+      },
+      "primary": "text"
+    },
+    "skeleton": {
+      "draws": true,
+      "props": {
+        "lines": "int?"
+      }
+    },
+    "slider": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "min": "int?",
+        "max": "int?",
+        "into": "Name"
+      },
+      "primary": "text"
+    },
+    "spinner": {
+      "draws": true,
+      "props": {
+        "text": "Text?"
+      },
+      "primary": "text"
+    },
+    "stat": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "value": "Text"
+      },
+      "primary": "text"
+    },
     "storage.write": {
       "consent": true,
       "props": {
@@ -209,35 +325,31 @@
         "value": "any"
       }
     },
-    "message.send": {
-      "consent": true,
+    "text": {
+      "draws": true,
       "props": {
-        "to": "string"
+        "text": "Text"
       },
-      "reversible": false
+      "primary": "text"
     },
-    "network.request": {
-      "consent": true,
+    "tile": {
+      "draws": true,
       "props": {
-        "audience": "string"
-      }
+        "text": "Text",
+        "detail": "Text?",
+        "icon": "Icon?",
+        "trailing": "Trailing?",
+        "onTap": "Action?"
+      },
+      "primary": "text"
     },
-    "disclosure.present": {
-      "consent": true,
-      "props": {},
-      "reversible": false
-    },
-    "navigation.navigate": {
+    "toggle": {
+      "draws": true,
       "props": {
-        "to": "Screen",
-        "as": "Transition?",
-        "present": "Present?"
-      }
-    },
-    "navigation.back": {
-      "props": {
-        "with": "Record?"
-      }
+        "text": "Text",
+        "into": "Name"
+      },
+      "primary": "text"
     }
   },
   "vocabularies": {
