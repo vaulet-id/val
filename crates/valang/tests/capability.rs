@@ -46,7 +46,8 @@ action Go {
   }
 }
 
-screen Home start: true {
+@main
+screen Home {
   column {
     tile(text: phrase("row"), onTap: Go)
     button(text: phrase("go"), emphasis: primary, onTap: Go)
@@ -188,14 +189,14 @@ fn a_screen_setting_nothing_provides_is_reported() {
 /// order files were read decides what somebody sees.
 #[test]
 fn more_than_one_screen_says_where_it_opens() {
-    let src = BASE.replace("screen Home start: true", "screen Home");
+    let src = BASE.replace("@main\nscreen Home", "screen Home");
     let msgs = errors(&src, false);
-    assert!(msgs.iter().any(|m| m.contains("none says `start: true`")), "got {msgs:?}");
+    assert!(msgs.iter().any(|m| m.contains("none is marked `@main`")), "got {msgs:?}");
 }
 
 #[test]
 fn two_screens_may_not_both_start() {
-    let src = BASE.replace("screen Done present: sheet", "screen Done start: true");
+    let src = BASE.replace("screen Done present: sheet", "@main\nscreen Done");
     let msgs = errors(&src, false);
     assert!(msgs.iter().any(|m| m.contains("a package opens at one")), "got {msgs:?}");
 }

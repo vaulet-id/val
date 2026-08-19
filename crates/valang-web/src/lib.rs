@@ -223,10 +223,7 @@ pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
             // somebody forgot to write.
             Err(e) => json!({
                 "name": s.name,
-                "start": s.settings.iter().any(|a| {
-                    a.name.as_deref() == Some("start")
-                        && matches!(&a.value, valang::ast::Expr::Bool { value: true, .. })
-                }),
+                "start": s.main,
                 "error": format!("{e:?}"),
                 "data": Vec::<Json>::new(),
                 "derived": Json::Object(Map::new()),

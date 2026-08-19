@@ -206,7 +206,7 @@ fn navigation_goes_somewhere(p: &Program, d: &mut Vec<Diagnostic>) {
 
 fn walk_ui(n: &UiNode, f: &mut impl FnMut(&UiNode)) {
     f(n);
-    for c in &n.children {
+    for c in n.children.iter().chain(n.otherwise.iter()) {
         walk_ui(c, f);
     }
 }

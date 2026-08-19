@@ -213,10 +213,12 @@ fn expand_node(
     d: &mut Vec<Diagnostic>,
 ) -> Vec<UiNode> {
     let Some(decl) = by_name.get(&node.kind) else {
-        let UiNode { kind, args, lambda, children, slots, span } = node;
+        let UiNode { kind, args, lambda, children, slots, otherwise, span } = node;
         let children =
             children.into_iter().flat_map(|c| expand_node(c, by_name, types, d)).collect();
-        return vec![UiNode { kind, args, lambda, children, slots, span }];
+        let otherwise =
+            otherwise.into_iter().flat_map(|c| expand_node(c, by_name, types, d)).collect();
+        return vec![UiNode { kind, args, lambda, children, slots, otherwise, span }];
     };
 
     let bound = bind(&node, decl, d);
@@ -250,6 +252,7 @@ fn flatten(
     UiNode {
         args,
         children: node.children.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
+        otherwise: node.otherwise.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
         ..node
     }
 }

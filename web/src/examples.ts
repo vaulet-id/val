@@ -160,7 +160,9 @@ action Tap {
   }
 }
 
-screen Home start: true {
+@main
+
+screen Home {
   title: "A counter"
 
   column {

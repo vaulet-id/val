@@ -61,7 +61,9 @@ action Reset {
   }
 }
 
-screen Catalogue start: true {
+@main
+
+screen Catalogue {
   // What this screen sees of the wallet, resolved before anything is drawn.
   data {
     receipts: credentials of PurchaseReceipt verified with AnyReceipt

@@ -34,7 +34,9 @@ action Save {
   }
 }
 
-screen Note start: true {
+@main
+
+screen Note {
   title: phrase("noteTitle")
 
   column {

@@ -265,6 +265,11 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
     // Drawn capabilities, in the tree.
     for screen in &program.screens {
         walk_ui(&screen.tree, &mut |node| {
+            // `if` is the language's, not a host's: it chooses between two
+            // trees and draws nothing itself.
+            if node.kind == "if" {
+                return;
+            }
             let Some((_, cap)) = usable.find(&node.kind) else {
                 let known = hosts.find(&node.kind).is_some();
                 d.push(Diagnostic::error(
@@ -394,13 +399,10 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
 
     // Screen settings.
     let screen_props = usable.screen_props();
-    let mut starts = 0;
+    let starts = program.screens.iter().filter(|s| s.main).count();
     for screen in &program.screens {
         for a in &screen.settings {
             let Some(name) = &a.name else { continue };
-            if name == "start" {
-                starts += 1;
-            }
             let Some(ty) = screen_props.get(name) else {
                 d.push(Diagnostic::error(
                     a.span,
@@ -417,13 +419,13 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
     if program.screens.len() > 1 && starts == 0 {
         d.push(Diagnostic::error(
             program.screens[0].span,
-            "more than one screen, and none says `start: true`".to_string(),
+            "more than one screen, and none is marked `@main`. A package opens at one, and which one is not the order the files were read".to_string(),
         ));
     }
     if starts > 1 {
         d.push(Diagnostic::error(
             program.screens[0].span,
-            "two screens say `start: true`, and a package opens at one".to_string(),
+            "two screens are marked `@main`, and a package opens at one".to_string(),
         ));
     }
 
@@ -498,6 +500,10 @@ fn walk_ui(nodes: &[crate::ast::UiNode], f: &mut impl FnMut(&crate::ast::UiNode)
     for n in nodes {
         f(n);
         walk_ui(&n.children, f);
+        // Both halves of an `if`, always. The branch that is not taken today is
+        // taken on somebody's phone tomorrow, and a capability report that
+        // counted one branch would be a report of what this run happened to do.
+        walk_ui(&n.otherwise, f);
     }
 }
 
@@ -529,5 +535,6 @@ fn name_primary(nodes: &mut [crate::ast::UiNode], hosts: &Hosts) {
             }
         }
         name_primary(&mut n.children, hosts);
+        name_primary(&mut n.otherwise, hosts);
     }
 }

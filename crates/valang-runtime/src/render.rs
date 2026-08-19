@@ -141,16 +141,9 @@ pub fn render_with(
         }
     }
 
-    let tree = screen
-        .tree
-        .iter()
-        .map(|n| component(&mut ev, n, state))
-        .collect::<Result<Vec<_>, _>>()?;
+    let tree = components(&mut ev, &screen.tree, state)?;
     let title = screen.title.as_ref().map(|t| component(&mut ev, t, state)).transpose()?;
-    let start = screen.settings.iter().any(|a| {
-        a.name.as_deref() == Some("start")
-            && matches!(&a.value, valang::ast::Expr::Bool { value: true, .. })
-    });
+    let start = screen.main;
     Ok(Screen { name: screen.name.clone(), start, title, data: resolved, derived, tree })
 }
 
@@ -158,6 +151,33 @@ pub fn render_with(
 /// resolves to nothing is a word from the host's vocabulary.
 fn is_bound_root(path: &str) -> bool {
     matches!(path.split('.').next(), Some("state" | "context" | "next"))
+}
+
+/// A run of sibling nodes.
+///
+/// One node in, one node out is not enough here: an `if` stands for the branch
+/// it chose, which may be several nodes or none. Choosing here rather than in
+/// the host is what keeps the condition out of what a host receives — the tree
+/// that leaves this function has already made up its mind.
+fn components(
+    ev: &mut Eval,
+    nodes: &[UiNode],
+    state: &BTreeMap<String, Value>,
+) -> Result<Vec<Component>, Trap> {
+    let mut out = Vec::new();
+    for n in nodes {
+        if n.kind == "if" {
+            let taken = match n.args.first() {
+                Some(a) => matches!(ev.expr(&a.value, state)?, Value::Bool(true)),
+                None => false,
+            };
+            let branch = if taken { &n.children } else { &n.otherwise };
+            out.extend(components(ev, branch, state)?);
+            continue;
+        }
+        out.push(component(ev, n, state)?);
+    }
+    Ok(out)
 }
 
 fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Result<Component, Trap> {
@@ -217,9 +237,7 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
             if let Some(bind) = &n.lambda {
                 ev.bind(bind, item.clone());
             }
-            for child in &n.children {
-                rows.push(component(ev, child, state)?);
-            }
+            rows.extend(components(ev, &n.children, state)?);
         }
         return Ok(Component { kind: n.kind.clone(), args, children: rows });
     }
@@ -227,7 +245,7 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
     Ok(Component {
         kind: n.kind.clone(),
         args,
-        children: n.children.iter().map(|c| component(ev, c, state)).collect::<Result<Vec<_>, _>>()?,
+        children: components(ev, &n.children, state)?,
     })
 }
 

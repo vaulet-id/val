@@ -77,6 +77,9 @@ screen … { … }                  // what the person sees
 - **Arguments are named once there are two**: `payment.request(to: merchant,
   amount: 12000)`. One argument may be positional.
 - **Keywords are reserved.** A dot is always field access.
+- **A directive marks a declaration and never configures one.** `@main` is
+  written on its own line above a `screen`, takes no arguments, and is the only
+  one.
 
 ---
 
@@ -343,6 +346,7 @@ no call graph to follow.
 You declare a screen; the wallet draws it.
 
 ```val
+@main
 screen Wallet {
   data {
     receipts: credentials of PurchaseReceipt verified with ReceiptFromMerchant
@@ -364,6 +368,27 @@ screen Wallet {
   }
 }
 ```
+
+**One screen carries `@main`.** It is where the application opens; every other
+screen is reached by a press. A package with more than one screen and no `@main`
+is rejected, because otherwise the first screen somebody sees would depend on
+the order the package's files were read.
+
+**A screen may show one tree or another.**
+
+```val
+if (state.points > 0) {
+  card(text: phrase("balance", points: state.points))
+} else {
+  emptyState(text: "notAMember")
+}
+```
+
+`else` is optional. Both branches are checked, and both contribute to the
+capability report: a capability used only in the branch that is not taken today
+is one the person consented to. The condition is resolved before anything is
+drawn, so a host receives a tree with no condition in it and needs no `if` of
+its own.
 
 **Declare data; do not fetch it.** The host resolves the `data` block before
 anything is drawn. `verified with` means a credential that fails the policy

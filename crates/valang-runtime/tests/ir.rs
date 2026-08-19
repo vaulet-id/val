@@ -42,7 +42,9 @@ action Go {
   }
 }
 
-screen Home start: true {
+@main
+
+screen Home {
   title: "Your points"
 
   column {

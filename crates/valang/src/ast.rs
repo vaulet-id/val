@@ -172,9 +172,14 @@ pub struct ScreenDecl {
     /// bundle check as every other sentence, rather than being a second path
     /// that has to be kept faithful to the first.
     pub title: Option<UiNode>,
-    /// `start: true`, `present: sheet`, `address: "receipt/{id}"` — props a
-    /// capability gives a screen. The parser learns the shape; which props exist
-    /// and what words they take is read from the host's interfaces.
+    /// `@main` — the screen the application opens on. A directive rather than a
+    /// setting because no screen ever sets it to false: it marks one screen out
+    /// of the package, and a boolean that is only ever written one way is a
+    /// marker wearing a value's clothes.
+    pub main: bool,
+    /// `present: sheet`, `address: "receipt/{id}"` — props a capability gives a
+    /// screen. The parser learns the shape; which props exist and what words
+    /// they take is read from the host's interfaces.
     pub settings: Vec<Arg>,
     /// What this screen is handed when something moves to it, declared the way
     /// a component declares its parameters.
@@ -214,6 +219,10 @@ pub struct UiNode {
     /// sentence does not have, or a placeholder nothing fills, is a failed
     /// build.
     pub slots: Vec<String>,
+    /// The second branch of an `if` in a screen's tree. Held on the node rather
+    /// than as a node of its own, so that everything which walks a tree walks
+    /// both halves without having to be taught a new shape.
+    pub otherwise: Vec<UiNode>,
     pub span: Span,
 }
 

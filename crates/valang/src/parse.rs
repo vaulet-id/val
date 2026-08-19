@@ -102,7 +102,32 @@ impl Parser {
             if self.eof() {
                 break;
             }
+            // `@main screen Home { … }`. A directive marks a declaration; it
+            // never configures one. The distinction is what keeps `@main` from
+            // growing arguments and becoming a second settings syntax.
+            let mut main = false;
+            if self.at("@") {
+                let at = self.peek().span;
+                self.bump();
+                let word = self.bump().text;
+                if word == "main" {
+                    main = true;
+                } else {
+                    self.diagnostics.push(Diagnostic::error(
+                        at,
+                        format!("`@{word}` is not a directive this language has. The one that exists is `@main`, on the screen an application opens"),
+                    ));
+                }
+                self.skip_newlines();
+            }
+
             let t = self.peek().clone();
+            if main && t.text != "screen" {
+                self.diagnostics.push(Diagnostic::error(
+                    t.span,
+                    format!("`@main` marks the screen an application opens, and `{}` is not a screen", t.text),
+                ));
+            }
             match t.text.as_str() {
                 "app" => {
                     let at = self.peek().span;
@@ -163,7 +188,11 @@ impl Parser {
                 "trust" => p.trusts.push(self.trust_decl()),
                 "function" => p.functions.push(self.function_decl()),
                 "action" => p.actions.push(self.action_decl()),
-                "screen" => p.screens.push(self.screen_decl()),
+                "screen" => {
+                    let mut s = self.screen_decl();
+                    s.main = main;
+                    p.screens.push(s);
+                }
                 "component" => p.components.push(self.component_decl()),
                 "host" => {
                     self.bump();
@@ -653,8 +682,10 @@ impl Parser {
         let params = self.param_list();
 
         // Settings sit between the name and the body: `screen Confirm(x: int)
-        // start: true present: sheet { … }`. The parser knows the shape and
-        // none of the words.
+        // present: sheet { … }`. The parser knows the shape and none of the
+        // words. Which screen opens the application is not one of them — that
+        // is `@main`, above the declaration, because it is a fact about the
+        // application rather than a property of the screen.
         let mut settings = Vec::new();
         while self.peek().kind == Kind::Ident && self.peek_at(1).is(":") && !self.at("title") {
             let at = self.peek().span;
@@ -686,6 +717,7 @@ impl Parser {
                     lambda: None,
                     children: Vec::new(),
                     slots: Vec::new(),
+                    otherwise: Vec::new(),
                     span: at,
                 });
                 continue;
@@ -708,7 +740,7 @@ impl Parser {
                 self.bump();
             }
         }
-        ScreenDecl { name, params, settings, title, data, compute, tree, span }
+        ScreenDecl { name, main: false, params, settings, title, data, compute, tree, span }
     }
 
     /// `component Name(param: type, …) { …catalogue… }`
@@ -822,6 +854,38 @@ impl Parser {
             return None;
         }
         let span = self.peek().span;
+
+        // `if (state.member exists) { … } else { … }` — a screen that shows one
+        // thing or the other. The condition is settled while the screen is being
+        // resolved, before anything is drawn, so what a host receives is a tree
+        // with no condition left in it.
+        if self.at("if") && self.peek_at(1).is("(") {
+            self.bump();
+            self.expect("(");
+            let cond = self.expr(0);
+            self.expect(")");
+            let children = self.ui_block();
+            let save = self.i;
+            self.skip_newlines();
+            let otherwise = if self.eat("else") {
+                self.ui_block()
+            } else {
+                // A newline that was skipped looking for `else` belongs to
+                // whatever comes next, which may be another node.
+                self.i = save;
+                Vec::new()
+            };
+            return Some(UiNode {
+                kind: "if".to_string(),
+                args: vec![Arg { name: None, value: cond, spread: false, span }],
+                lambda: None,
+                children,
+                slots: Vec::new(),
+                otherwise,
+                span,
+            });
+        }
+
         // `wallet.avatar` — a host's own component, written under the host's
         // name. One token would have made it two nodes, the second of which is
         // not a component anybody declared.
@@ -869,7 +933,30 @@ impl Parser {
                 }
             }
         }
-        Some(UiNode { kind, args, lambda, children, slots: Vec::new(), span })
+        Some(UiNode { kind, args, lambda, children, slots: Vec::new(), otherwise: Vec::new(), span })
+    }
+
+    /// `{ …nodes… }` — the branches of an `if`, which hold children only.
+    fn ui_block(&mut self) -> Vec<UiNode> {
+        let mut out = Vec::new();
+        self.skip_newlines();
+        if !self.eat("{") {
+            return out;
+        }
+        loop {
+            self.skip_newlines();
+            if self.eof() || self.eat("}") {
+                break;
+            }
+            let before = self.i;
+            if let Some(n) = self.ui_node() {
+                out.push(n);
+            }
+            if self.i == before {
+                self.bump();
+            }
+        }
+        out
     }
 
     // ------------------------------------------------------------ expressions

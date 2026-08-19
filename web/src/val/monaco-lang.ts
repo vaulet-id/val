@@ -25,6 +25,9 @@ export function registerVal(monaco: typeof Monaco) {
     tokenizer: {
       root: [
         [/\/\/.*$/, 'comment'],
+        // `@main`, before the identifier rule: `@` is not a word character, so
+        // without this the directive highlights as punctuation and a name.
+        [/@[a-zA-Z]\w*/, 'annotation'],
         [/"[^"]*"/, 'string'],
         [/\b\d[\d_]*\b/, 'number'],
         [/\b\d[\d_]*\.\d+\b/, 'invalid'],

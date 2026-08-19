@@ -21,6 +21,44 @@ screen Wallet {
 }
 ```
 
+## One screen opens the application
+
+Mark it `@main`. Every other screen is reached by a press.
+
+```val
+@main
+screen Wallet { … }
+
+screen Receipt(id: string) { … }
+```
+
+A package with more than one screen and no `@main` does not build: which screen
+somebody sees first would otherwise depend on the order the files happened to be
+read.
+
+## A screen may show one thing or another
+
+```val
+@main
+screen Wallet {
+  column {
+    if (state.points > 0) {
+      card(text: phrase("balance", points: state.points))
+      button(text: "scan", emphasis: primary, onTap: ScanToEarn)
+    } else {
+      emptyState(text: "notAMember", detail: "joinAtTheCounter")
+    }
+  }
+}
+```
+
+`else` is optional. Both branches are checked whichever one runs, and both count
+towards what the package declares it does — a capability used only in the branch
+nobody took today is still a capability the person consented to.
+
+The wallet never sees the condition. It is settled while the screen is being
+resolved, so what arrives to be drawn is one tree with the choice already made.
+
 ## Declare your data; do not fetch it
 
 The wallet resolves the `data` block before anything is drawn. No half-drawn
