@@ -1,0 +1,39 @@
+// A UI kit: components other packages draw.
+//
+// Nothing here is an application. It has no screens, no state and no actions —
+// it is a way of arranging the wallet's catalogue, published so that somebody
+// else's application can arrange it the same way.
+
+app "org.vaulet.kit"
+version 1
+
+capabilities {
+}
+
+// What leaves the package. Everything it draws arrives as an argument: it will
+// be expanded into an application whose state it has never seen, and a name
+// resolved against the wrong package's state is a mistake neither author is in
+// a position to notice.
+export component MoneyCard(label: string, amount: string, note: string?) {
+  card {
+    text: label
+    Amount(amount: amount)
+    if (note exists) {
+      text(note)
+    }
+  }
+}
+
+export component StatRow(label: string, value: int) {
+  keyValue {
+    text: label
+    value: value
+  }
+}
+
+// Private, and used by the one above. It comes along when `MoneyCard` is
+// imported, without its name — so an importing package may declare an `Amount`
+// of its own and the two never meet.
+component Amount(amount: string) {
+  stat(amount)
+}

@@ -1,0 +1,47 @@
+// An application that draws somebody else's components.
+//
+// Nothing here declares how a card looks. `org.vaulet.kit` does, and this
+// package names the version of it that it was built against — the surface it
+// depends on is somebody else's to change, so it is a version rather than a
+// name.
+
+app "org.vaulet.storefront"
+version 1
+
+capabilities {
+}
+
+import "org.vaulet.kit/1" { MoneyCard, StatRow }
+
+state {
+  balance: int default 1240
+  visits: int default 7
+}
+
+action Spend {
+  update {
+    balance: state.balance - 100
+  }
+}
+
+@main
+screen Home {
+  title: "Storefront"
+
+  column {
+    // The imported component is handed everything it draws. It has never seen
+    // this package's state, and could not read it if it tried.
+    MoneyCard(
+      label: "Balance"
+      amount: phrase("{points} points", points: state.balance)
+      note: "since March"
+    )
+
+    StatRow(label: "Visits this month", value: state.visits)
+
+    button("Spend 100") {
+      emphasis: primary
+      onTap: Spend
+    }
+  }
+}

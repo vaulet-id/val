@@ -252,3 +252,25 @@ fn a_failed_import_is_reported_once() {
     );
     assert_eq!(e.len(), 1, "{e:?}");
 }
+
+/// A package of nothing but components had nothing checked at all: a screen is
+/// what makes a component's body reachable, and a UI kit has no screens.
+#[test]
+fn a_package_with_no_screens_is_still_checked() {
+    let e = errors(
+        "app \"org.vaulet.badkit\"\nversion 1\n\ncapabilities {\n}\n\nexport component Broken(x: string) {\n  tabs {\n    text(x)\n  }\n}\n",
+        &[],
+    );
+    assert!(e.iter().any(|m| m.contains("`tabs` is not something this host provides")), "{e:?}");
+}
+
+/// And a component a screen does draw is reported once, not twice — the body
+/// and the call site are the same span.
+#[test]
+fn a_component_a_screen_draws_is_reported_once() {
+    let e = errors(
+        &app("component Broken(x: string) {\n  tabs {\n    text(x)\n  }\n}\n\n@main\nscreen Home {\n  column {\n    Broken(x: \"a\")\n  }\n}"),
+        &[],
+    );
+    assert_eq!(e.iter().filter(|m| m.contains("`tabs`")).count(), 1, "{e:?}");
+}
