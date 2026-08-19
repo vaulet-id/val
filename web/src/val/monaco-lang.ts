@@ -30,6 +30,9 @@ export function registerVal(monaco: typeof Monaco) {
         // without this the directive highlights as punctuation and a name.
         [/@[a-zA-Z]\w*/, 'annotation'],
         [/"[^"]*"/, 'string'],
+        // `` `words ${value} words` `` — the interpolations pick up the
+        // string's own colour, which is what every editor does with them.
+        [/`[^`]*`/, 'string'],
         [/\b\d[\d_]*\b/, 'number'],
         [/\b\d[\d_]*\.\d+\b/, 'invalid'],
         [

@@ -1375,6 +1375,11 @@ impl Parser {
         self.skip_newlines();
         let t = self.peek().clone();
 
+        if t.kind == Kind::Template {
+            self.bump();
+            return self.template(&t);
+        }
+
         // `["merchant", "amount"]` — a list written out. A list still has no
         // index; this is how one is said, not a way to reach into it.
         if t.is("[") {
@@ -1470,6 +1475,72 @@ impl Parser {
         Expr::Record { spread, fields, span }
     }
 
+    /// `` `you have ${state.points} points` `` becomes
+    /// `phrase("you have {points} points", points: state.points)`.
+    ///
+    /// Sugar, and deliberately nothing more: the template and its values travel
+    /// to the host separately so that the host formats the number — Thai
+    /// digits, the thousands separator, the currency position — for every
+    /// application at once. A template that joined them here would format them
+    /// in the application, differently in each one.
+    fn template(&mut self, t: &Token) -> Expr {
+        let span = t.span;
+        let mut words = String::new();
+        let mut args: Vec<Arg> = Vec::new();
+        let raw = t.text.clone();
+        let bytes = raw.as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            if bytes[i] == b'$' && bytes.get(i + 1) == Some(&b'{') {
+                let mut depth = 1;
+                let mut j = i + 2;
+                while j < bytes.len() && depth > 0 {
+                    match bytes[j] {
+                        b'{' => depth += 1,
+                        b'}' => depth -= 1,
+                        _ => {}
+                    }
+                    j += 1;
+                }
+                if depth != 0 {
+                    self.diagnostics.push(Diagnostic::error(span, "a `${` in this string is never closed"));
+                    break;
+                }
+                let inner = &raw[i + 2..j - 1];
+                let name = slot_name(inner, &args);
+                words.push('{');
+                words.push_str(&name);
+                words.push('}');
+
+                // The expression is parsed by this same parser, so `${a ?: b}`
+                // and `${xs.count()}` mean in a string exactly what they mean
+                // outside one.
+                let (value, mut d) = parse_expr(inner, span);
+                self.diagnostics.append(&mut d);
+                args.push(Arg { name: Some(name), value, spread: false, span });
+                i = j;
+                continue;
+            }
+            let ch = raw[i..].chars().next().unwrap_or('\0');
+            words.push(ch);
+            i += ch.len_utf8();
+        }
+
+        let mut all = vec![Arg {
+            name: None,
+            value: Expr::Str { value: words, span },
+            spread: false,
+            span,
+        }];
+        all.extend(args);
+        Expr::Call {
+            callee: Box::new(Expr::Ident { name: crate::expand::PHRASE.to_string(), span }),
+            args: all,
+            span,
+        }
+    }
+
     fn switch_expr(&mut self) -> Expr {
         let span = self.peek().span;
         self.bump();
@@ -1500,4 +1571,48 @@ impl Parser {
         }
         Expr::Switch { subject: Box::new(subject), arms, span }
     }
+}
+
+/// What to call the slot a `${…}` fills.
+///
+/// The last segment of a path, because `${state.member.points}` is about points
+/// and a bundle for a second language is read by somebody who was not here. A
+/// name already used, or an expression that is not a path, falls back to its
+/// position — two slots with one name would be one slot.
+fn slot_name(inner: &str, taken: &[Arg]) -> String {
+    let trimmed = inner.trim();
+    let last = trimmed.rsplit('.').next().unwrap_or("");
+    let usable = !last.is_empty()
+        && last.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && last.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    let already = |n: &str| taken.iter().any(|a| a.name.as_deref() == Some(n));
+    if usable && !already(last) {
+        return last.to_string();
+    }
+    let mut n = taken.len();
+    loop {
+        let candidate = format!("v{n}");
+        if !already(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// One expression, parsed on its own. The inside of a `${…}`.
+fn parse_expr(src: &str, span: crate::diag::Span) -> (Expr, Vec<Diagnostic>) {
+    let (toks, mut d) = Lexer::new(src).run();
+    let mut p = Parser { toks, i: 0, diagnostics: Vec::new() };
+    let e = p.expr(0);
+    // Positions inside a template are the template's own: it is lexed as one
+    // token, and a column from a second lexer would point into a string nobody
+    // can see.
+    for mut x in p.diagnostics {
+        x.span = span;
+        d.push(x);
+    }
+    for x in d.iter_mut() {
+        x.span = span;
+    }
+    (e, d)
 }

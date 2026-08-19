@@ -15,6 +15,8 @@ pub enum Kind {
     /// A newline that ends a statement. Newlines inside an unclosed bracket are
     /// not emitted at all — §2, and the reason the parser never has to ask.
     Newline,
+    /// The inside of a `` ` `` string, markers and all.
+    Template,
     Eof,
 }
 
@@ -45,6 +47,13 @@ const PUNCT: &[&str] = &[
     "==", "!=", "<=", ">=", "&&", "||", "->", "=>", "...", "{", "}", "(", ")", "[", "]", ",", ":",
     ".", ";", "?", "+", "-", "*", "/", "%", "<", ">", "=", "!", "@",
 ];
+
+/// The span an escape is reported at. A template is lexed as one token, so an
+/// escape inside it has the string's own position rather than its exact one —
+/// which is the position somebody looking for it would start from anyway.
+fn at_esc(span: Span) -> Span {
+    span
+}
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Self {
@@ -92,6 +101,54 @@ impl<'a> Lexer<'a> {
                 while self.i < self.bytes.len() && self.bytes[self.i] != b'\n' {
                     self.bump(1);
                 }
+                continue;
+            }
+
+            // `` `you have ${points} points` `` — the words and the values
+            // written together. Lexed whole, markers and all: what it means is
+            // decided by the parser, which turns it into the same `phrase` a
+            // person would have written by hand.
+            if c == b'`' {
+                let span = self.span(1);
+                self.bump(1);
+                let mut text = String::new();
+                let mut closed = false;
+                while self.i < self.bytes.len() {
+                    match self.bytes[self.i] {
+                        b'`' => {
+                            self.bump(1);
+                            closed = true;
+                            break;
+                        }
+                        b'\\' => {
+                            self.bump(1);
+                            let esc = *self.bytes.get(self.i).unwrap_or(&b'`');
+                            self.bump(1);
+                            match esc {
+                                b'`' => text.push('`'),
+                                b'$' => text.push('$'),
+                                b'\\' => text.push('\\'),
+                                b'n' => text.push('\n'),
+                                b't' => text.push('\t'),
+                                other => {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        at_esc(span),
+                                        format!("`\\{}` is not an escape this language has", other as char),
+                                    ));
+                                }
+                            }
+                        }
+                        b => {
+                            let n = char_len(b);
+                            text.push_str(&self.src[self.i..self.i + n]);
+                            self.bump(n);
+                        }
+                    }
+                }
+                if !closed {
+                    self.diagnostics.push(Diagnostic::error(span, "this line ends inside a `` ` `` string"));
+                }
+                out.push(Token { kind: Kind::Template, text, span });
                 continue;
             }
 

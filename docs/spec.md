@@ -491,6 +491,26 @@ built against, and a host provides those semantics or refuses to run it.
 
 ### Text
 
+```val
+text(`you have ${state.points} points`)
+```
+
+A `` ` `` string is sugar for `phrase`: the line above is exactly
+
+```val
+text(phrase("you have {points} points", points: state.points))
+```
+
+The words and the values travel to the host separately, because the host formats
+the number. A slot takes the last segment of the path it holds, so a bundle for a
+second language reads as a sentence; a name used twice, or an expression that is
+not a path, takes its position instead. Any expression may go inside `${…}`, and
+means there what it means anywhere else.
+
+Words written in place are still words: a package promising two locales is
+refused for a `` ` `` string exactly as it is for a `"` one. Interpolation is
+for the application in one language, which most are.
+
 Write the words. An application in one language needs no bundle at all:
 
 ```val
