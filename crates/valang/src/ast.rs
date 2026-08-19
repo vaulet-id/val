@@ -104,6 +104,25 @@ pub struct TypeRef {
     pub optional: bool,
 }
 
+impl TypeRef {
+    /// The type as somebody would write it — `List(string)`, `int?`.
+    ///
+    /// Used where a person reads it rather than where the compiler does: the
+    /// exported surface in the capability report is a thing a publisher diffs
+    /// against what they published last time.
+    pub fn written(&self) -> String {
+        let mut out = self.name.clone();
+        if !self.args.is_empty() {
+            let args: Vec<String> = self.args.iter().map(|a| a.written()).collect();
+            out = format!("{out}({})", args.join(", "));
+        }
+        if self.optional {
+            out.push('?');
+        }
+        out
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TrustDecl {
     pub name: String,

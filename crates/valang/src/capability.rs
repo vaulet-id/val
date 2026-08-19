@@ -262,9 +262,20 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
         program.capabilities.iter().map(|c| c.name.clone()).collect();
     let mut uses: Vec<String> = Vec::new();
 
-    // Drawn capabilities, in the tree.
-    for screen in &program.screens {
-        walk_ui(&screen.tree, &mut |node| {
+    // Drawn capabilities, in the tree — and in the components, which a package
+    // of nothing but components would otherwise never have checked: a screen is
+    // what makes a component's body reachable, and a UI kit has no screens. A
+    // component a screen does draw is reported at the same span either way, and
+    // the duplicate collapses.
+    let trees: Vec<&[crate::ast::UiNode]> = program
+        .screens
+        .iter()
+        .map(|s| s.tree.as_slice())
+        .chain(program.components.iter().map(|c| c.tree.as_slice()))
+        .collect();
+
+    for tree in &trees {
+        walk_ui(tree, &mut |node| {
             // `if` is the language's, not a host's: it chooses between two
             // trees and draws nothing itself.
             if node.kind == "if" {

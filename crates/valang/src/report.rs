@@ -28,6 +28,16 @@ pub struct Report {
     /// opened by a link is a package whose screens somebody else can point at,
     /// which is a sentence the person installing it is owed.
     pub addresses: BTreeSet<String>,
+    /// What this package exports, with the parameters each one takes.
+    ///
+    /// The surface somebody else's build depends on. Changing a parameter here
+    /// breaks a package that is not yours and whose author is not in the room,
+    /// so it belongs in the report rather than only in the source: a publisher
+    /// can see what they are about to change, and diff it against what they
+    /// published.
+    pub exports: BTreeSet<String>,
+    /// What this package takes from others, as written.
+    pub imports: BTreeSet<String>,
     pub irreversible: bool,
 }
 
@@ -199,6 +209,26 @@ pub fn report(p: &Program) -> Report {
             _ => None,
         })
         .collect();
+    r.exports = p
+        .components
+        .iter()
+        .filter(|c| c.exported)
+        .map(|c| {
+            let params: Vec<String> = c
+                .params
+                .iter()
+                .map(|f| format!("{}: {}", f.name, f.ty.written()))
+                .collect();
+            format!("{}({})", c.name, params.join(", "))
+        })
+        .collect();
+
+    r.imports = p
+        .imports
+        .iter()
+        .map(|i| format!("{} {{ {} }}", i.package, i.names.join(", ")))
+        .collect();
+
     r.irreversible = !r.discloses.is_empty() || !r.proves.is_empty() || !r.payments.is_empty();
     r
 }
@@ -303,6 +333,8 @@ impl fmt::Display for Report {
         row(f, "writes state", &self.writes)?;
         row(f, "runs only on", &self.hosts)?;
         row(f, "reachable at", &self.addresses)?;
+        row(f, "exports", &self.exports)?;
+        row(f, "imports", &self.imports)?;
         writeln!(f, "{:<14} {}", "irreversible", if self.irreversible { "yes" } else { "none" })
     }
 }

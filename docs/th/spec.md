@@ -653,11 +653,19 @@ proves         birthdate <= now - 20 years
 issues         LoyaltyMember
 talks to       broker.co.th
 writes state   member.points
+exports        MoneyCard(label: string, amount: string)
+imports        org.vaulet.kit/1 { MoneyCard }
 irreversible   one disclosure
 ```
 
 ใบยินยอมที่ผู้ใช้กดอนุมัติคือการเรนเดอร์รายงานนี้ อ่านมันอย่างที่เขาจะอ่าน:
 ถ้ามันบอกอะไรที่คุณไม่ได้ตั้งใจ แปลว่าโค้ดของคุณบอกอย่างนั้น
+
+`exports` คือพื้นผิวที่ package อื่น build ทับ และสองบรรทัดท้ายเป็นสองบรรทัดเดียวที่ไม่ได้
+พูดถึงผู้ใช้ มันพูดกับคนที่พึ่งพา package นี้ ไม่มีอะไรตรวจได้ว่าการแก้ component ที่ export
+มาพร้อมเวอร์ชันใหม่ — package ที่พึ่งพามันไม่ได้อยู่ตอนคุณ build และผู้เขียนของมันก็ไม่ได้อยู่
+ที่จะบอกว่าพารามิเตอร์ย้ายที่ สิ่งที่อยู่คือสิ่งที่ package นี้ export ไว้ครั้งก่อน ถ้ามีคนเก็บมันไว้:
+`valc --surface <file>` เก็บมันไว้ และปฏิเสธพื้นผิวที่เปลี่ยนโดยที่เวอร์ชันไม่เปลี่ยน
 
 ### host ตรวจอะไรก่อนรับ package ของคุณ
 

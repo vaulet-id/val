@@ -681,11 +681,21 @@ proves         birthdate <= now - 20 years
 issues         LoyaltyMember
 talks to       broker.co.th
 writes state   member.points
+exports        MoneyCard(label: string, amount: string)
+imports        org.vaulet.kit/1 { MoneyCard }
 irreversible   one disclosure
 ```
 
 The consent sheet the person approves is a rendering of this report. Read it as
 they would: if it says something you did not intend, your code says it.
+
+`exports` is the surface other packages build against, and the last two lines
+are the only ones that are not about the person: they are for whoever depends on
+this package. Nothing can check that a change to an exported component came with
+a new version — the packages that depend on it are not present at your build,
+and their authors are not there to say a parameter moved. What is present is
+what this package exported last time, if it was kept: `valc --surface <file>`
+keeps it and refuses a changed surface at an unchanged version.
 
 ### What the host checks before admitting your package
 

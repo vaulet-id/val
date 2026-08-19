@@ -40,6 +40,24 @@ fn main() -> ExitCode {
     // versions itself. Where a package comes from is not the language's
     // question — a registry, a directory, an editor's open projects are all
     // answers — so the command line answers it here and hands the result over.
+    // `--surface <file>`, where a package records what it exports.
+    //
+    // Nothing else can enforce the rule that changing an exported component is
+    // a new version rather than an edit: the packages that depend on it are not
+    // here, and their authors are not in the room. What is here is what this
+    // package published last time, if somebody kept it — so keeping it is the
+    // mechanism.
+    let mut surface_path = None;
+    while let Some(i) = args.iter().position(|a| a == "--surface") {
+        args.remove(i);
+        if i < args.len() {
+            surface_path = Some(args.remove(i));
+        } else {
+            eprintln!("--surface takes a file");
+            return ExitCode::from(2);
+        }
+    }
+
     let mut package_dirs = Vec::new();
     while let Some(i) = args.iter().position(|a| a == "--packages") {
         args.remove(i);
@@ -52,7 +70,7 @@ fn main() -> ExitCode {
     }
 
     if args.is_empty() {
-        eprintln!("usage: valc [--packages <dir>] <file.val>…");
+        eprintln!("usage: valc [--packages <dir>] [--surface <file>] <file.val>…");
         return ExitCode::from(2);
     }
 
@@ -107,7 +125,15 @@ fn main() -> ExitCode {
             println!("  {errors} error(s) — would not build");
             return if failed { ExitCode::from(1) } else { ExitCode::SUCCESS };
         }
-        print!("{}", valang::report::report(&program));
+        let report = valang::report::report(&program);
+        print!("{report}");
+
+        if let Some(path) = &surface_path {
+            if let Err(message) = check_surface(path, &report) {
+                println!("  {message}");
+                failed = true;
+            }
+        }
     }
     if failed {
         ExitCode::FAILURE
@@ -116,6 +142,51 @@ fn main() -> ExitCode {
     }
 }
 
+
+/// What this package exported the last time it was built at this version.
+///
+/// A change here is a change to somebody else's build. The file is kept beside
+/// the package and read on the next build, which is the only way to notice: the
+/// packages that depend on this one are not present, and their authors are not
+/// in the room to say that a parameter moved.
+///
+/// A new version records its own surface and says nothing about the old one — a
+/// version is exactly the thing that is allowed to differ.
+fn check_surface(path: &str, report: &valang::report::Report) -> Result<(), String> {
+    let mut held: serde_json::Value = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    let now: Vec<String> = report.exports.iter().cloned().collect();
+    let key = format!("{}/{}", report.app, report.version);
+
+    if let Some(before) = held[&key].as_array() {
+        let before: Vec<String> =
+            before.iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
+        if before != now {
+            let gone: Vec<&String> = before.iter().filter(|x| !now.contains(x)).collect();
+            let new: Vec<&String> = now.iter().filter(|x| !before.contains(x)).collect();
+            let mut said = String::new();
+            for x in gone {
+                said.push_str(&format!("\n      was  {x}"));
+            }
+            for x in new {
+                said.push_str(&format!("\n      now  {x}"));
+            }
+            return Err(format!(
+                "error: `{key}` published a different surface, and a package that imports it was built against the old one. That is a new version, not an edit:{said}"
+            ));
+        }
+        return Ok(());
+    }
+
+    held[&key] = serde_json::json!(now);
+    if let Err(e) = std::fs::write(path, format!("{:#}\n", held)) {
+        return Err(format!("error: cannot write {path}: {e}"));
+    }
+    Ok(())
+}
 
 /// The packages under each `--packages` directory.
 ///
