@@ -192,8 +192,13 @@ impl<'a> Lexer<'a> {
             if let Some(p) = PUNCT.iter().find(|p| self.src[self.i..].starts_with(**p)) {
                 let span = self.span(p.len() as u32);
                 match *p {
-                    "{" | "(" | "[" => self.depth += 1,
-                    "}" | ")" | "]" => self.depth -= 1,
+                    // Only the brackets an expression wraps in. A brace holds
+                    // statements, and statements are newline-separated — so a
+                    // newline inside one is a separator and not whitespace.
+                    // Counting braces too is why a `switch` arm ran on into the
+                    // next line and read `"gold" >= 100` as a comparison.
+                    "(" | "[" => self.depth += 1,
+                    ")" | "]" => self.depth -= 1,
                     _ => {}
                 }
                 self.bump(p.len());

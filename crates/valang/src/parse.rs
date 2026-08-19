@@ -979,6 +979,17 @@ impl Parser {
                 let mut policy = None;
                 let mut limit = None;
                 loop {
+                    // `verified with`, `order by` and `limit` are usually
+                    // written on their own lines under the declaration they
+                    // belong to. A newline separates statements everywhere
+                    // else, so it is stepped over here and put back when what
+                    // follows turns out to be the next statement.
+                    let before = self.i;
+                    self.skip_newlines();
+                    if !(self.at("verified") || self.at("order") || self.at("limit")) {
+                        self.i = before;
+                        break;
+                    }
                     if self.at("verified") {
                         self.bump();
                         self.eat("with");

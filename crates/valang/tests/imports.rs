@@ -274,3 +274,16 @@ fn a_component_a_screen_draws_is_reported_once() {
     );
     assert_eq!(e.iter().filter(|m| m.contains("`tabs`")).count(), 1, "{e:?}");
 }
+
+/// A component's body may name another component. Screens have theirs expanded
+/// before anything checks them, so a body is the one place a component name
+/// survives to be checked — and reporting it as a name the host does not have
+/// sends the author to the wrong document.
+#[test]
+fn a_component_may_use_another_component() {
+    let e = errors(
+        "app \"org.vaulet.kit\"\nversion 1\n\ncapabilities {\n}\n\nexport component Outer(x: string) {\n  card {\n    text: x\n    Inner(x: x)\n  }\n}\n\ncomponent Inner(x: string) {\n  text(x)\n}\n",
+        &[],
+    );
+    assert!(e.is_empty(), "{e:?}");
+}

@@ -66,7 +66,9 @@ screen … { … }                  // what the person sees
 ### Syntax
 
 - **A newline ends a statement.** No semicolons. A statement continues while a
-  bracket is open, so wrap long expressions in `( … )`.
+  round or square bracket is open, so wrap long expressions in `( … )`. A brace
+  holds statements, so a newline inside one separates rather than continues —
+  which is why a `switch` arm ends at its line and its comma is optional.
 - **The shell is newline-separated, expressions are comma-separated.**
   `member.tier: tier` on its own line; `{ ...member, tier: tier }` with commas.
 - **`if` and `switch` parenthesise their condition**, as in TypeScript and Dart.

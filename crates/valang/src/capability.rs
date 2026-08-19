@@ -281,6 +281,12 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
             if node.kind == "if" || node.kind == "for" {
                 return;
             }
+            // A component this package declares. Screens have had theirs
+            // expanded by now, so this is a component's body naming another
+            // one — checked where that one is declared, not once per use.
+            if program.components.iter().any(|c| c.name == node.kind) {
+                return;
+            }
             let Some((_, cap)) = usable.find(&node.kind) else {
                 let known = hosts.find(&node.kind).is_some();
                 d.push(Diagnostic::error(
