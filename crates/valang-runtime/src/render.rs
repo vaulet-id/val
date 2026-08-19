@@ -228,7 +228,12 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
     // `verified with` in whatever language the renderer happens to be written
     // in — and then in the next one too.
     if n.kind == "list" {
-        let items = match args.get("0") {
+        // `of`, the name the registry gives a list's positional argument. The
+        // front end names it before anything downstream sees it, so reading the
+        // index here would be reading a shape that only exists when the
+        // compiler was run without a registry — which is not a program a host
+        // would ever admit.
+        let items = match args.get("of") {
             Some(Value::List(items)) => items.clone(),
             _ => Vec::new(),
         };

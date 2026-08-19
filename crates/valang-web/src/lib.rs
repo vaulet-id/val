@@ -511,14 +511,14 @@ fn ui_json(n: &valang::ast::UiNode) -> Json {
         // resolves it against the wallet, because the wallet is the host's.
         args.insert(key, json!(render(&a.value)));
     }
-    if let Some(first) = args.get("0").cloned() {
-        args.entry("text".to_string()).or_insert(first);
-    }
     json!({
         "kind": n.kind,
         "args": Json::Object(args),
         "lambda": n.lambda,
         "children": n.children.iter().map(ui_json).collect::<Vec<_>>(),
+        // The other half of an `if`. A screen is listed here before it is
+        // resolved, so both branches are still in it.
+        "otherwise": n.otherwise.iter().map(ui_json).collect::<Vec<_>>(),
     })
 }
 
