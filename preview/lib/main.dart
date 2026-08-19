@@ -247,6 +247,12 @@ class _PreviewAppState extends State<PreviewApp> {
   /// which is why there is no push, pop or replace for it to get wrong.
   final List<String> _stack = [];
 
+  /// What each screen's form holds, keyed by screen. Above the stack rather than
+  /// inside a screen, because going somewhere and coming back must not lose what
+  /// somebody had already typed — and because a screen that returns a value
+  /// writes into the form of the one that opened it.
+  final Map<String, Map<String, Object?>> _forms = {};
+
   Map<String, dynamic> get _current {
     final byName = {
       for (final s in _in.screens) (s as Map<String, dynamic>)['name'] as String: s,
@@ -288,8 +294,13 @@ class _PreviewAppState extends State<PreviewApp> {
     }
   }
 
-  void _back() => setState(() {
+  void _back([Map<String, Object?> with_ = const {}]) => setState(() {
         if (_stack.length > 1) _stack.removeLast();
+        if (with_.isEmpty) return;
+        // What the screen returned, written into the form of the one that
+        // opened it — the same names its fields write into.
+        final below = _stack.isEmpty ? _opening['name'] as String : _stack.last;
+        (_forms[below] ??= {}).addAll(with_);
       });
 
   Widget build(BuildContext context) {
@@ -317,6 +328,7 @@ class _PreviewAppState extends State<PreviewApp> {
                       canGoBack: _stack.length > 1,
                       onNavigate: _navigate,
                       onBack: _back,
+                      form: _forms[_current['name'] as String] ??= {},
                     ),
                   ),
                 ),
@@ -358,11 +370,13 @@ class _Phone extends StatelessWidget {
     this.canGoBack = false,
     this.onNavigate,
     this.onBack,
+    this.form,
   });
 
   final bool canGoBack;
   final void Function(String, [Map<String, Object?>])? onNavigate;
-  final VoidCallback? onBack;
+  final void Function([Map<String, Object?>])? onBack;
+  final Map<String, Object?>? form;
 
   static const width = 393.0;
   static const height = 852.0;
@@ -422,6 +436,7 @@ class _Phone extends StatelessWidget {
                       canGoBack: canGoBack,
                       onNavigate: onNavigate,
                       onBack: onBack,
+                      form: form,
                     ),
                   ),
                   const _HomeIndicator(),
@@ -440,13 +455,15 @@ class _Phone extends StatelessWidget {
 /// Moving between screens is the host's: it never reaches the application, so
 /// nothing about it is posted out and nothing about it is in the record.
 class _Nav extends InheritedWidget {
-  const _Nav({required this.go, required super.child});
+  const _Nav({required this.go, required this.back, required super.child});
 
   /// True when the target was a screen and the move happened.
   final bool Function(String, Map<String, Object?>) go;
 
-  static bool Function(String, Map<String, Object?>)? of(BuildContext c) =>
-      c.dependOnInheritedWidgetOfExactType<_Nav>()?.go;
+  /// Coming back, with whatever the screen returned.
+  final void Function(Map<String, Object?>) back;
+
+  static _Nav? of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<_Nav>();
 
   @override
   bool updateShouldNotify(_Nav old) => false;
@@ -489,20 +506,23 @@ class _Screen extends StatefulWidget {
     this.canGoBack = false,
     this.onNavigate,
     this.onBack,
+    this.form,
   });
 
   final Map<String, dynamic> screen;
   final Incoming incoming;
   final bool canGoBack;
   final void Function(String, [Map<String, Object?>])? onNavigate;
-  final VoidCallback? onBack;
+  final void Function([Map<String, Object?>])? onBack;
+  final Map<String, Object?>? form;
 
   @override
   State<_Screen> createState() => _ScreenState();
 }
 
 class _ScreenState extends State<_Screen> {
-  final Map<String, Object?> _values = {};
+  Map<String, Object?> get _values => widget.form ?? _own;
+  final Map<String, Object?> _own = {};
 
   static bool _isPrimary(Map<String, dynamic> n) =>
       n['kind'] == 'button' && ((n['args'] as Map?)?['emphasis'] as String?)?.trim() == 'primary';
@@ -533,6 +553,7 @@ class _ScreenState extends State<_Screen> {
     final docked = _flatten(nodes).where(_isPrimary).toList();
 
     return _Nav(
+      back: (returned) => widget.onBack?.call(returned),
       go: (target, args) {
         final onNavigate = widget.onNavigate;
         if (onNavigate == null || !widget.incoming.hasScreen(target)) return false;
@@ -911,9 +932,14 @@ class _NodeState extends State<_Node> {
     // `onTap: Detail` is `navigation.navigate(to: Detail)` written short, and
     // moving between screens is the host's own business — it never reaches the
     // application, which is why nothing is posted for it.
-    final navigate = _Nav.of(context);
     final with_ = (args['onTapWith'] as Map?)?.cast<String, Object?>() ?? const <String, Object?>{};
-    if (navigate != null && navigate(target, with_)) return;
+    final nav = _Nav.of(context);
+    if (target == 'navigation.back') {
+      // What a screen returns goes into the form of the one that opened it.
+      nav?.back((with_['with'] as Map?)?.cast<String, Object?>() ?? with_);
+      return;
+    }
+    if (nav != null && nav.go(target, with_)) return;
 
     web.window.parent?.postMessage(
       jsonEncode({'type': 'tap', 'action': target, 'input': _Form.of(context)}).toJS,

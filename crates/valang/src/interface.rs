@@ -264,6 +264,13 @@ fn lower_first(s: &str) -> String {
     }
 }
 
+fn walk_ui(nodes: &[crate::ast::UiNode], f: &mut impl FnMut(&crate::ast::UiNode)) {
+    for n in nodes {
+        f(n);
+        walk_ui(&n.children, f);
+    }
+}
+
 fn walk(stmts: &[crate::ast::Stmt], f: &mut impl FnMut(&crate::ast::Stmt)) {
     use crate::ast::Stmt;
     for s in stmts {

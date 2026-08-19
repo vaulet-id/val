@@ -181,7 +181,12 @@ fn navigation_goes_somewhere(p: &Program, d: &mut Vec<Diagnostic>) {
                         if let Some(target) = a.value.path() {
                             // `onTap` names an action or a screen; either has to
                             // exist, and which one it is decides what happens.
-                            if !screens.contains(target.as_str())
+                            // A dotted target is a capability's operation —
+                            // `navigation.back(with: …)`. Which operations exist
+                            // is the host's document, so it is checked where the
+                            // interfaces are in reach rather than guessed here.
+                            if !target.contains('.')
+                                && !screens.contains(target.as_str())
                                 && !p.actions.iter().any(|x| x.name == target)
                             {
                                 d.push(Diagnostic::error(

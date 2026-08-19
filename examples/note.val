@@ -13,12 +13,14 @@ capabilities {
 state {
   note:      string default ""
   reminders: bool default false
+  tag:       string default ""
 }
 
 action Save {
   input {
-    body:  string
+    body:   string
     remind: bool
+    tag:    string
   }
 
   require {
@@ -28,6 +30,7 @@ action Save {
   update {
     note:      body
     reminders: remind
+    tag:       tag
   }
 }
 
@@ -35,11 +38,14 @@ screen Note start: true {
   title: sentence("noteTitle")
 
   column {
-    card(text: sentence("current", note: state.note))
+    card(text: sentence("current", note: state.note, tag: state.tag))
 
     section(text: sentence("write"))
     field(text: sentence("body"), into: body)
     toggle(text: sentence("remind"), into: remind)
+
+    // A screen that returns a value writes into the same name a field would.
+    tile(text: sentence("pickTag"), onTap: PickTag)
 
     button(text: sentence("save"), emphasis: primary, onTap: Save)
     button(text: sentence("about"), emphasis: secondary, onTap: About)
@@ -49,6 +55,17 @@ screen Note start: true {
 // A second screen, reached by a press. `onTap: About` is
 // `navigation.navigate(to: About)` written short, and coming back is the host's
 // — an application never declares a way back.
+// A picker. It returns into `tag`, which is what the form on the screen that
+// opened it is collecting — no new mechanism, the same names its fields use.
+screen PickTag present: sheet {
+  title: sentence("pickTagTitle")
+
+  column {
+    tile(text: sentence("tagWork"), onTap: navigation.back(with: { tag: "work" }))
+    tile(text: sentence("tagHome"), onTap: navigation.back(with: { tag: "home" }))
+  }
+}
+
 screen About present: sheet {
   title: sentence("aboutTitle")
 

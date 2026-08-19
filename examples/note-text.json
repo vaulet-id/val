@@ -10,8 +10,8 @@
       "th": "บันทึก"
     },
     "current": {
-      "en": "Saved: {note}",
-      "th": "บันทึกไว้: {note}"
+      "en": "Saved: {note} ({tag})",
+      "th": "บันทึกไว้: {note} ({tag})"
     },
     "write": {
       "en": "Write one",
@@ -40,6 +40,22 @@
     "aboutBody": {
       "en": "Nothing you type is application state. The wallet holds it and hands it over when you submit.",
       "th": "สิ่งที่คุณพิมพ์ไม่ใช่ state ของแอป wallet ถือไว้แล้วส่งให้ตอนคุณกดบันทึก"
+    },
+    "pickTag": {
+      "en": "Choose a tag",
+      "th": "เลือกป้าย"
+    },
+    "pickTagTitle": {
+      "en": "Tags",
+      "th": "ป้าย"
+    },
+    "tagWork": {
+      "en": "Work",
+      "th": "งาน"
+    },
+    "tagHome": {
+      "en": "Home",
+      "th": "บ้าน"
     }
   }
 }
