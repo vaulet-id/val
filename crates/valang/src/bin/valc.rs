@@ -40,13 +40,29 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
 
+    // A package is several files sharing one scope: `wallet.val` presses an
+    // action `loyalty.val` declares, and either alone is half a program that
+    // fails for the wrong reason. They are analysed together, the way a host
+    // analyses the package it received — checking them one at a time reported
+    // that a screen's action did not exist, which was true only of that file.
+    let mut sources = Vec::new();
     let mut failed = false;
     for path in &args {
-        let Ok(src) = std::fs::read_to_string(path) else {
-            eprintln!("{path}: cannot read");
-            failed = true;
-            continue;
-        };
+        match std::fs::read_to_string(path) {
+            Ok(src) => sources.push((path.clone(), src)),
+            Err(_) => {
+                eprintln!("{path}: cannot read");
+                failed = true;
+            }
+        }
+    }
+    if sources.is_empty() {
+        return ExitCode::from(2);
+    }
+
+    {
+        let path = &sources[0].0;
+        let src = sources.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join("\n");
         // The bundle beside the sources, if there is one. Checking the code
         // without it is checking half a package — and it is the half that says
         // what a person reads.
@@ -64,7 +80,7 @@ fn main() -> ExitCode {
             None => valang::analyse_fully(&src, None, &catalogues(), &interfaces()),
         };
 
-        println!("── {path}");
+        println!("── {}", args.join(" "));
         for d in &diagnostics {
             println!("  {d}");
         }
@@ -72,7 +88,7 @@ fn main() -> ExitCode {
         if errors > 0 {
             failed = true;
             println!("  {errors} error(s) — would not build");
-            continue;
+            return if failed { ExitCode::from(1) } else { ExitCode::SUCCESS };
         }
         print!("{}", valang::report::report(&program));
     }
