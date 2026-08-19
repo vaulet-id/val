@@ -23,9 +23,10 @@ pub struct Program {
     /// rendering path, because it expands into the catalogue before a host sees
     /// it.
     pub components: Vec<ComponentDecl>,
-    /// The catalogues this package draws from, as `name/version`. A host that
-    /// does not implement one refuses the package rather than approximating it.
-    pub catalogues: Vec<String>,
+    /// The hosts whose registries this package needs, as `name/version`. A
+    /// host that does not provide one refuses the package rather than
+    /// approximating it.
+    pub hosts: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

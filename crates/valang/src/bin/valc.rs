@@ -74,10 +74,8 @@ fn main() -> ExitCode {
         let bundle = bundle.as_deref().and_then(parse_bundle);
 
         let (program, diagnostics) = match &bundle {
-            Some((keys, locales)) => {
-                valang::analyse_fully(&src, Some((keys, locales)), &catalogues(), &interfaces())
-            }
-            None => valang::analyse_fully(&src, None, &catalogues(), &interfaces()),
+            Some((keys, locales)) => valang::analyse_fully(&src, Some((keys, locales)), &hosts()),
+            None => valang::analyse_fully(&src, None, &hosts()),
         };
 
         println!("── {}", args.join(" "));
@@ -99,37 +97,22 @@ fn main() -> ExitCode {
     }
 }
 
-/// The capabilities to check against. A real host publishes its own; what a
-/// command line has is whatever is on disk beside the language.
-fn interfaces() -> valang::interface::Interfaces {
-    const EFFECTS: &str = include_str!("../../../../interfaces/core-effects.json");
-    const NAVIGATION: &str = include_str!("../../../../interfaces/navigation.json");
 
-    let mut loaded = Vec::new();
-    for source in [EFFECTS, NAVIGATION] {
-        match valang::interface::Interface::parse_many(source) {
-            Ok(mut i) => loaded.append(&mut i),
-            Err(e) => eprintln!("an interface did not parse: {e}"),
-        }
-    }
-    valang::interface::Interfaces::of(loaded)
-}
-
-/// The catalogues to check against.
+/// What to check against.
 ///
-/// A real host publishes its own and hands it to the compiler; what a command
-/// line has is whatever is on disk beside the language. The core profile is
-/// built in because a package that names nothing else is checked against it.
-fn catalogues() -> valang::catalogue::Catalogues {
-    const CORE: &str = include_str!("../../../../catalogues/core.json");
-    const VAULET: &str = include_str!("../../../../catalogues/vaulet.json");
+/// A real host hands the compiler its own registry; what a command line has is
+/// whatever is on disk beside the language. The core one is built in because a
+/// package naming nothing else is checked against it.
+fn hosts() -> valang::capability::Hosts {
+    const CORE: &str = include_str!("../../../../hosts/core.json");
+    const VAULET: &str = include_str!("../../../../hosts/vaulet.json");
 
     let mut loaded = Vec::new();
     for source in [CORE, VAULET] {
-        match valang::catalogue::Catalogue::parse(source) {
-            Ok(c) => loaded.push(c),
-            Err(e) => eprintln!("a catalogue did not parse: {e}"),
+        match valang::capability::Host::parse(source) {
+            Ok(h) => loaded.push(h),
+            Err(e) => eprintln!("a host registry did not parse: {e}"),
         }
     }
-    valang::catalogue::Catalogues::of(loaded)
+    valang::capability::Hosts::of(loaded)
 }

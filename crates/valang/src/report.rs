@@ -20,10 +20,10 @@ pub struct Report {
     pub audiences: BTreeSet<String>,
     pub payments: BTreeSet<String>,
     pub writes: BTreeSet<String>,
-    /// The catalogues this package needs beyond the profile every host
-    /// implements. Empty means it runs on any of them, which is the sentence a
+    /// The hosts this package needs beyond the registry every one of them
+    /// provides. Empty means it runs on any of them, which is a sentence a
     /// person deciding to install it is owed as much as the rest.
-    pub catalogues: BTreeSet<String>,
+    pub hosts: BTreeSet<String>,
     /// The addresses a link from outside can reach. A package that can be
     /// opened by a link is a package whose screens somebody else can point at,
     /// which is a sentence the person installing it is owed.
@@ -183,10 +183,10 @@ pub fn report(p: &Program) -> Report {
         r.reads = narrowed;
     }
 
-    r.catalogues = p
-        .catalogues
+    r.hosts = p
+        .hosts
         .iter()
-        .filter(|c| !c.starts_with(crate::catalogue::CORE))
+        .filter(|h| !h.starts_with(crate::capability::CORE))
         .cloned()
         .collect();
     r.addresses = p
@@ -301,7 +301,7 @@ impl fmt::Display for Report {
         row(f, "talks to", &self.audiences)?;
         row(f, "moves money", &self.payments)?;
         row(f, "writes state", &self.writes)?;
-        row(f, "runs only on", &self.catalogues)?;
+        row(f, "runs only on", &self.hosts)?;
         row(f, "reachable at", &self.addresses)?;
         writeln!(f, "{:<14} {}", "irreversible", if self.irreversible { "yes" } else { "none" })
     }

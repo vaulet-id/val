@@ -7,8 +7,7 @@
 
 pub mod ast;
 pub mod check;
-pub mod catalogue;
-pub mod interface;
+pub mod capability;
 pub mod diag;
 pub mod expand;
 pub mod lex;
@@ -33,7 +32,7 @@ pub type TextBundle = std::collections::BTreeMap<String, std::collections::BTree
 /// (§9) — and every sentence a person reads is in there rather than in the
 /// program.
 pub fn analyse_with(src: &str, bundle: Option<(&TextBundle, &[String])>) -> (ast::Program, Vec<Diagnostic>) {
-    analyse_against(src, bundle, &catalogue::Catalogues::default())
+    analyse_against(src, bundle, &capability::Hosts::default())
 }
 
 /// Analyse against the host's catalogues as well.
@@ -44,9 +43,9 @@ pub fn analyse_with(src: &str, bundle: Option<(&TextBundle, &[String])>) -> (ast
 pub fn analyse_against(
     src: &str,
     bundle: Option<(&TextBundle, &[String])>,
-    catalogues: &catalogue::Catalogues,
+    hosts: &capability::Hosts,
 ) -> (ast::Program, Vec<Diagnostic>) {
-    analyse_fully(src, bundle, catalogues, &interface::Interfaces::default())
+    analyse_fully(src, bundle, hosts)
 }
 
 /// Analyse against everything the host published: its catalogues and its
@@ -55,8 +54,7 @@ pub fn analyse_against(
 pub fn analyse_fully(
     src: &str,
     bundle: Option<(&TextBundle, &[String])>,
-    catalogues: &catalogue::Catalogues,
-    interfaces: &interface::Interfaces,
+    hosts: &capability::Hosts,
 ) -> (ast::Program, Vec<Diagnostic>) {
     let (mut program, mut diagnostics) = parse::parse(src);
     // A package's own components become the host's catalogue before anything
@@ -68,8 +66,7 @@ pub fn analyse_fully(
     if let Some((bundle, locales)) = bundle {
         diagnostics.extend(check::check_bundle(&program, bundle, locales));
     }
-    diagnostics.extend(catalogue::check_screens(&program, catalogues));
-    diagnostics.extend(interface::check(&program, interfaces));
+    diagnostics.extend(capability::check(&program, hosts));
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one
     // that mattered gets skipped. Not `dedup_by`, which only sees neighbours:

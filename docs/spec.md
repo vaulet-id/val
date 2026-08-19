@@ -400,9 +400,9 @@ button(text: "key", emphasis: primary, onTap: Action)
 ```
 
 Props are semantic — `text`, `icon`, `emphasis`, `state`, `onTap`. No colours,
-no fonts, no pixel sizes. Asking for a component the catalogue does not have is
-reported, not approximated. Your package records the catalogue version it was
-built against, and a host renders those semantics or refuses to run it.
+no fonts, no pixel sizes. Asking for something this host does not provide is
+reported, not approximated. Your package records the registry version it was
+built against, and a host provides those semantics or refuses to run it.
 
 ### Text
 
@@ -626,7 +626,7 @@ they would: if it says something you did not intend, your code says it.
 5. Every locale your manifest promises has every key.
 
 Then its own policy: whether an app of your kind may hold those capabilities,
-and whether it can render your catalogue version.
+and whether it provides the registry version you built against.
 
 ### Who signs the credentials you issue
 

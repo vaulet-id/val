@@ -1,0 +1,28 @@
+{
+  "_comment": "Vaulet's own additions. Written under `wallet.` in a screen, so a reader sees from the line that it has stopped being portable.",
+  "host": "id.vaulet.wallet",
+  "version": 1,
+  "capabilities": {
+    "avatar": {
+      "draws": true,
+      "props": {
+        "of": "Claim"
+      }
+    },
+    "idCard": {
+      "draws": true,
+      "props": {
+        "of": "Verified"
+      }
+    },
+    "swipeAway": {
+      "draws": true,
+      "props": {
+        "text": "Text",
+        "onRemove": "Action"
+      },
+      "children": true
+    }
+  },
+  "vocabularies": {}
+}

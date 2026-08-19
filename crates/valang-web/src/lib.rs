@@ -70,12 +70,11 @@ pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
         .map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
         .unwrap_or_default();
 
-    let cats = catalogues(&input["catalogues"]);
-    let ifaces = interfaces(&input["interfaces"]);
+    let hosts = hosts(&input["hosts"]);
     let (program, diagnostics) = if bundle.is_empty() {
-        valang::analyse_fully(source, None, &cats, &ifaces)
+        valang::analyse_fully(source, None, &hosts)
     } else {
-        valang::analyse_fully(source, Some((&bundle, &locales)), &cats, &ifaces)
+        valang::analyse_fully(source, Some((&bundle, &locales)), &hosts)
     };
 
     write(
@@ -328,42 +327,6 @@ fn hex_bytes(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-/// The capabilities the caller published, alongside its catalogues. Both come
-/// from the host for the same reason.
-fn interfaces(j: &Json) -> valang::interface::Interfaces {
-    let mut loaded = Vec::new();
-    if let Some(list) = j.as_array() {
-        for entry in list {
-            let source = match entry {
-                Json::String(s) => s.clone(),
-                other => other.to_string(),
-            };
-            if let Ok(mut i) = valang::interface::Interface::parse_many(&source) {
-                loaded.append(&mut i);
-            }
-        }
-    }
-    valang::interface::Interfaces::of(loaded)
-}
-
-/// The catalogues the caller published. A host hands these in; the language does
-/// not carry a list of what any host can draw.
-fn catalogues(j: &Json) -> valang::catalogue::Catalogues {
-    let mut loaded = Vec::new();
-    if let Some(list) = j.as_array() {
-        for entry in list {
-            let source = match entry {
-                Json::String(s) => s.clone(),
-                other => other.to_string(),
-            };
-            if let Ok(c) = valang::catalogue::Catalogue::parse(&source) {
-                loaded.push(c);
-            }
-        }
-    }
-    valang::catalogue::Catalogues::of(loaded)
-}
-
 /// A JSON object as the values an action is given.
 fn json_state(j: &Json) -> BTreeMap<String, valang_runtime::value::Value> {
     let mut out = BTreeMap::new();
@@ -382,6 +345,24 @@ fn json_state(j: &Json) -> BTreeMap<String, valang_runtime::value::Value> {
         }
     }
     out
+}
+
+/// What the caller says it provides. A host hands this in; the language carries
+/// no list of what anybody can do or draw.
+fn hosts(j: &Json) -> valang::capability::Hosts {
+    let mut loaded = Vec::new();
+    if let Some(list) = j.as_array() {
+        for entry in list {
+            let source = match entry {
+                Json::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            if let Ok(h) = valang::capability::Host::parse(&source) {
+                loaded.push(h);
+            }
+        }
+    }
+    valang::capability::Hosts::of(loaded)
 }
 
 fn text_bundle(j: &Json) -> valang::TextBundle {

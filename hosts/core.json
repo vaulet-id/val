@@ -1,9 +1,17 @@
 {
-  "_comment": "The profile every conforming host implements. A package that names only this runs on any of them. Adding a component here needs two hosts that can already draw it — one host is an extension, not a profile.",
-  "catalogue": "org.val.core",
+  "_comment": "What this host provides to a Micro App: one registry, one version. `draws` says a capability is written in a screen's tree; without it, it is called in `execute`. `consent` says it appears on the sheet the person approves — a policy attribute, not a category.",
+  "host": "org.val.core",
   "version": 1,
-  "components": {
+  "screen": {
+    "props": {
+      "start": "bool?",
+      "present": "Present?",
+      "address": "Address?"
+    }
+  },
+  "capabilities": {
     "column": {
+      "draws": true,
       "props": {
         "gap": "Gap?",
         "align": "Align?"
@@ -11,6 +19,7 @@
       "children": true
     },
     "row": {
+      "draws": true,
       "props": {
         "gap": "Gap?",
         "align": "Align?"
@@ -18,19 +27,20 @@
       "children": true
     },
     "divider": {
+      "draws": true,
       "props": {
         "style": "DividerStyle?"
-      },
-      "children": false
+      }
     },
     "section": {
+      "draws": true,
       "props": {
         "text": "Text",
         "style": "SectionStyle?"
-      },
-      "children": false
+      }
     },
     "card": {
+      "draws": true,
       "props": {
         "text": "Text",
         "onTap": "Action?"
@@ -38,16 +48,17 @@
       "children": true
     },
     "tile": {
+      "draws": true,
       "props": {
         "text": "Text",
         "detail": "Text?",
         "icon": "Icon?",
         "trailing": "Trailing?",
         "onTap": "Action?"
-      },
-      "children": false
+      }
     },
     "list": {
+      "draws": true,
       "props": {
         "of": "List<T>",
         "onRemove": "Action?"
@@ -55,102 +66,162 @@
       "children": true
     },
     "image": {
+      "draws": true,
       "props": {
         "asset": "Asset"
-      },
-      "children": false
+      }
     },
     "button": {
+      "draws": true,
       "props": {
         "text": "Text",
         "emphasis": "Emphasis?",
         "icon": "Icon?",
         "state": "State?",
         "onTap": "Action"
-      },
-      "children": false
+      }
     },
     "field": {
+      "draws": true,
       "props": {
         "text": "Text",
         "kind": "FieldKind?",
         "icon": "Icon?",
         "into": "Name"
-      },
-      "children": false
+      }
     },
     "pick": {
+      "draws": true,
       "props": {
         "text": "Text",
         "of": "List<T>?",
         "kind": "PickKind?",
         "into": "Name"
-      },
-      "children": false
+      }
     },
     "toggle": {
+      "draws": true,
       "props": {
         "text": "Text",
         "into": "Name"
-      },
-      "children": false
+      }
     },
     "progress": {
+      "draws": true,
       "props": {
         "text": "Text?",
         "value": "int",
         "of": "int"
-      },
-      "children": false
+      }
     },
     "credentialCard": {
+      "draws": true,
       "props": {
         "of": "Verified"
-      },
-      "children": false
+      }
     },
     "claim": {
+      "draws": true,
       "props": {
         "text": "Text",
         "of": "Claim"
-      },
-      "children": false
+      }
     },
     "qr": {
+      "draws": true,
       "props": {
         "of": "Presentation"
-      },
-      "children": false
+      }
     },
     "notice": {
+      "draws": true,
       "props": {
         "text": "Text",
         "tone": "Tone?"
-      },
-      "children": false
+      }
     },
     "banner": {
+      "draws": true,
       "props": {
         "text": "Text",
         "detail": "Text?",
         "image": "Asset?",
         "icon": "Icon?",
         "onTap": "Action?"
-      },
-      "children": false
+      }
     },
     "carousel": {
+      "draws": true,
       "props": {
         "of": "List<T>?"
       },
       "children": true
     },
     "grid": {
+      "draws": true,
       "props": {
         "of": "List<T>?",
         "columns": "int?"
       },
       "children": true
+    },
+    "credential.read": {
+      "consent": true,
+      "props": {
+        "of": "Type"
+      }
+    },
+    "credential.issue": {
+      "consent": true,
+      "props": {
+        "of": "Credential"
+      }
+    },
+    "payment.request": {
+      "consent": true,
+      "props": {
+        "to": "string",
+        "amount": "int"
+      },
+      "reversible": false
+    },
+    "storage.write": {
+      "consent": true,
+      "props": {
+        "scope": "string",
+        "id": "string",
+        "value": "any"
+      }
+    },
+    "message.send": {
+      "consent": true,
+      "props": {
+        "to": "string"
+      },
+      "reversible": false
+    },
+    "network.request": {
+      "consent": true,
+      "props": {
+        "audience": "string"
+      }
+    },
+    "disclosure.present": {
+      "consent": true,
+      "props": {},
+      "reversible": false
+    },
+    "navigation.navigate": {
+      "props": {
+        "to": "Screen",
+        "as": "Transition?",
+        "present": "Present?"
+      }
+    },
+    "navigation.back": {
+      "props": {
+        "with": "Record?"
+      }
     }
   },
   "vocabularies": {
@@ -215,6 +286,15 @@
       "warning",
       "document",
       "key"
+    ],
+    "transition": [
+      "push",
+      "replace",
+      "root"
+    ],
+    "present": [
+      "full",
+      "sheet"
     ]
   }
 }

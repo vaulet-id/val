@@ -1,16 +1,11 @@
-import core from '../../../catalogues/core.json?raw'
-import vaulet from '../../../catalogues/vaulet.json?raw'
-import effects from '../../../interfaces/core-effects.json?raw'
-import navigation from '../../../interfaces/navigation.json?raw'
+import core from '../../../hosts/core.json?raw'
+import vaulet from '../../../hosts/vaulet.json?raw'
 
-/// The catalogues this host publishes. A wallet hands its own to the compiler —
-/// the language carries no list of what anybody can draw, so the playground
-/// supplies Vaulet's the way a real host would.
-export const CATALOGUES = [core, vaulet]
-
-/// And what it can do. A capability is a document for the same reason a
-/// component is: a second wallet publishes its own rather than patching ours.
-export const INTERFACES = [effects, navigation]
+/// What this host provides — everything it draws and everything it does, in one
+/// registry. A wallet hands its own to the compiler; the language carries no
+/// list of what anybody can do, so the playground supplies Vaulet's the way a
+/// real host would.
+export const HOSTS = [core, vaulet]
 
 // The compiler and the runtime, loaded into the page.
 //
@@ -138,7 +133,7 @@ export function analyse(
   text?: Record<string, Record<string, string>>,
   locales?: string[],
 ): Analysis {
-  return call('val_analyse', { source, text, locales, catalogues: CATALOGUES, interfaces: INTERFACES }) as Analysis
+  return call('val_analyse', { source, text, locales, hosts: HOSTS }) as Analysis
 }
 
 export function resolve(source: string, wallet: unknown): { screens: Resolved[] } {

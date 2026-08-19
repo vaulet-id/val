@@ -165,16 +165,16 @@ impl Parser {
                 "action" => p.actions.push(self.action_decl()),
                 "screen" => p.screens.push(self.screen_decl()),
                 "component" => p.components.push(self.component_decl()),
-                "catalogue" => {
+                "host" => {
                     self.bump();
                     self.skip_newlines();
                     if self.peek().kind == Kind::Str {
-                        p.catalogues.push(self.bump().text);
+                        p.hosts.push(self.bump().text);
                     } else {
                         let at = self.peek().span;
                         self.diagnostics.push(Diagnostic::error(
                             at,
-                            "a catalogue is named and versioned: `catalogue \"org.val.core/1\"`"
+                            "a host is named and versioned: `host \"id.vaulet.wallet/1\"`"
                                 .to_string(),
                         ));
                     }
