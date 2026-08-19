@@ -104,12 +104,21 @@ fn a_directive_marks_a_screen_and_nothing_else() {
 /// A package is signed and published, then run by hosts on their own schedule.
 /// A word that becomes a keyword later breaks a package whose author has moved
 /// on, so the words are held before anything needs them.
+/// A keyword is never a name. Enforced at the one place a name the author chose
+/// is read, so a declaration, a parameter and a `const` are all covered by it.
+#[test]
+fn a_keyword_is_not_a_name() {
+    let src = program("  card(\"ok\")").replace("  update {", "  compute {\n    const screen = 1\n  }\n\n  update {");
+    let e = errors(&src);
+    assert!(e.iter().any(|m| m.contains("`screen` is a keyword, and a keyword is never a name")), "{e:?}");
+}
+
 #[test]
 fn words_held_for_later_may_not_be_used_as_names() {
     for word in ["export", "import"] {
         let src = program("  card(\"ok\")")
             .replace("  update {", &format!("  compute {{\n    const {word} = 1\n  }}\n\n  update {{"));
         let e = errors(&src);
-        assert!(e.iter().any(|m| m.contains(&format!("`{word}` is reserved"))), "{word}: {e:?}");
+        assert!(e.iter().any(|m| m.contains(&format!("`{word}` is held"))), "{word}: {e:?}");
     }
 }

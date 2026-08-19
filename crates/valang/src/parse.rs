@@ -6,14 +6,32 @@
 use crate::ast::*;
 use crate::diag::Diagnostic;
 
-/// Words nothing uses yet.
+/// The language's own words. A dot is always field access and a keyword is
+/// never a name, so that reading a declaration never depends on knowing what
+/// else the package declared.
+const RESERVED: &[&str] = &[
+    // The shell.
+    "app", "version", "capabilities", "enum", "credential", "type", "state",
+    "trust", "anchor", "refines", "function", "action", "screen", "data",
+    "input", "require", "verify", "compute", "update", "execute", "present",
+    "component", "host",
+    // Expressions.
+    "const", "let", "var", "if", "else", "switch", "default", "return", "with",
+    "exists", "from", "of", "as", "order", "by", "limit", "desc", "asc", "in",
+    // Effects written as syntax rather than as calls.
+    "disclose", "prove",
+    // Types.
+    "string", "int", "bool", "date", "datetime", "bytes", "List", "Credential",
+    "Verified", "Proof",
+];
+
+/// Words nothing uses yet, held for the day a Micro App wants a component from
+/// another package.
 ///
-/// A package is signed, published and then run by hosts on their own schedule,
+/// A package is signed, published, and then run by hosts on their own schedule,
 /// so a word that turns into a keyword after the fact breaks a package its
-/// author is no longer editing. `export` and `import` are held for the day a
-/// Micro App wants a component from another package — see the guide's note on
-/// why that day has not come.
-const RESERVED: &[&str] = &["export", "import"];
+/// author is no longer editing.
+const HELD: &[&str] = &["export", "import"];
 use crate::lex::{Kind, Lexer, Token};
 
 pub struct Parser {
@@ -79,12 +97,17 @@ impl Parser {
         self.skip_newlines();
         if self.peek().kind == Kind::Ident {
             let t = self.bump();
-            if RESERVED.contains(&t.text.as_str()) {
+            let word = t.text.as_str();
+            if RESERVED.contains(&word) {
+                self.diagnostics.push(Diagnostic::error(
+                    t.span,
+                    format!("`{word}` is a keyword, and a keyword is never a name"),
+                ));
+            } else if HELD.contains(&word) {
                 self.diagnostics.push(Diagnostic::error(
                     t.span,
                     format!(
-                        "`{}` is reserved. Nothing in this language uses it yet, and a name that becomes a keyword later is a package that stops building on somebody else's release",
-                        t.text
+                        "`{word}` is held for a feature this language does not have yet. A name that becomes a keyword later is a package that stops building on somebody else's release"
                     ),
                 ));
             }
