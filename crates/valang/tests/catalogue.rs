@@ -57,7 +57,7 @@ fn the_core_profile_is_enough_on_its_own() {
 
 #[test]
 fn a_component_no_catalogue_has_is_reported() {
-    let src = BASE.replace("tile(text: phrase(\"row\"), onTap: Go)", "carousel(text: phrase(\"row\"))");
+    let src = BASE.replace("tile(text: phrase(\"row\"), onTap: Go)", "hologram(text: phrase(\"row\"))");
     let msgs = errors(&src, false);
     assert!(
         msgs.iter().any(|m| m.contains("not in this catalogue")),

@@ -491,6 +491,73 @@ IconData _iconOf(Object? word) => switch (word) {
       _ => Icons.edit_outlined,
     };
 
+/// Pages side by side, with dots under them.
+///
+/// The page it is on is the host's — like a scroll position, it is not
+/// application state, it is not hashed and it is not in the record.
+class _Carousel extends StatefulWidget {
+  const _Carousel({required this.pages, required this.incoming});
+
+  final List<Map<String, dynamic>> pages;
+  final Incoming incoming;
+
+  @override
+  State<_Carousel> createState() => _CarouselState();
+}
+
+class _CarouselState extends State<_Carousel> {
+  final _controller = PageController(viewportFraction: 0.92);
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        SizedBox(
+          height: 140,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: widget.pages.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (context, i) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _Node(node: widget.pages[i], incoming: widget.incoming),
+            ),
+          ),
+        ),
+        if (widget.pages.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: Vaulet.sm),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < widget.pages.length; i++)
+                  Container(
+                    width: i == _page ? 18 : 6,
+                    height: 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: i == _page
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// The white group an answered row sits in: one card, hairlines between rows.
 class _InputGroup extends StatelessWidget {
   const _InputGroup({required this.rows, required this.incoming});
@@ -938,9 +1005,84 @@ class _NodeState extends State<_Node> {
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(Vaulet.lg),
-            child: _text(style: Vaulet.cardTitle),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _text(style: Vaulet.cardTitle),
+                for (final c in children)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Vaulet.sm),
+                    child: _Node(node: c, incoming: widget.incoming),
+                  ),
+              ],
+            ),
           ),
         );
+
+      // The wallet's own home screen leads with these, and a Micro App that
+      // wanted one had to build it out of a card that held nothing.
+      case 'banner':
+        final action = (args['onTap'] as String?)?.trim();
+        final scheme = Theme.of(context).colorScheme;
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: action == null ? null : () => _tap(action),
+            child: SizedBox(
+              height: 132,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(color: scheme.secondaryContainer),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: Vaulet.lg),
+                      child: Icon(
+                        _iconOf(args['icon']),
+                        size: 72,
+                        color: scheme.onSecondaryContainer.withValues(alpha: 0.25),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(Vaulet.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _text(
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSecondaryContainer,
+                          ),
+                        ),
+                        if (args['detail'] != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              _detail(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: scheme.onSecondaryContainer.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+      // Sideways, with the dots the wallet's own home screen has.
+      case 'carousel':
+        return _Carousel(pages: children, incoming: widget.incoming);
 
       case 'list':
         // Already expanded: one child per row, each with its slots resolved.

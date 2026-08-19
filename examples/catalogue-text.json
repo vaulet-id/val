@@ -68,6 +68,22 @@
     "notNow": {
       "en": "Not now",
       "th": "ยังไม่ได้"
+    },
+    "bannerOne": {
+      "en": "Double points this week",
+      "th": "สัปดาห์นี้แต้มคูณสอง"
+    },
+    "bannerOneDetail": {
+      "en": "On every receipt over ฿200",
+      "th": "ทุกใบเสร็จตั้งแต่ 200 บาท"
+    },
+    "bannerTwo": {
+      "en": "Your data stays yours",
+      "th": "ข้อมูลของคุณยังเป็นของคุณ"
+    },
+    "bannerTwoDetail": {
+      "en": "Nothing here leaves the wallet",
+      "th": "ไม่มีอะไรออกจากกระเป๋า"
     }
   }
 }

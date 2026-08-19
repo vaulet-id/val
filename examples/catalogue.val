@@ -64,6 +64,13 @@ screen Catalogue start: true {
   }
 
   column {
+    // `carousel` — pages side by side, with dots. The page it is on is the
+    // wallet's, like a scroll position.
+    carousel {
+      banner(text: phrase("bannerOne"), detail: phrase("bannerOneDetail"), icon: money, onTap: Press)
+      banner(text: phrase("bannerTwo"), detail: phrase("bannerTwoDetail"), icon: shield)
+    }
+
     // `card` — a heading with values in it.
     card(text: phrase("summary", presses: state.presses, spent: spent))
 
