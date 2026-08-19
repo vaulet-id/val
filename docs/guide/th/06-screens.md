@@ -91,6 +91,52 @@ prop เป็นเชิงความหมาย: `text` `icon` `emphasis` 
 
 ถ้าคุณต้องการพิกเซล ให้ใช้ชั้น webview พร้อมเพดาน capability ที่ต่ำกว่า
 
+## แบ่ง component ให้ package อื่นใช้
+
+component มองเห็นได้จากทุกไฟล์ใน package ของคุณอยู่แล้ว ถ้าจะให้ package อื่นวาดมันได้
+ใส่ `export` และถ้าจะวาดของคนอื่น ใช้ `import` ระบุชื่อกับเวอร์ชัน
+
+```val
+// org.vaulet.ui
+export component MoneyCard(label: string, amount: string) {
+  card {
+    text: label
+    Amount(amount: amount)
+  }
+}
+
+component Amount(amount: string) { text(amount) }
+```
+
+```val
+// org.vaulet.shop
+import "org.vaulet.ui/1" { MoneyCard }
+
+@main
+screen Home {
+  column {
+    MoneyCard(label: "Balance", amount: "120")
+  }
+}
+```
+
+มีสามเรื่องที่ตามมาจากวิธี resolve และเป็นส่วนที่ควรรู้:
+
+**มันเกิดขึ้นตอน build** component ที่ import ถูกขยายในที่ที่มันถูกเขียน แล้วค่อยพับเข้ามาใน
+package ของคุณ ไม่มีการ link และไม่มีการดึงอะไรตอนที่คนกำลังดูหน้าจอ `Amount` ข้างบน
+เป็นของภายในและตามมาโดยไม่เอาชื่อมาด้วย มันจึงชนกับ `Amount` ของคุณเองไม่ได้
+
+**สิ่งที่มันวาดกลายเป็นสิ่งที่คุณต้องประกาศ** component ที่ import เข้ามาแล้วเล่นวิดีโอ
+ต้องมี `media.video` อยู่ในบล็อก capabilities *ของคุณ* เพราะผู้ใช้ยินยอมกับรายการเดียว
+ไม่ใช่รายการละ package ที่บังเอิญเกี่ยวข้อง
+
+**component ที่ export รับสิ่งที่มันวาดเข้ามาเป็นอาร์กิวเมนต์** มันอ่าน `state`, `input`
+หรือ `context` ไม่ได้ เพราะของพวกนั้นเป็นของ package ที่มันไปลงเอย และชื่อที่ resolve
+ไปหา state ของ package ผิดตัวคือความผิดพลาดที่ผู้เขียนทั้งสองฝั่งมองไม่เห็น
+
+ข้อความก็ทำงานแบบเดียวกัน — key ที่อยู่ใน component ที่ import มา ถูกค้นใน bundle
+*ของคุณ* คุณเป็นคน import มันเข้ามา คุณก็เป็นคนให้คำ
+
 ## ข้อความไม่ได้อยู่ในโค้ดคุณ
 
 `text: "balance"` เป็น key ที่ชี้เข้าไปใน bundle ที่ถูกเซ็นของคุณ:

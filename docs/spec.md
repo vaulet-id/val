@@ -77,12 +77,9 @@ screen … { … }                  // what the person sees
 - **Arguments are named once there are two**: `payment.request(to: merchant,
   amount: 12000)`. One argument may be positional.
 - **A keyword is never a name**, so reading a declaration never depends on
-  knowing what else the package declared. Two more words are held that nothing
-  uses yet — `export` and `import`, for the day a Micro App wants a component
-  from another package. A package is signed and then run by hosts on their own
-  schedule, so a word that becomes a keyword afterwards breaks a package whose
-  author has moved on. Claim names from an issuer are not affected: they are
-  read from the credential, not chosen here. A dot is always field access.
+  knowing what else the package declared. Claim names from an issuer are not
+  affected: they are read from the credential, not chosen here. A dot is always
+  field access.
 - **A directive marks a declaration; a setting configures one.** `@main` is
   written on its own line above a `screen`. A directive may take arguments —
   `@name(value)` — and `@main` takes none. The set of directives belongs to the
@@ -419,6 +416,45 @@ what is already on the screen does not need to be stored, hashed and replayed.
 **Interaction state belongs to the host.** Which tab is open, scroll position,
 what is typed but not submitted. An action receives what the form held at the
 moment it was submitted, through `input`.
+
+### Across packages
+
+A component is visible to every file in its package — a package's files share
+one scope, so the boundary `export` crosses is the package, never the file.
+
+```val
+export component MoneyCard(label: string, amount: string) { … }
+```
+
+```val
+import "org.vaulet.ui/1" { MoneyCard }
+```
+
+An external thing is named the way every external thing in this language is
+named: a quoted identifier with a version, as `host "id.vaulet.wallet/1"` is. A
+package is a signed artifact rather than a namespace, so what is imported from is
+a version and not a scope. The names are listed rather than opened wholesale:
+everything that crossed into a package is signed as part of it, and one line
+says what that was.
+
+**Imports are resolved at build time.** The imported component is expanded in the
+package that wrote it and then folded into the importer, so the package a host
+admits is one program. There is no linking step and nothing resolved at run
+time. A private helper of the exporting package comes along without its name and
+cannot collide with the importer's own.
+
+**What an import draws is declared by the package that draws it.** An imported
+component needing `media.video` needs it in the importing package's
+`capabilities` block. A person consents to one list.
+
+**An exported component reads its own parameters and nothing else** — not
+`state`, `input` or `context`, which belong to whichever package it is expanded
+into. Text keys inside it are looked up in the importing package's bundle, for
+the same reason: the words belong to the application somebody is looking at.
+
+**A version is what an importer depends on.** Changing an exported component's
+parameters is a breaking change to packages that are not yours, so it is a new
+version rather than an edit.
 
 ### Components
 

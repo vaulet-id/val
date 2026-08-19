@@ -56,11 +56,25 @@ pub fn analyse_fully(
     bundle: Option<(&TextBundle, &[String])>,
     hosts: &capability::Hosts,
 ) -> (ast::Program, Vec<Diagnostic>) {
+    analyse_with_packages(src, bundle, hosts, &expand::Packages::default())
+}
+
+/// Analyse against the other packages this build can reach, as well.
+///
+/// Where a package comes from is not the language's question — a registry, a
+/// directory, an editor's open projects are all answers — so the caller resolves
+/// them and hands them over, the way it hands over the host registries.
+pub fn analyse_with_packages(
+    src: &str,
+    bundle: Option<(&TextBundle, &[String])>,
+    hosts: &capability::Hosts,
+    packages: &expand::Packages,
+) -> (ast::Program, Vec<Diagnostic>) {
     let (mut program, mut diagnostics) = parse::parse(src);
     // A package's own components become the host's catalogue before anything
     // else looks at a screen, so every later pass — the checks, the capability
     // report, the renderer — sees one kind of node.
-    diagnostics.extend(expand::expand(&mut program));
+    diagnostics.extend(expand::expand(&mut program, packages));
     // Before `check`, which asks whether a declared capability goes unused and
     // needs to know that drawing a video is a use of `media.video`.
     diagnostics.extend(capability::check(&mut program, hosts));

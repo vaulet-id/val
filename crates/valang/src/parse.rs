@@ -23,15 +23,18 @@ const RESERVED: &[&str] = &[
     // Types.
     "string", "int", "bool", "date", "datetime", "bytes", "List", "Credential",
     "Verified", "Proof",
+    // What crosses a package boundary.
+    "export", "import",
 ];
 
-/// Words nothing uses yet, held for the day a Micro App wants a component from
-/// another package.
+/// Words nothing uses yet.
 ///
 /// A package is signed, published, and then run by hosts on their own schedule,
 /// so a word that turns into a keyword after the fact breaks a package its
-/// author is no longer editing.
-const HELD: &[&str] = &["export", "import"];
+/// author is no longer editing. Held before anything needs them, because
+/// refusing them costs nothing today and refusing them later costs somebody a
+/// build they cannot fix.
+const HELD: &[&str] = &[];
 use crate::lex::{Kind, Lexer, Token};
 
 pub struct Parser {
@@ -223,7 +226,22 @@ impl Parser {
                     s.directives = directives;
                     p.screens.push(s);
                 }
-                "component" => p.components.push(self.component_decl()),
+                "component" => p.components.push(self.component_decl(false)),
+                "export" => {
+                    let at = self.peek().span;
+                    self.bump();
+                    if self.at("component") {
+                        p.components.push(self.component_decl(true));
+                    } else {
+                        let bad = self.peek().clone();
+                        self.diagnostics.push(Diagnostic::error(
+                            at,
+                            format!("`export` marks a component, and `{}` is not one. What leaves a package is a way of arranging the host's catalogue — state, actions and credentials belong to the package that declared them", bad.text),
+                        ));
+                        self.skip_block();
+                    }
+                }
+                "import" => p.imports.push(self.import_decl()),
                 "host" => {
                     self.bump();
                     self.skip_newlines();
@@ -833,7 +851,54 @@ impl Parser {
     /// component that could declare data of its own would be a screen, and the
     /// rule that a screen resolves its data before anything is drawn would then
     /// hold for only some of what is on it.
-    fn component_decl(&mut self) -> ComponentDecl {
+    /// `import "org.vaulet.ui/1" { MoneyCard, Chip }`
+    fn import_decl(&mut self) -> ImportDecl {
+        let span = self.peek().span;
+        self.bump();
+        self.skip_newlines();
+
+        let package = if self.peek().kind == Kind::Str {
+            self.bump().text
+        } else {
+            let bad = self.peek().clone();
+            self.diagnostics.push(Diagnostic::error(
+                bad.span,
+                "a package is imported by name and version: `import \"org.vaulet.ui/1\" { … }`. A reverse-DNS name and a field access are the same shape, so the name is quoted".to_string(),
+            ));
+            String::new()
+        };
+
+        // Listed rather than opened wholesale. What crossed into this package is
+        // then one line to read — and everything that crossed is signed as part
+        // of it.
+        let mut names = Vec::new();
+        self.skip_newlines();
+        if self.eat("{") {
+            loop {
+                self.skip_newlines();
+                if self.eof() || self.eat("}") {
+                    break;
+                }
+                if self.eat(",") {
+                    continue;
+                }
+                if self.peek().kind == Kind::Ident {
+                    names.push(self.bump().text);
+                } else {
+                    self.bump();
+                }
+            }
+        } else {
+            self.diagnostics.push(Diagnostic::error(
+                span,
+                "an import lists what it takes: `import \"org.vaulet.ui/1\" { MoneyCard }`. A package that opened all of another one would carry names nobody wrote".to_string(),
+            ));
+        }
+
+        ImportDecl { package, names, span }
+    }
+
+    fn component_decl(&mut self, exported: bool) -> ComponentDecl {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
@@ -863,7 +928,7 @@ impl Parser {
                 self.bump();
             }
         }
-        ComponentDecl { name, params, tree, span }
+        ComponentDecl { name, exported, params, tree, span }
     }
 
     fn data_block(&mut self) -> Vec<DataDecl> {

@@ -94,6 +94,56 @@ reported, not approximated.
 
 If you need pixels, use the webview tier and its lower capability ceiling.
 
+## Sharing a component with another package
+
+A component is visible to every file in your package. To let another package
+draw it, `export` it — and to draw somebody else's, `import` it by name and
+version.
+
+```val
+// org.vaulet.ui
+export component MoneyCard(label: string, amount: string) {
+  card {
+    text: label
+    Amount(amount: amount)
+  }
+}
+
+component Amount(amount: string) { text(amount) }
+```
+
+```val
+// org.vaulet.shop
+import "org.vaulet.ui/1" { MoneyCard }
+
+@main
+screen Home {
+  column {
+    MoneyCard(label: "Balance", amount: "120")
+  }
+}
+```
+
+Three things follow from how this is resolved, and they are the parts worth
+knowing:
+
+**It happens at build time.** The imported component is expanded where it was
+written, then folded into your package. Nothing is linked and nothing is fetched
+while somebody is looking at a screen. `Amount` above is private and comes along
+without its name, so it cannot collide with an `Amount` of your own.
+
+**What it draws becomes yours to declare.** An imported component that plays a
+video needs `media.video` in *your* capabilities block, because the person
+consents to one list rather than to one per package involved.
+
+**An exported component takes what it draws as an argument.** It cannot read
+`state`, `input` or `context`: those belong to whichever package it lands in, and
+a name resolved against the wrong package's state is a mistake neither author can
+see.
+
+Text works the same way — a key inside an imported component is looked up in
+*your* bundle. You imported the component; you supply the words.
+
 ## Text is not in your code
 
 `text: "balance"` is a key into your signed bundle:

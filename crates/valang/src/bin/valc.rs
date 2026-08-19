@@ -34,9 +34,25 @@ fn parse_bundle(text: &str) -> Option<(valang::TextBundle, Vec<String>)> {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+
+    // `--packages <dir>`, where every subdirectory is a package that names and
+    // versions itself. Where a package comes from is not the language's
+    // question — a registry, a directory, an editor's open projects are all
+    // answers — so the command line answers it here and hands the result over.
+    let mut package_dirs = Vec::new();
+    while let Some(i) = args.iter().position(|a| a == "--packages") {
+        args.remove(i);
+        if i < args.len() {
+            package_dirs.push(args.remove(i));
+        } else {
+            eprintln!("--packages takes a directory");
+            return ExitCode::from(2);
+        }
+    }
+
     if args.is_empty() {
-        eprintln!("usage: valc <file.val>…");
+        eprintln!("usage: valc [--packages <dir>] <file.val>…");
         return ExitCode::from(2);
     }
 
@@ -73,9 +89,12 @@ fn main() -> ExitCode {
             .and_then(|p| std::fs::read_to_string(p).ok());
         let bundle = bundle.as_deref().and_then(parse_bundle);
 
+        let packages = packages(&package_dirs);
         let (program, diagnostics) = match &bundle {
-            Some((keys, locales)) => valang::analyse_fully(&src, Some((keys, locales)), &hosts()),
-            None => valang::analyse_fully(&src, None, &hosts()),
+            Some((keys, locales)) => {
+                valang::analyse_with_packages(&src, Some((keys, locales)), &hosts(), &packages)
+            }
+            None => valang::analyse_with_packages(&src, None, &hosts(), &packages),
         };
 
         println!("── {}", args.join(" "));
@@ -97,6 +116,58 @@ fn main() -> ExitCode {
     }
 }
 
+
+/// The packages under each `--packages` directory.
+///
+/// One subdirectory is one package: its `.val` files are read together, because
+/// a package is several files sharing one scope, and it identifies itself by the
+/// `app` and `version` it declares rather than by what the directory is called.
+fn packages(dirs: &[String]) -> valang::expand::Packages {
+    let mut loaded = Vec::new();
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            eprintln!("{dir}: cannot read");
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let mut src = String::new();
+            if let Ok(files) = std::fs::read_dir(&path) {
+                let mut paths: Vec<_> = files
+                    .flatten()
+                    .map(|f| f.path())
+                    .filter(|p| p.extension().is_some_and(|e| e == "val"))
+                    .collect();
+                // Read in a fixed order: a package is one scope, and a
+                // diagnostic that moved because the filesystem listed
+                // differently is a diagnostic nobody can cite.
+                paths.sort();
+                for p in paths {
+                    if let Ok(text) = std::fs::read_to_string(&p) {
+                        src.push_str(&text);
+                        src.push('\n');
+                    }
+                }
+            }
+            if src.is_empty() {
+                continue;
+            }
+            // Parsed, not checked. Whether that package builds is its own
+            // build's answer, and running its checks here would report its
+            // unrelated mistakes during somebody else's build. What is taken
+            // from it is checked on the way in.
+            let (program, d) = valang::parse::parse(&src);
+            for x in d.iter().filter(|x| x.severity == valang::Severity::Error) {
+                eprintln!("{}: {x}", path.display());
+            }
+            loaded.push(program);
+        }
+    }
+    valang::expand::Packages::of(loaded)
+}
 
 /// What to check against.
 ///

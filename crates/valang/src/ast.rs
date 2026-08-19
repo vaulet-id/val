@@ -23,6 +23,11 @@ pub struct Program {
     /// rendering path, because it expands into the catalogue before a host sees
     /// it.
     pub components: Vec<ComponentDecl>,
+    /// Components taken from other packages. Resolved and expanded before any
+    /// other pass, so what an imported component draws lands in this package's
+    /// capability report — a person consents to one list, not to one per
+    /// package that happened to be involved.
+    pub imports: Vec<ImportDecl>,
     /// The hosts whose registries this package needs, as `name/version`. A
     /// host that does not provide one refuses the package rather than
     /// approximating it.
@@ -36,6 +41,12 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub struct ComponentDecl {
     pub name: String,
+    /// `export component MoneyCard(…)`. What leaves the package.
+    ///
+    /// A component without it is visible to every file in the package, because
+    /// a package's files share one scope — the boundary this crosses is the
+    /// package, never the file.
+    pub exported: bool,
     /// Named at the call site, like every other call with more than one
     /// argument. A component takes values and an action to call; it cannot
     /// declare state or data of its own.
@@ -227,6 +238,24 @@ pub struct UiNode {
     /// than as a node of its own, so that everything which walks a tree walks
     /// both halves without having to be taught a new shape.
     pub otherwise: Vec<UiNode>,
+    pub span: Span,
+}
+
+/// `import "org.vaulet.ui/1" { MoneyCard, Chip }`.
+///
+/// Named the way every other external thing is named in this language — a
+/// quoted identifier with a version, as `host "id.vaulet.wallet/1"` is. A
+/// package is a signed artifact rather than a namespace, so what is imported
+/// from is a version and not a scope.
+///
+/// The names are listed rather than opened wholesale: what crossed into a
+/// package is then one line to read, which matters because everything that
+/// crossed is signed as part of it.
+#[derive(Debug, Clone)]
+pub struct ImportDecl {
+    /// `org.vaulet.ui/1`, as written.
+    pub package: String,
+    pub names: Vec<String>,
     pub span: Span,
 }
 

@@ -14,6 +14,48 @@ use std::collections::BTreeMap;
 use crate::ast::{Arg, ComponentDecl, CredentialDecl, Expr, Program, UiNode};
 use crate::diag::{Diagnostic, Span};
 
+/// The other packages a build can reach.
+///
+/// Supplied by whoever runs the compiler, the way the host registries are: a
+/// front end that knew where packages live would know one publisher's answer,
+/// and there is more than one place a package can come from.
+#[derive(Debug, Default)]
+pub struct Packages {
+    by_id: BTreeMap<String, Program>,
+}
+
+impl Packages {
+    /// Keyed by what an import writes — `org.vaulet.ui/1`, the package's own
+    /// name and version.
+    pub fn of(programs: Vec<Program>) -> Self {
+        let by_id = programs
+            .into_iter()
+            .filter_map(|p| {
+                let app = p.app.clone()?;
+                let version = p.version.clone()?;
+                Some((format!("{app}/{version}"), p))
+            })
+            .collect();
+        Self { by_id }
+    }
+
+    pub fn find(&self, id: &str) -> Option<&Program> {
+        self.by_id.get(id)
+    }
+
+    pub fn ids(&self) -> impl Iterator<Item = &String> {
+        self.by_id.keys()
+    }
+}
+
+/// What an exported component may not reach for.
+///
+/// It is expanded into a package that is not the one that wrote it, so a name
+/// resolved against the wrong package's state is not a mistake the author of
+/// either package could see. A component that leaves a package is a function of
+/// its arguments and nothing else.
+const NOT_IN_AN_EXPORT: &[&str] = &["state", "input", "context"];
+
 /// A component this package declares may not take a name the catalogue uses —
 /// that would be overriding the host rather than composing it.
 ///
@@ -38,10 +80,10 @@ pub fn is_catalogue_name(name: &str) -> bool {
 /// happened to name the same ones.
 pub const PHRASE: &str = "phrase";
 
-pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
+pub fn expand(program: &mut Program, packages: &Packages) -> Vec<Diagnostic> {
     let mut d = Vec::new();
 
-    let by_name: BTreeMap<String, ComponentDecl> =
+    let mut by_name: BTreeMap<String, ComponentDecl> =
         program.components.iter().map(|c| (c.name.clone(), c.clone())).collect();
 
     for c in &program.components {
@@ -55,7 +97,10 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
 
     // A cycle would expand forever, and totality is the one promise this
     // language cannot bend. Checked before anything is expanded, so a cyclic
-    // package reports the cycle rather than running out of memory.
+    // package reports the cycle rather than running out of memory — and its
+    // early return comes before imports are resolved, so an import that failed
+    // does not stop the screens being expanded and leave every call to it
+    // reported a second time as a name the host does not have.
     for c in &program.components {
         if let Some(path) = cycle_from(&c.name, &by_name) {
             d.push(Diagnostic::error(
@@ -68,6 +113,29 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
         return d;
     }
 
+    // What this package wrote is checked here; what it imported was checked
+    // when its own package was built, and is checked again on the way in
+    // because a package arrives as an artifact rather than as a promise.
+    for c in &program.components {
+        if c.exported {
+            for node in &c.tree {
+                reaches_outside_its_arguments(node, &c.name, &mut d);
+            }
+        }
+    }
+
+    let (imported, unresolved) = resolve_imports(program, packages, &mut d);
+    for (name, decl) in imported {
+        if by_name.contains_key(&name) {
+            d.push(Diagnostic::error(
+                decl.span,
+                format!("`{name}` is imported and this package also declares it. Which one a screen meant would depend on which pass ran first"),
+            ));
+            continue;
+        }
+        by_name.insert(name, decl);
+    }
+
     let types: BTreeMap<String, CredentialDecl> =
         program.types.iter().map(|t| (t.name.clone(), t.clone())).collect();
 
@@ -75,13 +143,131 @@ pub fn expand(program: &mut Program) -> Vec<Diagnostic> {
     for s in &mut screens {
         let mut out = Vec::new();
         for node in std::mem::take(&mut s.tree) {
-            out.extend(expand_node(node, &by_name, &types, &mut d));
+            out.extend(expand_node(node, &by_name, &types, &unresolved, &mut d));
         }
         s.tree = out.into_iter().map(|n| open_phrases(n, &mut d)).collect();
         s.title = s.title.take().map(|t| open_phrases(t, &mut d));
     }
     program.screens = screens;
     d
+}
+
+/// The components this package takes from others, expanded in the package that
+/// wrote them.
+///
+/// Expanding there rather than here is what keeps the two packages' names
+/// apart: what arrives is a tree of the host's catalogue and this component's
+/// own parameters, so an exporting package's private helper never has to not
+/// collide with an importing package's component.
+///
+/// It also means there is no linking step and nothing resolved at run time. The
+/// package a host admits is one program, and what an imported component draws
+/// lands in that program's capability report — a person consents to one list,
+/// not to one per package that happened to be involved.
+fn resolve_imports(
+    program: &Program,
+    packages: &Packages,
+    d: &mut Vec<Diagnostic>,
+) -> (BTreeMap<String, ComponentDecl>, std::collections::BTreeSet<String>) {
+    let mut out: BTreeMap<String, ComponentDecl> = BTreeMap::new();
+    let mut unresolved = std::collections::BTreeSet::new();
+
+    for import in &program.imports {
+        let Some(source) = packages.find(&import.package) else {
+            let known: Vec<&String> = packages.ids().collect();
+            d.push(Diagnostic::error(
+                import.span,
+                if known.is_empty() {
+                    format!("`{}` is not a package this build can reach, and no packages were supplied to it at all", import.package)
+                } else {
+                    format!(
+                        "`{}` is not a package this build can reach. It has: {}",
+                        import.package,
+                        known.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")
+                    )
+                },
+            ));
+            unresolved.extend(import.names.iter().cloned());
+            continue;
+        };
+
+        let theirs: BTreeMap<String, ComponentDecl> =
+            source.components.iter().map(|c| (c.name.clone(), c.clone())).collect();
+        let their_types: BTreeMap<String, CredentialDecl> =
+            source.types.iter().map(|t| (t.name.clone(), t.clone())).collect();
+
+        for name in &import.names {
+            if out.contains_key(name) {
+                d.push(Diagnostic::error(
+                    import.span,
+                    format!("`{name}` is imported twice, from two packages"),
+                ));
+                continue;
+            }
+            let Some(decl) = theirs.get(name) else {
+                d.push(Diagnostic::error(
+                    import.span,
+                    format!("`{}` declares no `{name}`", import.package),
+                ));
+                unresolved.insert(name.clone());
+                continue;
+            };
+            if !decl.exported {
+                d.push(Diagnostic::error(
+                    import.span,
+                    format!("`{}` declares `{name}` and does not export it. What leaves a package is the package's decision, because changing it breaks somebody who is not in the room", import.package),
+                ));
+                unresolved.insert(name.clone());
+                continue;
+            }
+
+            let tree: Vec<UiNode> = decl
+                .tree
+                .iter()
+                .cloned()
+                .flat_map(|n| expand_node(n, &theirs, &their_types, &Default::default(), d))
+                .collect();
+
+            for node in &tree {
+                reaches_outside_its_arguments(node, name, d);
+            }
+
+            out.insert(name.clone(), ComponentDecl { tree, ..decl.clone() });
+        }
+    }
+
+    (out, unresolved)
+}
+
+/// An exported component reads its own parameters and nothing else.
+///
+/// `state.points` inside one would resolve against whichever package it was
+/// expanded into, which is a mistake neither author can see: the one who wrote
+/// it was looking at their own state, and the one who imported it never read
+/// the body.
+fn reaches_outside_its_arguments(node: &UiNode, component: &str, d: &mut Vec<Diagnostic>) {
+    for a in &node.args {
+        if let Some(root) = root_of(&a.value) {
+            if NOT_IN_AN_EXPORT.contains(&root.as_str()) {
+                d.push(Diagnostic::error(
+                    a.span,
+                    format!("`{component}` is exported and reads `{root}`, which belongs to whichever package it is expanded into. An exported component takes what it draws as an argument"),
+                ));
+            }
+        }
+    }
+    for child in node.children.iter().chain(node.otherwise.iter()) {
+        reaches_outside_its_arguments(child, component, d);
+    }
+}
+
+/// The name a path starts at. `state.member.points` is `state`.
+fn root_of(e: &Expr) -> Option<String> {
+    match e {
+        Expr::Ident { name, .. } => Some(name.clone()),
+        Expr::Member { obj, .. } => root_of(obj),
+        _ => None,
+    }
 }
 
 /// `text: phrase("You have {points} points", points: total)` becomes
@@ -210,14 +396,22 @@ fn expand_node(
     node: UiNode,
     by_name: &BTreeMap<String, ComponentDecl>,
     types: &BTreeMap<String, CredentialDecl>,
+    unresolved: &std::collections::BTreeSet<String>,
     d: &mut Vec<Diagnostic>,
 ) -> Vec<UiNode> {
+    // A name an import could not supply is dropped rather than left to the pass
+    // that asks what the host provides — which would answer that a component the
+    // author knows they imported is not one of the host's, and send them looking
+    // in the wrong place. The build has already failed by here.
+    if unresolved.contains(&node.kind) {
+        return Vec::new();
+    }
     let Some(decl) = by_name.get(&node.kind) else {
         let UiNode { kind, args, lambda, children, slots, otherwise, span } = node;
         let children =
-            children.into_iter().flat_map(|c| expand_node(c, by_name, types, d)).collect();
+            children.into_iter().flat_map(|c| expand_node(c, by_name, types, unresolved, d)).collect();
         let otherwise =
-            otherwise.into_iter().flat_map(|c| expand_node(c, by_name, types, d)).collect();
+            otherwise.into_iter().flat_map(|c| expand_node(c, by_name, types, unresolved, d)).collect();
         return vec![UiNode { kind, args, lambda, children, slots, otherwise, span }];
     };
 
@@ -229,7 +423,7 @@ fn expand_node(
 
     body.into_iter()
         .map(|n| substitute(n, &bound))
-        .flat_map(|n| expand_node(n, by_name, types, d))
+        .flat_map(|n| expand_node(n, by_name, types, unresolved, d))
         .collect()
 }
 

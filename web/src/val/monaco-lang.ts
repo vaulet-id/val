@@ -6,6 +6,7 @@ const SHELL = [
   'app', 'version', 'capabilities', 'enum', 'credential', 'type', 'state',
   'trust', 'anchor', 'refines', 'function', 'action', 'screen', 'data',
   'input', 'require', 'verify', 'compute', 'update', 'execute', 'present',
+  'component', 'host', 'import', 'export',
 ]
 const EXPR = ['const', 'if', 'else', 'switch', 'default', 'return', 'with', 'exists', 'from', 'of', 'as', 'order', 'by', 'limit', 'desc', 'asc']
 const EFFECT = ['disclose', 'prove', 'navigate']
