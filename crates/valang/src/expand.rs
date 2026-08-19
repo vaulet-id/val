@@ -333,6 +333,7 @@ fn open_phrases(node: UiNode, d: &mut Vec<Diagnostic>) -> UiNode {
         args,
         slots,
         children: node.children.into_iter().map(|c| open_phrases(c, d)).collect(),
+        otherwise: node.otherwise.into_iter().map(|c| open_phrases(c, d)).collect(),
         ..node
     }
 }
@@ -492,18 +493,25 @@ fn substitute(node: UiNode, bound: &BTreeMap<String, Expr>) -> UiNode {
     UiNode {
         args: node.args.into_iter().map(|a| Arg { value: replace(a.value, bound), ..a }).collect(),
         children: node.children.into_iter().map(|c| substitute(c, bound)).collect(),
+        otherwise: node.otherwise.into_iter().map(|c| substitute(c, bound)).collect(),
         ..node
     }
 }
 
+/// A parameter, wherever it appears in an expression.
+///
+/// Every variant is written out and there is no catch-all for the ones that
+/// hold expressions: the arm that swallowed the rest is how `note exists` inside
+/// a component kept the parameter's own name and evaluated to nothing — a
+/// condition that was false for a value that was there. When a variant is added
+/// to `Expr`, this stops compiling, which is the point.
 fn replace(e: Expr, bound: &BTreeMap<String, Expr>) -> Expr {
+    let go = |x: Box<Expr>| Box::new(replace(*x, bound));
     match e {
         Expr::Ident { ref name, .. } => bound.get(name).cloned().unwrap_or(e),
-        Expr::Member { obj, name, span } => {
-            Expr::Member { obj: Box::new(replace(*obj, bound)), name, span }
-        }
+        Expr::Member { obj, name, span } => Expr::Member { obj: go(obj), name, span },
         Expr::Record { spread, fields, span } => Expr::Record {
-            spread: spread.map(|s| Box::new(replace(*s, bound))),
+            spread: spread.map(go),
             fields: fields.into_iter().map(|(k, v)| (k, replace(v, bound))).collect(),
             span,
         },
@@ -512,19 +520,60 @@ fn replace(e: Expr, bound: &BTreeMap<String, Expr>) -> Expr {
             args: args.into_iter().map(|a| Arg { value: replace(a.value, bound), ..a }).collect(),
             span,
         },
-        Expr::Binary { op, lhs, rhs, span } => Expr::Binary {
-            op,
-            lhs: Box::new(replace(*lhs, bound)),
-            rhs: Box::new(replace(*rhs, bound)),
+        Expr::Unary { op, rhs, span } => Expr::Unary { op, rhs: go(rhs), span },
+        Expr::Binary { op, lhs, rhs, span } => {
+            Expr::Binary { op, lhs: go(lhs), rhs: go(rhs), span }
+        }
+        Expr::Ternary { cond, then, other, span } => {
+            Expr::Ternary { cond: go(cond), then: go(then), other: go(other), span }
+        }
+        Expr::With { subject, policy, span } => {
+            Expr::With { subject: go(subject), policy, span }
+        }
+        Expr::Exists { subject, span } => Expr::Exists { subject: go(subject), span },
+        Expr::List { items, span } => {
+            Expr::List { items: items.into_iter().map(|i| replace(i, bound)).collect(), span }
+        }
+        Expr::Switch { subject, arms, span } => Expr::Switch {
+            subject: go(subject),
+            arms: arms
+                .into_iter()
+                .map(|a| crate::ast::SwitchArm {
+                    pattern: match a.pattern {
+                        crate::ast::ArmPattern::Value(v) => {
+                            crate::ast::ArmPattern::Value(replace(v, bound))
+                        }
+                        crate::ast::ArmPattern::Compare { op, rhs } => {
+                            crate::ast::ArmPattern::Compare { op, rhs: replace(rhs, bound) }
+                        }
+                        crate::ast::ArmPattern::Default => crate::ast::ArmPattern::Default,
+                    },
+                    body: replace(a.body, bound),
+                    span: a.span,
+                })
+                .collect(),
             span,
         },
-        Expr::Ternary { cond, then, other, span } => Expr::Ternary {
-            cond: Box::new(replace(*cond, bound)),
-            then: Box::new(replace(*then, bound)),
-            other: Box::new(replace(*other, bound)),
-            span,
-        },
-        other => other,
+        // A lambda's own parameters shadow whatever the call site bound, so they
+        // are removed from the map before the body is walked — otherwise
+        // `receipts.map { amount -> amount }` would take the component's
+        // `amount` instead of the row's.
+        Expr::Lambda { params, body, span } => {
+            let mut inner = bound.clone();
+            for p in &params {
+                inner.remove(p);
+            }
+            Expr::Lambda { params, body: Box::new(replace(*body, &inner)), span }
+        }
+        Expr::From { value, policies, span } => {
+            Expr::From { value: go(value), policies, span }
+        }
+        // The leaves. Nothing inside them to replace.
+        Expr::Num { .. }
+        | Expr::Float { .. }
+        | Expr::Str { .. }
+        | Expr::Bool { .. }
+        | Expr::Error { .. } => e,
     }
 }
 
@@ -564,6 +613,10 @@ fn uses(tree: &[UiNode]) -> Vec<String> {
         for n in nodes {
             out.push(n.kind.clone());
             walk(&n.children, out);
+            // Both halves. A component used only in the branch that is not
+            // taken is still a component this one uses, and a cycle hidden
+            // there expands forever rather than being reported.
+            walk(&n.otherwise, out);
         }
     }
     walk(tree, &mut out);

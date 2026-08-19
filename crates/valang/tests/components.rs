@@ -190,3 +190,68 @@ fn a_spread_must_name_a_parameter() {
         "expected an unknown name to be reported, got {msgs:?}"
     );
 }
+
+/// A parameter is a parameter wherever it appears in an expression.
+///
+/// Substitution enumerated a handful of expression kinds and swallowed the
+/// rest, so `note exists` inside a component kept the parameter's own name and
+/// evaluated to nothing: a condition that was false for a value that was there.
+/// One case per variant that was missing.
+#[test]
+fn a_parameter_is_substituted_in_every_kind_of_expression() {
+    for (label, expr) in [
+        ("exists", "note exists"),
+        ("unary", "!(note exists)"),
+        ("list", "[note, note] exists"),
+        ("switch", "(switch (note) { default => true }) exists"),
+        ("ternary", "(note exists ? note : note) exists"),
+    ] {
+        let src = format!(
+            r#"
+app "example.substitute"
+version 1
+
+capabilities {{
+}}
+
+component C(note: string?) {{
+  column {{
+    if ({expr}) {{
+      text(note)
+    }}
+  }}
+}}
+
+@main
+screen Home {{
+  column {{
+    C(note: "here")
+  }}
+}}
+"#
+        );
+        let (program, d) = valang::analyse(&src);
+        assert!(
+            d.iter().all(|x| x.severity != valang::diag::Severity::Error),
+            "{label}: {d:?}"
+        );
+
+        // The condition must mention the value, not the parameter's name.
+        let mut names = Vec::new();
+        fn walk(nodes: &[valang::ast::UiNode], out: &mut Vec<String>) {
+            for n in nodes {
+                for a in &n.args {
+                    a.value.walk(&mut |e| {
+                        if let valang::ast::Expr::Ident { name, .. } = e {
+                            out.push(name.clone());
+                        }
+                    });
+                }
+                walk(&n.children, out);
+                walk(&n.otherwise, out);
+            }
+        }
+        walk(&program.screens[0].tree, &mut names);
+        assert!(!names.contains(&"note".to_string()), "{label}: `note` survived: {names:?}");
+    }
+}

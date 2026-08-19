@@ -100,3 +100,131 @@ fn a_directive_marks_a_screen_and_nothing_else() {
     let e = errors(&src);
     assert!(e.iter().any(|m| m.contains("`@main` marks a screen, and `action` is not one")), "{e:?}");
 }
+
+/// A parameter inside the `else` half of a component's body is a parameter.
+///
+/// Substitution walked children and carried the other branch through unchanged,
+/// so the name stayed the parameter's own and resolved to nothing — a component
+/// that drew an empty card exactly when the condition was false.
+#[test]
+fn a_parameter_is_substituted_in_both_branches() {
+    let src = format!(
+        r#"
+app "example.branches"
+version 1
+
+capabilities {{
+}}
+
+state {{
+  points: int default 0
+}}
+
+component Either(shown: string, hidden: string) {{
+  column {{
+    if (state.points > 0) {{
+      card(shown)
+    }} else {{
+      card(hidden)
+    }}
+  }}
+}}
+
+@main
+screen Home {{
+  column {{
+    Either(shown: "yes", hidden: "no")
+  }}
+}}
+"#
+    );
+    let hosts = Hosts::of(vec![Host::parse(CORE).expect("the core registry parses")]);
+    let (program, d) = valang::analyse_fully(&src, None, &hosts);
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    let mut found = String::new();
+    fn walk(nodes: &[valang::ast::UiNode], out: &mut String) {
+        for n in nodes {
+            for a in &n.args {
+                if let valang::ast::Expr::Str { value, .. } = &a.value {
+                    out.push_str(value);
+                }
+            }
+            walk(&n.children, out);
+            walk(&n.otherwise, out);
+        }
+    }
+    walk(&program.screens[0].tree, &mut found);
+    assert!(found.contains("yes") && found.contains("no"), "one branch kept the parameter: {found}");
+}
+
+/// The siblings of the substitution bug, each the same mistake in a different
+/// walker: a phrase in the branch that is not taken, and a cycle hidden there.
+#[test]
+fn a_phrase_in_the_other_branch_is_flattened() {
+    let src = r#"
+app "example.branches"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+@main
+screen Home {
+  column {
+    if (state.points > 0) {
+      card(phrase("You have {n}", n: state.points))
+    } else {
+      card(phrase("Nothing yet, {who}", who: "friend"))
+    }
+  }
+}
+"#;
+    let hosts = Hosts::of(vec![Host::parse(CORE).expect("the core registry parses")]);
+    let (program, d) = valang::analyse_fully(src, None, &hosts);
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    // Flattened means the `phrase` call is gone and its slot is recorded.
+    let branch = &program.screens[0].tree[0].children[0].otherwise[0];
+    assert_eq!(branch.slots, vec!["who".to_string()], "the other branch kept its phrase call");
+}
+
+#[test]
+fn a_cycle_through_the_other_branch_is_still_a_cycle() {
+    let src = r#"
+app "example.branches"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+component Loop(text: string) {
+  column {
+    if (state.points > 0) {
+      card(text)
+    } else {
+      Loop(text: text)
+    }
+  }
+}
+
+@main
+screen Home {
+  column {
+    Loop(text: "x")
+  }
+}
+"#;
+    let hosts = Hosts::of(vec![Host::parse(CORE).expect("the core registry parses")]);
+    let (_, d) = valang::analyse_fully(src, None, &hosts);
+    let msgs: Vec<String> = d.into_iter().map(|x| x.message).collect();
+    assert!(msgs.iter().any(|m| m.contains("`Loop` uses itself")), "{msgs:?}");
+}
