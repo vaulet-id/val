@@ -50,13 +50,13 @@ action Go {
 
 screen Home start: true {
   column {
-    button(text: sentence("go"), emphasis: primary, onTap: Go)
+    button(text: phrase("go"), emphasis: primary, onTap: Go)
   }
 }
 
 screen Done present: sheet {
   column {
-    card(text: sentence("done"))
+    card(text: phrase("done"))
   }
 }
 "#;
@@ -116,4 +116,28 @@ fn two_screens_may_not_both_start() {
     let src = TWO_SCREENS.replace("screen Done present: sheet", "screen Done start: true");
     let msgs = errors(&src);
     assert!(msgs.iter().any(|m| m.contains("a package opens at one")), "got {msgs:?}");
+}
+
+/// A press may name an operation, and a mistyped one used to reach the renderer
+/// and do nothing at all.
+#[test]
+fn a_press_naming_an_operation_this_host_lacks_is_reported() {
+    let src = TWO_SCREENS.replace(
+        "button(text: phrase(\"go\"), emphasis: primary, onTap: Go)",
+        "button(text: phrase(\"go\"), emphasis: primary, onTap: navigation.bck())",
+    );
+    let msgs = errors(&src);
+    assert!(
+        msgs.iter().any(|m| m.contains("navigation.bck") && m.contains("not something this host offers")),
+        "got {msgs:?}"
+    );
+}
+
+#[test]
+fn a_press_naming_an_operation_this_host_has_is_clean() {
+    let src = TWO_SCREENS.replace(
+        "button(text: phrase(\"go\"), emphasis: primary, onTap: Go)",
+        "button(text: phrase(\"go\"), emphasis: primary, onTap: navigation.back())",
+    );
+    assert!(errors(&src).is_empty(), "{:?}", errors(&src));
 }

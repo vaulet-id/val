@@ -65,21 +65,21 @@ screen Catalogue start: true {
 
   column {
     // `card` — a heading with values in it.
-    card(text: sentence("summary", presses: state.presses, spent: spent))
+    card(text: phrase("summary", presses: state.presses, spent: spent))
 
     // `section` — a subhead, which is how this wallet groups what follows.
     section(text: "rows")
 
     // `row` — a line with a leading icon. With `onTap` it gains a chevron and
     // becomes pressable; without one it is a line of text.
-    tile(text: sentence("plainRow"))
-    tile(text: sentence("pressableRow"), onTap: Press)
+    tile(text: phrase("plainRow"))
+    tile(text: phrase("pressableRow"), onTap: Press)
 
     // `list` — one row per element, with each element's slots resolved. An
     // empty list draws the wallet's own empty state, never yours.
     section(text: "fromTheWallet")
     list(receipts) { r ->
-      tile(text: sentence("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at),
+      tile(text: phrase("receiptRow", merchant: r.claims.merchant, at: r.claims.purchased_at),
            onTap: Receipt(merchant: r.claims.merchant, amount: r.claims.amount))
     }
 
@@ -95,9 +95,9 @@ screen Catalogue start: true {
 // because what it needs arrives as parameters rather than being read out of a
 // selection somebody had to remember to set.
 screen Receipt(merchant: string, amount: int) {
-  title: sentence("receiptTitle")
+  title: phrase("receiptTitle")
 
   column {
-    card(text: sentence("receiptDetail", merchant: merchant, amount: amount))
+    card(text: phrase("receiptDetail", merchant: merchant, amount: amount))
   }
 }

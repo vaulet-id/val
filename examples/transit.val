@@ -68,10 +68,10 @@ action Tap {
 }
 
 screen Pass {
-  title: sentence("passTitle")
+  title: phrase("passTitle")
 
   column {
-    card(text: sentence("ridesSoFar", rides: state.rides))
+    card(text: phrase("ridesSoFar", rides: state.rides))
     section(text: "howToRide")
     button(text: "tap", emphasis: primary, onTap: Tap)
   }

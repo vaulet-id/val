@@ -125,7 +125,7 @@ action VoteAgainst {
 }
 
 screen Meeting {
-  title: sentence("meetingTitle")
+  title: phrase("meetingTitle")
 
   column {
     card(text: "resolution")

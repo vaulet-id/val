@@ -790,21 +790,17 @@ class _NodeState extends State<_Node> {
     final key = args['text'] as String?;
     if (key == null) return '';
     final entry = (widget.incoming.text[key] as Map?)?.cast<String, dynamic>();
-    final template = entry?[widget.incoming.locale] as String?;
-    return template ?? key;
+    return entry?[widget.incoming.locale] as String? ?? key;
   }
 
   Widget _text({TextStyle? style, bool upper = false}) {
     final key = args['text'] as String?;
     if (key == null) return const SizedBox.shrink();
+    // Words written in place are the words. A package in one language has no
+    // bundle at all, and 80% of them never will — a key is something to learn
+    // about on the day a second language is added, and not before.
     final entry = (widget.incoming.text[key] as Map?)?.cast<String, dynamic>();
-    if (entry == null) {
-      return Text(
-        'missing key “$key”',
-        style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
-      );
-    }
-    var template = entry[widget.incoming.locale] as String?;
+    var template = entry == null ? key : entry[widget.incoming.locale] as String?;
     if (upper) template = template?.toUpperCase();
     if (template == null) {
       return Text(

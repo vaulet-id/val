@@ -96,7 +96,7 @@ screen Portfolio {
     // The host formats the number. An app that formatted it would get Thai
     // digits, the thousands separator and the currency position wrong
     // separately from every other app.
-    card(text: sentence("portfolioTotal", value: totalValue, change: returnBps))
+    card(text: phrase("portfolioTotal", value: totalValue, change: returnBps))
 
     // A section subhead, which is how this host groups a list. There are no
     // tabs in the catalogue: the wallet has never had one, and a screen cannot
@@ -105,7 +105,7 @@ screen Portfolio {
 
     list(holdings) { h ->
       tile(
-        text: sentence(
+        text: phrase(
           "holdingLine",
           symbol:   h.claims.symbol,
           quantity: h.claims.quantity,

@@ -355,10 +355,10 @@ screen Wallet {
   }
 
   column {
-    card(text: sentence("balance", points: state.member.points))
+    card(text: phrase("balance", points: state.member.points))
     section(text: "history")
     list(receipts) { r ->
-      tile(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
+      tile(text: phrase("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
     button(text: "scan", emphasis: primary, onTap: ScanToEarn)
   }
@@ -393,8 +393,8 @@ What the wallet ships, not what the language defines:
 ```val
 column { … }
 section(text: "key")
-card(text: sentence("key", name: value))
-tile(text: sentence("key", name: value), onTap: Action)
+card(text: phrase("key", name: value))
+tile(text: phrase("key", name: value), onTap: Action)
 list(binding) { item -> … }
 button(text: "key", emphasis: primary, onTap: Action)
 ```
@@ -406,17 +406,34 @@ built against, and a host renders those semantics or refuses to run it.
 
 ### Text
 
+Write the words. An application in one language needs no bundle at all:
+
+```val
+section(text: "Your receipts")
+card(text: phrase("You have {points} points", points: state.member.points))
+```
+
+`phrase` carries the values; the host formats numbers, dates and currency for
+the language it is running in.
+
+A second language turns those words into keys:
+
 ```json
-"balance": { "en": "You have {points} points", "th": "คุณมี {points} แต้ม" }
+{
+  "locales": ["en", "th"],
+  "keys": {
+    "balance": { "en": "You have {points} points", "th": "คุณมี {points} แต้ม" }
+  }
+}
 ```
 
 ```val
-card(text: sentence("balance", points: state.member.points))
+card(text: phrase("balance", points: state.member.points))
 ```
 
-You supply the slots; the host formats numbers, dates and currency per locale.
-A missing key, a missing slot, a slot of the wrong type or an untranslated
-locale is a failed build.
+A package that promises two languages and writes words in place is a failed
+build, naming the language they would be wrong in. So is a missing slot, a slot
+of the wrong type, or a key one language does not translate.
 
 ### Data that is not a credential
 

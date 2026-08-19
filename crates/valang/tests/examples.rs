@@ -350,7 +350,12 @@ action Earn { compute { refuse "tooSmall" } }
 
     let empty: valang::TextBundle = BTreeMap::new();
     let (_, d) = valang::analyse_with(src, Some((&empty, &locales)));
-    assert!(d.iter().any(|d| d.message.contains("has no `tooSmall`")), "{d:?}");
+    // Two languages promised and nothing translating this one: the words are
+    // written in place, which is fine in one language and not in two.
+    assert!(
+        d.iter().any(|d| d.message.contains("written here as words")),
+        "{d:?}"
+    );
 
     let half: valang::TextBundle =
         BTreeMap::from([("tooSmall".into(), BTreeMap::from([("en".to_string(), "Too small".to_string())]))]);

@@ -347,10 +347,10 @@ screen Wallet {
   }
 
   column {
-    card(text: sentence("balance", points: state.member.points))
+    card(text: phrase("balance", points: state.member.points))
     section(text: "history")
     list(receipts) { r ->
-      tile(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
+      tile(text: phrase("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
     button(text: "scan", emphasis: primary, onTap: ScanToEarn)
   }
@@ -382,8 +382,8 @@ action: pure ไม่มี effect
 ```val
 column { … }
 section(text: "key")
-card(text: sentence("key", name: value))
-tile(text: sentence("key", name: value), onTap: Action)
+card(text: phrase("key", name: value))
+tile(text: phrase("key", name: value), onTap: Action)
 list(binding) { item -> … }
 button(text: "key", emphasis: primary, onTap: Action)
 ```
@@ -395,17 +395,33 @@ build ด้วย และ host ก็เรนเดอร์ความห�
 
 ### ข้อความ
 
+เขียนคำลงไปตรงๆ แอปที่มีภาษาเดียวไม่ต้องมี bundle เลย:
+
+```val
+section(text: "ใบเสร็จของคุณ")
+card(text: phrase("คุณมี {points} แต้ม", points: state.member.points))
+```
+
+`phrase` ถือค่าที่จะเติม ส่วน host จัดรูปแบบตัวเลข วันที่ และสกุลเงินตามภาษาที่
+กำลังใช้อยู่
+
+ภาษาที่สองเปลี่ยนคำเหล่านั้นให้เป็น key:
+
 ```json
-"balance": { "en": "You have {points} points", "th": "คุณมี {points} แต้ม" }
+{
+  "locales": ["en", "th"],
+  "keys": {
+    "balance": { "en": "You have {points} points", "th": "คุณมี {points} แต้ม" }
+  }
+}
 ```
 
 ```val
-card(text: sentence("balance", points: state.member.points))
+card(text: phrase("balance", points: state.member.points))
 ```
 
-คุณให้ค่าใส่ช่อง แล้ว host จัดรูปแบบตัวเลข วันที่ และสกุลเงินตามภาษาให้
-key ที่หายไป ช่องที่หายไป ช่องที่ผิด type หรือภาษาที่ยังไม่ได้แปล คือ build
-ที่ล้มเหลว
+package ที่สัญญาสองภาษาแล้วยังเขียนคำลงไปตรงๆ คือ build ที่ล้มเหลว โดยบอกว่าคำนั้น
+จะผิดในภาษาไหน เช่นเดียวกับช่องที่หายไป ช่องที่ผิด type และ key ที่ภาษาหนึ่งไม่ได้แปล
 
 ### ข้อมูลที่ไม่ใช่ credential
 

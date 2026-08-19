@@ -11,7 +11,7 @@
 // of lists — a person consented to one.
 
 screen Wallet {
-  title: sentence("walletTitle")
+  title: phrase("walletTitle")
 
   // Declared, not fetched. The host resolves this before it draws, so there is
   // no half-empty screen and no prompt arriving mid-scroll — and a reviewer
@@ -29,7 +29,7 @@ screen Wallet {
     // `text:` is a key into the signed manifest, never a sentence. The compiler
     // checks the key exists, that `points` is a slot, that its type matches,
     // and that every locale this app ships to has a translation.
-    card(text: sentence("balance", points: state.member.points))
+    card(text: phrase("balance", points: state.member.points))
 
     // A section subhead, which is how this host groups a list. There are no
     // tabs in the catalogue — the wallet has never had one, and a screen cannot
@@ -37,7 +37,7 @@ screen Wallet {
     section(text: "history")
 
     list(receipts) { r ->
-      tile(text: sentence("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
+      tile(text: phrase("receiptLine", merchant: r.claims.merchant, at: r.claims.purchased_at))
     }
 
     // Primary, so the host docks it. A call to action that scrolls with the

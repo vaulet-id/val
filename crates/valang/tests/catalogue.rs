@@ -44,8 +44,8 @@ action Go {
 
 screen Home {
   column {
-    tile(text: sentence("row"), onTap: Go)
-    button(text: sentence("go"), emphasis: primary, onTap: Go)
+    tile(text: phrase("row"), onTap: Go)
+    button(text: phrase("go"), emphasis: primary, onTap: Go)
   }
 }
 "#;
@@ -57,7 +57,7 @@ fn the_core_profile_is_enough_on_its_own() {
 
 #[test]
 fn a_component_no_catalogue_has_is_reported() {
-    let src = BASE.replace("tile(text: sentence(\"row\"), onTap: Go)", "carousel(text: sentence(\"row\"))");
+    let src = BASE.replace("tile(text: phrase(\"row\"), onTap: Go)", "carousel(text: phrase(\"row\"))");
     let msgs = errors(&src, false);
     assert!(
         msgs.iter().any(|m| m.contains("not in this catalogue")),
@@ -70,7 +70,7 @@ fn a_component_no_catalogue_has_is_reported() {
 #[test]
 fn a_hosts_own_component_needs_that_catalogue_declared() {
     let src = BASE.replace(
-        "tile(text: sentence(\"row\"), onTap: Go)",
+        "tile(text: phrase(\"row\"), onTap: Go)",
         "wallet.avatar(of: state.n)",
     );
 
@@ -96,7 +96,7 @@ fn a_catalogue_this_host_does_not_have_is_reported() {
 
 #[test]
 fn a_prop_the_component_does_not_take_is_reported() {
-    let src = BASE.replace("button(text: sentence(\"go\"), emphasis: primary,", "button(text: sentence(\"go\"), colour: red,");
+    let src = BASE.replace("button(text: phrase(\"go\"), emphasis: primary,", "button(text: phrase(\"go\"), colour: red,");
     let msgs = errors(&src, false);
     assert!(msgs.iter().any(|m| m.contains("has no `colour`")), "got {msgs:?}");
 }
@@ -116,8 +116,8 @@ fn a_word_outside_a_vocabulary_is_reported_with_the_words() {
 #[test]
 fn a_component_that_holds_no_children_is_reported() {
     let src = BASE.replace(
-        "tile(text: sentence(\"row\"), onTap: Go)",
-        "tile(text: sentence(\"row\")) { tile(text: sentence(\"row\")) }",
+        "tile(text: phrase(\"row\"), onTap: Go)",
+        "tile(text: phrase(\"row\")) { tile(text: phrase(\"row\")) }",
     );
     let msgs = errors(&src, false);
     assert!(msgs.iter().any(|m| m.contains("holds no children")), "got {msgs:?}");
@@ -146,8 +146,8 @@ action Save {
 
 screen Home {
   column {
-    field(text: sentence("body"), into: body)
-    button(text: sentence("save"), emphasis: primary, onTap: Save)
+    field(text: phrase("body"), into: body)
+    button(text: phrase("save"), emphasis: primary, onTap: Save)
   }
 }
 "#;

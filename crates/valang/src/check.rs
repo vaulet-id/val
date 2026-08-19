@@ -390,8 +390,13 @@ pub fn check_bundle(
     // renders as itself, and a slot the sentence does not name is a value
     // nobody reads — usually a rename that stopped halfway.
     for (key, span, slots) in &filled {
-        let Some(entry) = bundle.get(key) else { continue };
-        for (locale, template) in entry {
+        // Words written in place carry their own slots, checked against
+        // themselves. A key carries the bundle's, checked in every language.
+        let templates: Vec<(String, String)> = match bundle.get(key) {
+            Some(entry) => entry.iter().map(|(l, t)| (l.clone(), t.clone())).collect(),
+            None => vec![("this line".to_string(), key.clone())],
+        };
+        for (locale, template) in &templates {
             let named = placeholders(template);
             for want in &named {
                 if !slots.contains(want) {
@@ -412,12 +417,24 @@ pub fn check_bundle(
         }
     }
 
+    // One language needs no bundle at all: the words on the screen are the
+    // words, and 80% of applications will never have a second one. A key only
+    // becomes something to know about when a package promises two languages,
+    // and that is where the error appears.
+    let translated = locales.len() > 1;
+
     for (key, span, what) in want {
         let Some(entry) = bundle.get(&key) else {
-            d.push(Diagnostic::error(
-                span,
-                format!("the text bundle has no `{key}`, and this {what} names it"),
-            ));
+            if translated {
+                d.push(Diagnostic::error(
+                    span,
+                    format!(
+                        "`{key}` is written here as words, and this package promises {}. Move it to text.json as a key, or ship one language",
+                        locales.join(" and ")
+                    ),
+                ));
+            }
+            let _ = what;
             continue;
         };
         for locale in locales {

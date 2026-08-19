@@ -35,20 +35,20 @@ action Save {
 }
 
 screen Note start: true {
-  title: sentence("noteTitle")
+  title: phrase("noteTitle")
 
   column {
-    card(text: sentence("current", note: state.note, tag: state.tag))
+    card(text: phrase("current", note: state.note, tag: state.tag))
 
-    section(text: sentence("write"))
-    field(text: sentence("body"), icon: document, into: body)
-    toggle(text: sentence("remind"), into: remind)
+    section(text: phrase("write"))
+    field(text: phrase("body"), icon: document, into: body)
+    toggle(text: phrase("remind"), into: remind)
 
     // A screen that returns a value writes into the same name a field would.
-    tile(text: sentence("pickTag"), onTap: PickTag)
+    tile(text: phrase("pickTag"), onTap: PickTag)
 
-    button(text: sentence("save"), emphasis: primary, onTap: Save)
-    button(text: sentence("about"), emphasis: secondary, onTap: About)
+    button(text: phrase("save"), emphasis: primary, onTap: Save)
+    button(text: phrase("about"), emphasis: secondary, onTap: About)
   }
 }
 
@@ -58,18 +58,18 @@ screen Note start: true {
 // A picker. It returns into `tag`, which is what the form on the screen that
 // opened it is collecting — no new mechanism, the same names its fields use.
 screen PickTag present: sheet {
-  title: sentence("pickTagTitle")
+  title: phrase("pickTagTitle")
 
   column {
-    tile(text: sentence("tagWork"), onTap: navigation.back(with: { tag: "work" }))
-    tile(text: sentence("tagHome"), onTap: navigation.back(with: { tag: "home" }))
+    tile(text: phrase("tagWork"), onTap: navigation.back(with: { tag: "work" }))
+    tile(text: phrase("tagHome"), onTap: navigation.back(with: { tag: "home" }))
   }
 }
 
 screen About present: sheet {
-  title: sentence("aboutTitle")
+  title: phrase("aboutTitle")
 
   column {
-    card(text: sentence("aboutBody"))
+    card(text: phrase("aboutBody"))
   }
 }

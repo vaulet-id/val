@@ -160,20 +160,22 @@ action Tap {
   }
 }
 
-screen Home {
+screen Home start: true {
+  title: "A counter"
+
   column {
-    card(text: "count", taps: state.taps)
-    button(text: "tap", emphasis: primary, onTap: Tap)
+    card(text: phrase("Tapped {taps} times", taps: state.taps))
+    button(text: "Tap", emphasis: primary, onTap: Tap)
   }
 }
 `
 
+/// One language, so the words are written on the screen and this file only
+/// says which language they are in. Adding a second is what turns them into
+/// keys — and 80% of applications never will.
 const STARTER_TEXT = `{
-  "locales": ["en", "th"],
-  "keys": {
-    "count": { "en": "Tapped {taps} times", "th": "กดไปแล้ว {taps} ครั้ง" },
-    "tap":   { "en": "Tap", "th": "กด" }
-  }
+  "locales": ["en"],
+  "keys": {}
 }
 `
 

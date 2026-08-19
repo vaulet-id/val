@@ -199,6 +199,29 @@ pub fn check(
 
     // Every effect is an operation of a capability this host offers, with the
     // props that operation takes.
+    // A press may name a capability's operation. `onTap: navigation.back(…)` is
+    // the shorter half of the same call an `execute` block would make, and
+    // without this a mistyped one reached the renderer and did nothing.
+    for screen in &program.screens {
+        walk_ui(&screen.tree, &mut |node| {
+            for a in &node.args {
+                if a.name.as_deref() != Some("onTap") {
+                    continue;
+                }
+                let Some(target) = a.value.path() else { continue };
+                if !target.contains('.') {
+                    continue;
+                }
+                if interfaces.find(&target).is_none() {
+                    d.push(Diagnostic::error(
+                        a.span,
+                        format!("`{target}` is not something this host offers"),
+                    ));
+                }
+            }
+        });
+    }
+
     for action in &program.actions {
         for block in action.phases.iter().filter(|b| b.phase == Phase::Execute) {
             walk(&block.stmts, &mut |stmt| {
