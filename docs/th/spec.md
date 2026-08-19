@@ -755,6 +755,17 @@ min  max  abs
 map  filter  fold  any  all  count  first
 ```
 
+ฟังก์ชันเขียนตรงที่ใช้ หรือระบุชื่อก็ได้:
+
+```val
+receipts.map { r -> r.claims.amount }
+receipts.map(amountOf)
+receipts.fold(0, add)
+```
+
+ฟังก์ชันที่ระบุชื่อรับสิ่งที่ combinator ส่งให้ — หนึ่งค่า หรือสองค่าสำหรับ `fold`
+ซึ่งค่าแรกคือค่าที่สะสมมา
+
 ### Effect
 
 อยู่ใน `execute` เท่านั้น ไม่เคยอยู่หลังฟังก์ชัน และถูกยื่นเป็นชุดเดียว

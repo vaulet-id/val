@@ -857,6 +857,44 @@ impl<'a> Cx<'a> {
                             from.extend(t.from);
                             origins.extend(t.origins);
                         }
+                        // `map`, `filter`, `fold`, `any` and `all` are given a
+                        // function: written where they are used, or named. One
+                        // that is given neither used to return the list
+                        // unchanged, so the mistake ran and did nothing.
+                        if matches!(name.as_str(), "map" | "filter" | "fold" | "any" | "all") {
+                            let given = args.iter().any(|a| match &a.value {
+                                Expr::Lambda { .. } => true,
+                                Expr::Ident { name, .. } => {
+                                    self.p.functions.iter().any(|f| f.name == *name)
+                                }
+                                _ => false,
+                            });
+                            if !given {
+                                self.err(
+                                    *span,
+                                    format!("`{name}` is given a function — `{{ r -> … }}`, or the name of one this package declares"),
+                                );
+                            }
+                            // A named function takes the row, and `fold` hands
+                            // it the running value first.
+                            let wants = if name == "fold" { 2 } else { 1 };
+                            for a in args {
+                                let Expr::Ident { name: fname, span: fspan } = &a.value else {
+                                    continue;
+                                };
+                                let Some(f) = self.p.functions.iter().find(|f| f.name == *fname)
+                                else {
+                                    continue;
+                                };
+                                if f.params.len() != wants {
+                                    let n = f.params.len();
+                                    self.err(
+                                        *fspan,
+                                        format!("`{name}` hands over {wants} value(s), and `{fname}` takes {n}"),
+                                    );
+                                }
+                            }
+                        }
                         let out = |ty| Typed { ty, from: from.clone(), origins: origins.clone() };
                         return match name.as_str() {
                             "fold" | "count" => out(Ty::Int),

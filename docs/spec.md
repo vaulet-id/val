@@ -785,6 +785,17 @@ min  max  abs
 map  filter  fold  any  all  count  first
 ```
 
+The function is written where it is used, or named:
+
+```val
+receipts.map { r -> r.claims.amount }
+receipts.map(amountOf)
+receipts.fold(0, add)
+```
+
+A named function takes what the combinator hands over — one value, or two for
+`fold`, whose first is the running one.
+
 ### Effects
 
 Only in `execute`, never behind a function, offered as one batch.

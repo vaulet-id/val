@@ -374,9 +374,30 @@ impl<'a> Eval<'a> {
         }
 
         if let Some(f) = self.program.functions.iter().find(|f| f.name == name).cloned() {
+            let mut values = Vec::new();
+            for arg in args {
+                values.push(self.expr(&arg.value, state)?);
+            }
+            return self.call_declared(&f, values, state);
+        }
+
+        Err(Trap::Unsupported(format!("no function named `{name}`")))
+    }
+
+    /// A declared function, with its arguments already evaluated.
+    ///
+    /// Held apart from the call syntax because a function is also passed by
+    /// name — `receipts.map(double)` — and there the values come from the list
+    /// rather than from a call site.
+    fn call_declared(
+        &mut self,
+        f: &FunctionDecl,
+        values: Vec<Value>,
+        state: &BTreeMap<String, Value>,
+    ) -> R<Value> {
+        {
             self.push();
-            for (param, arg) in f.params.iter().zip(args) {
-                let v = self.expr(&arg.value, state)?;
+            for (param, v) in f.params.iter().zip(values) {
                 self.bind(&param.name, v);
             }
             let mut out = Value::Null;
@@ -391,13 +412,49 @@ impl<'a> Eval<'a> {
             self.pop();
             return Ok(out);
         }
+    }
 
-        Err(Trap::Unsupported(format!("no function named `{name}`")))
+    /// One function, with values for its parameters.
+    fn apply(
+        &mut self,
+        f: &Callable,
+        values: Vec<Value>,
+        state: &BTreeMap<String, Value>,
+    ) -> R<Value> {
+        match f {
+            Callable::Written(params, body) => {
+                self.push();
+                for (p, v) in params.iter().zip(values) {
+                    self.bind(p, v);
+                }
+                let out = self.expr(body, state);
+                self.pop();
+                out
+            }
+            Callable::Named(name) => {
+                let Some(decl) =
+                    self.program.functions.iter().find(|f| f.name == *name).cloned()
+                else {
+                    return Err(Trap::Unsupported(format!("no function named `{name}`")));
+                };
+                self.call_declared(&decl, values, state)
+            }
+        }
     }
 
     fn combinator(&mut self, name: &str, items: Vec<Value>, args: &[Arg], state: &BTreeMap<String, Value>) -> R<Value> {
-        let lambda = args.iter().find_map(|a| match &a.value {
-            Expr::Lambda { params, body, .. } => Some((params.clone(), body.clone())),
+        // Either shape of function: written here, or named. A function passed
+        // by name used to match nothing and the combinator returned the list
+        // unchanged — which compiled, ran, and did nothing.
+        let f = args.iter().find_map(|a| match &a.value {
+            Expr::Lambda { params, body, .. } => {
+                Some(Callable::Written(params.clone(), (**body).clone()))
+            }
+            Expr::Ident { name, .. }
+                if self.program.functions.iter().any(|f| f.name == *name) =>
+            {
+                Some(Callable::Named(name.clone()))
+            }
             _ => None,
         });
 
@@ -409,30 +466,17 @@ impl<'a> Eval<'a> {
                     Some(a) => self.expr(&a.value, state)?,
                     None => Value::Null,
                 };
-                let Some((params, body)) = lambda else { return Ok(acc) };
+                let Some(f) = f else { return Ok(acc) };
                 for item in items {
-                    self.push();
-                    if let Some(p) = params.first() {
-                        self.bind(p, acc.clone());
-                    }
-                    if let Some(p) = params.get(1) {
-                        self.bind(p, item);
-                    }
-                    acc = self.expr(&body, state)?;
-                    self.pop();
+                    acc = self.apply(&f, vec![acc, item], state)?;
                 }
                 acc
             }
             "map" | "filter" | "any" | "all" => {
-                let Some((params, body)) = lambda else { return Ok(Value::List(items)) };
+                let Some(f) = f else { return Ok(Value::List(items)) };
                 let mut mapped = Vec::new();
                 for item in items {
-                    self.push();
-                    if let Some(p) = params.first() {
-                        self.bind(p, item.clone());
-                    }
-                    let v = self.expr(&body, state)?;
-                    self.pop();
+                    let v = self.apply(&f, vec![item.clone()], state)?;
                     match name {
                         "map" => mapped.push(v),
                         "filter" => {
@@ -482,6 +526,17 @@ fn render(e: &Expr) -> String {
         Expr::Lambda { .. } => "…".into(),
         other => other.path().unwrap_or_else(|| "…".into()),
     }
+}
+
+/// What a combinator was handed: a function written where it is used, or the
+/// name of one the package declared.
+///
+/// Both are called the same way. Until this existed only the first was, and a
+/// function passed by name matched nothing — so `receipts.map(double)` compiled,
+/// ran, and returned the list unchanged.
+enum Callable {
+    Written(Vec<String>, Expr),
+    Named(String),
 }
 
 /// How long a range may be.

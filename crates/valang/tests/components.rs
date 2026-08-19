@@ -361,3 +361,63 @@ screen Detail(id: string) {
         .collect();
     assert!(msgs.iter().any(|m| m.contains("`Detail` takes `id` as string")), "{msgs:?}");
 }
+
+/// A combinator given no function at all used to return the list unchanged.
+#[test]
+fn a_combinator_is_given_a_function() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+function f(xs: List<int>): List<int> {
+  return xs.map(nothing)
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.iter().any(|m| m.contains("`map` is given a function")), "{msgs:?}");
+}
+
+#[test]
+fn a_named_function_takes_what_the_combinator_hands_over() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+function add(a: int, b: int): int {
+  return a + b
+}
+
+function f(xs: List<int>): List<int> {
+  return xs.map(add)
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(
+        msgs.iter().any(|m| m.contains("`map` hands over 1 value(s), and `add` takes 2")),
+        "{msgs:?}"
+    );
+}
