@@ -223,7 +223,7 @@ pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
             // somebody forgot to write.
             Err(e) => json!({
                 "name": s.name,
-                "start": s.main,
+                "start": s.is_main(),
                 "error": format!("{e:?}"),
                 "data": Vec::<Json>::new(),
                 "derived": Json::Object(Map::new()),

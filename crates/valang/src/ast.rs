@@ -172,11 +172,8 @@ pub struct ScreenDecl {
     /// bundle check as every other sentence, rather than being a second path
     /// that has to be kept faithful to the first.
     pub title: Option<UiNode>,
-    /// `@main` — the screen the application opens on. A directive rather than a
-    /// setting because no screen ever sets it to false: it marks one screen out
-    /// of the package, and a boolean that is only ever written one way is a
-    /// marker wearing a value's clothes.
-    pub main: bool,
+    /// `@main` — what is written above the declaration.
+    pub directives: Vec<Directive>,
     /// `present: sheet`, `address: "receipt/{id}"` — props a capability gives a
     /// screen. The parser learns the shape; which props exist and what words
     /// they take is read from the host's interfaces.
@@ -188,6 +185,13 @@ pub struct ScreenDecl {
     pub compute: Vec<Stmt>,
     pub tree: Vec<UiNode>,
     pub span: Span,
+}
+
+impl ScreenDecl {
+    /// Whether this is the screen the application opens on.
+    pub fn is_main(&self) -> bool {
+        self.directives.iter().any(|d| d.name == "main")
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -223,6 +227,23 @@ pub struct UiNode {
     /// than as a node of its own, so that everything which walks a tree walks
     /// both halves without having to be taught a new shape.
     pub otherwise: Vec<UiNode>,
+    pub span: Span,
+}
+
+/// `@main`, `@name(argument)` — a mark on a declaration.
+///
+/// Distinct from a setting, which configures the thing it is written on and
+/// takes a value from the host's vocabulary. A directive says something about
+/// the declaration's place in the package: which screen opens it. That is why
+/// it sits above the declaration rather than among its props, and why the set
+/// of them is the language's rather than a host's.
+#[derive(Debug, Clone)]
+pub struct Directive {
+    pub name: String,
+    /// Empty for a directive that only marks. The syntax carries arguments so
+    /// that the first directive which needs one is a row in a table rather than
+    /// a second shape.
+    pub args: Vec<Arg>,
     pub span: Span,
 }
 

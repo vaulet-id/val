@@ -77,9 +77,12 @@ screen … { … }                  // what the person sees
 - **Arguments are named once there are two**: `payment.request(to: merchant,
   amount: 12000)`. One argument may be positional.
 - **Keywords are reserved.** A dot is always field access.
-- **A directive marks a declaration and never configures one.** `@main` is
-  written on its own line above a `screen`, takes no arguments, and is the only
-  one.
+- **A directive marks a declaration; a setting configures one.** `@main` is
+  written on its own line above a `screen`. A directive may take arguments —
+  `@name(value)` — and `@main` takes none. The set of directives belongs to the
+  language, not to a host: which screen a package opens at is the same fact in
+  every wallet that runs it. Settings — `present:`, `address:` — take their
+  values from the host's vocabularies instead.
 
 ---
 

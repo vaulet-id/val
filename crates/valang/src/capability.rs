@@ -399,7 +399,7 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
 
     // Screen settings.
     let screen_props = usable.screen_props();
-    let starts = program.screens.iter().filter(|s| s.main).count();
+    let starts = program.screens.iter().filter(|s| s.is_main()).count();
     for screen in &program.screens {
         for a in &screen.settings {
             let Some(name) = &a.name else { continue };

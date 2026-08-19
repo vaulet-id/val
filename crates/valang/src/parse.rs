@@ -102,31 +102,19 @@ impl Parser {
             if self.eof() {
                 break;
             }
-            // `@main screen Home { … }`. A directive marks a declaration; it
-            // never configures one. The distinction is what keeps `@main` from
-            // growing arguments and becoming a second settings syntax.
-            let mut main = false;
-            if self.at("@") {
-                let at = self.peek().span;
-                self.bump();
-                let word = self.bump().text;
-                if word == "main" {
-                    main = true;
-                } else {
-                    self.diagnostics.push(Diagnostic::error(
-                        at,
-                        format!("`@{word}` is not a directive this language has. The one that exists is `@main`, on the screen an application opens"),
-                    ));
-                }
-                self.skip_newlines();
-            }
+            let directives = self.directives();
 
             let t = self.peek().clone();
-            if main && t.text != "screen" {
-                self.diagnostics.push(Diagnostic::error(
-                    t.span,
-                    format!("`@main` marks the screen an application opens, and `{}` is not a screen", t.text),
-                ));
+            for d in &directives {
+                if t.text != "screen" {
+                    self.diagnostics.push(Diagnostic::error(
+                        d.span,
+                        format!(
+                            "`@{}` marks a screen, and `{}` is not one",
+                            d.name, t.text
+                        ),
+                    ));
+                }
             }
             match t.text.as_str() {
                 "app" => {
@@ -190,7 +178,7 @@ impl Parser {
                 "action" => p.actions.push(self.action_decl()),
                 "screen" => {
                     let mut s = self.screen_decl();
-                    s.main = main;
+                    s.directives = directives;
                     p.screens.push(s);
                 }
                 "component" => p.components.push(self.component_decl()),
@@ -675,6 +663,60 @@ impl Parser {
 
     // ---------------------------------------------------------------- screen
 
+    /// `@main`, `@name(argument)` — zero or more, each on its own line above a
+    /// declaration.
+    ///
+    /// The set is closed and lives here rather than in a host's registry: a
+    /// directive says which screen a *package* opens at, which is a fact about
+    /// the package and the same in every wallet that runs it.
+    fn directives(&mut self) -> Vec<Directive> {
+        // name, and how many arguments it takes. Arguments are parsed for every
+        // directive, so the first one that needs an argument is a row here
+        // rather than a second syntax bolted on beside this one.
+        const KNOWN: &[(&str, usize)] = &[("main", 0)];
+
+        let mut out = Vec::new();
+        while self.at("@") {
+            let span = self.peek().span;
+            self.bump();
+            if self.peek().kind != Kind::Ident {
+                let bad = self.bump();
+                self.diagnostics.push(Diagnostic::error(
+                    span,
+                    format!("`@` introduces a directive, and `{}` is not a name", bad.text),
+                ));
+                continue;
+            }
+            let name = self.bump().text;
+            let args = if self.at("(") { self.args() } else { Vec::new() };
+
+            match KNOWN.iter().find(|(k, _)| *k == name) {
+                None => self.diagnostics.push(Diagnostic::error(
+                    span,
+                    format!(
+                        "`@{name}` is not a directive this language has. They are: {}",
+                        KNOWN.iter().map(|(k, _)| format!("`@{k}`")).collect::<Vec<_>>().join(", ")
+                    ),
+                )),
+                Some((_, arity)) if args.len() != *arity => {
+                    self.diagnostics.push(Diagnostic::error(
+                        span,
+                        if *arity == 0 {
+                            format!("`@{name}` marks a declaration and takes nothing")
+                        } else {
+                            format!("`@{name}` takes {arity} argument(s), and this gives {}", args.len())
+                        },
+                    ));
+                }
+                Some(_) => {}
+            }
+
+            out.push(Directive { name, args, span });
+            self.skip_newlines();
+        }
+        out
+    }
+
     fn screen_decl(&mut self) -> ScreenDecl {
         let span = self.peek().span;
         self.bump();
@@ -740,7 +782,7 @@ impl Parser {
                 self.bump();
             }
         }
-        ScreenDecl { name, main: false, params, settings, title, data, compute, tree, span }
+        ScreenDecl { name, directives: Vec::new(), params, settings, title, data, compute, tree, span }
     }
 
     /// `component Name(param: type, …) { …catalogue… }`

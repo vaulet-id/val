@@ -143,7 +143,7 @@ pub fn render_with(
 
     let tree = components(&mut ev, &screen.tree, state)?;
     let title = screen.title.as_ref().map(|t| component(&mut ev, t, state)).transpose()?;
-    let start = screen.main;
+    let start = screen.is_main();
     Ok(Screen { name: screen.name.clone(), start, title, data: resolved, derived, tree })
 }
 

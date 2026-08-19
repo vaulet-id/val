@@ -77,3 +77,26 @@ fn a_node_after_a_branchless_if_is_not_swallowed() {
     assert_eq!(e.len(), 1, "{e:?}");
     assert!(e[0].contains("`nonesuch`"), "{e:?}");
 }
+
+/// The syntax carries arguments even though the only directive today takes
+/// none, so the first one that needs an argument is a row in a table rather
+/// than a second shape bolted on beside this one.
+#[test]
+fn a_directive_that_takes_nothing_is_given_nothing() {
+    let e = errors(&program("  card(\"ok\")").replace("@main", "@main(true)"));
+    assert!(e.iter().any(|m| m.contains("`@main` marks a declaration and takes nothing")), "{e:?}");
+}
+
+#[test]
+fn an_unknown_directive_says_which_ones_exist() {
+    let e = errors(&program("  card(\"ok\")").replace("@main", "@sheet"));
+    assert!(e.iter().any(|m| m.contains("is not a directive this language has")), "{e:?}");
+    assert!(e.iter().any(|m| m.contains("`@main`")), "{e:?}");
+}
+
+#[test]
+fn a_directive_marks_a_screen_and_nothing_else() {
+    let src = program("  card(\"ok\")").replace("action Earn", "@main\naction Earn");
+    let e = errors(&src);
+    assert!(e.iter().any(|m| m.contains("`@main` marks a screen, and `action` is not one")), "{e:?}");
+}
