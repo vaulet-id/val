@@ -41,7 +41,7 @@ screen Note start: true {
     card(text: sentence("current", note: state.note, tag: state.tag))
 
     section(text: sentence("write"))
-    field(text: sentence("body"), into: body)
+    field(text: sentence("body"), icon: document, into: body)
     toggle(text: sentence("remind"), into: remind)
 
     // A screen that returns a value writes into the same name a field would.

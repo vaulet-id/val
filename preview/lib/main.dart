@@ -450,6 +450,80 @@ class _Phone extends StatelessWidget {
   }
 }
 
+/// Which components are answered rather than read. They are drawn as one group
+/// where they sit together, the way the wallet's attribute rows are.
+bool _isInput(Map<String, dynamic> n) =>
+    const {'field', 'toggle', 'pick'}.contains(n['kind']);
+
+/// Consecutive inputs, gathered. Runs of one non-input are left alone.
+///
+/// The application never declares a group: it lists the fields it needs and the
+/// host puts them on one surface. A screen that had to say `group { … }` is a
+/// screen that can forget to.
+List<List<Map<String, dynamic>>> _group(List<Map<String, dynamic>> children) {
+  final out = <List<Map<String, dynamic>>>[];
+  for (final c in children) {
+    if (_isInput(c) && out.isNotEmpty && _isInput(out.last.first)) {
+      out.last.add(c);
+    } else {
+      out.add([c]);
+    }
+  }
+  return out;
+}
+
+/// The icon a field carries, from the catalogue's closed set. An unknown word
+/// draws the neutral one rather than nothing, because the check that refuses it
+/// has already run by the time anything is drawn.
+IconData _iconOf(Object? word) => switch (word) {
+      'receipt' => Icons.receipt_long_outlined,
+      'wallet' => Icons.account_balance_wallet_outlined,
+      'shield' => Icons.shield_outlined,
+      'person' => Icons.person_outline,
+      'card' => Icons.credit_card,
+      'calendar' => Icons.calendar_today_outlined,
+      'location' => Icons.location_on_outlined,
+      'money' => Icons.payments_outlined,
+      'check' => Icons.check_circle_outline,
+      'warning' => Icons.warning_amber_outlined,
+      'document' => Icons.description_outlined,
+      'key' => Icons.key_outlined,
+      _ => Icons.edit_outlined,
+    };
+
+/// The white group an answered row sits in: one card, hairlines between rows.
+class _InputGroup extends StatelessWidget {
+  const _InputGroup({required this.rows, required this.incoming});
+
+  final List<Map<String, dynamic>> rows;
+  final Incoming incoming;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Vaulet.lg, Vaulet.md, Vaulet.md, Vaulet.md),
+              child: _Node(node: rows[i], incoming: incoming),
+            ),
+            if (i != rows.length - 1)
+              Divider(
+                height: 1,
+                thickness: 0.5,
+                indent: Vaulet.lg,
+                color: scheme.outlineVariant.withValues(alpha: 0.4),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Where a press can go, for the nodes deep in a screen.
 ///
 /// Moving between screens is the host's: it never reaches the application, so
@@ -769,10 +843,12 @@ class _NodeState extends State<_Node> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final c in children)
+            for (final run in _group(children))
               Padding(
                 padding: const EdgeInsets.only(bottom: Vaulet.sm),
-                child: _Node(node: c, incoming: widget.incoming),
+                child: run.length == 1 && !_isInput(run.first)
+                    ? _Node(node: run.first, incoming: widget.incoming)
+                    : _InputGroup(rows: run, incoming: widget.incoming),
               ),
           ],
         );
@@ -863,23 +939,48 @@ class _NodeState extends State<_Node> {
       case 'field':
         final into = (args['into'] as String?)?.trim();
         final kind = (args['kind'] as String?)?.trim();
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: Vaulet.sm),
-          child: TextField(
-            keyboardType: kind == 'number' ? TextInputType.number : TextInputType.text,
-            decoration: InputDecoration(
-              labelText: _label(),
-              border: const OutlineInputBorder(),
-              isDense: true,
+        final scheme = Theme.of(context).colorScheme;
+        return Row(
+          // Top, not centre: a field that has grown to three lines is still one
+          // row about one thing, and an icon that slid to the middle points at
+          // the second line of it.
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 44,
+              width: 40,
+              child: Center(
+                child: Icon(_iconOf(args['icon']), size: 22, color: scheme.onSurfaceVariant),
+              ),
             ),
-            onChanged: into == null ? null : (v) => _Form.set(context, into, v),
-          ),
+            Expanded(
+              child: TextField(
+                keyboardType: kind == 'number' ? TextInputType.number : TextInputType.text,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w400),
+                decoration: InputDecoration(
+                  labelText: _label(),
+                  labelStyle: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                  floatingLabelStyle: TextStyle(fontSize: 13, color: scheme.primary),
+                  // Always floating: the label names the box whether or not
+                  // there is anything in it, and a label that moves on focus is
+                  // a label somebody has to have already read.
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                ),
+                onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+              ),
+            ),
+          ],
         );
 
       case 'toggle':
         final into = (args['into'] as String?)?.trim();
         return SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          dense: true,
+          visualDensity: VisualDensity.compact,
           title: _text(),
           value: into == null ? false : _Form.of(context)[into] == true,
           onChanged: into == null
