@@ -13,6 +13,7 @@
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
@@ -306,6 +307,11 @@ class _PreviewAppState extends State<PreviewApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      // Flutter web leaves the mouse out of `dragDevices`, on the reasoning
+      // that a page scrolls with the wheel. That is right for a page and wrong
+      // for a phone on a desk: a carousel nobody can drag reads as a carousel
+      // that does not work.
+      scrollBehavior: const _DragAnywhere(),
       theme: Vaulet.theme(_in.dark ? Brightness.dark : Brightness.light),
       home: Scaffold(
         backgroundColor: Colors.transparent,
@@ -491,6 +497,20 @@ IconData _iconOf(Object? word) => switch (word) {
       _ => Icons.edit_outlined,
     };
 
+/// Drag with whatever is to hand — this is a phone being looked at through a
+/// browser, and the pointer is standing in for a finger.
+class _DragAnywhere extends MaterialScrollBehavior {
+  const _DragAnywhere();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+}
+
 /// Pages side by side, with dots under them.
 ///
 /// The page it is on is the host's — like a scroll position, it is not
@@ -506,7 +526,12 @@ class _Carousel extends StatefulWidget {
 }
 
 class _CarouselState extends State<_Carousel> {
-  final _controller = PageController(viewportFraction: 0.92);
+  /// Far enough from either end that a person swiping back on the first page
+  /// finds the last one there, rather than a wall. The pages repeat; the count
+  /// only has to outlast a session.
+  static const _middle = 10000;
+
+  late final _controller = PageController(initialPage: _middle);
   int _page = 0;
 
   @override
@@ -518,23 +543,34 @@ class _CarouselState extends State<_Carousel> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final n = widget.pages.length;
     return Column(
       children: [
+        // Out past the screen's own padding: a banner that stops short of the
+        // edge reads as a card that failed to fill its row, and the wallet's
+        // own home screen runs them to the edge.
+        // The height is bounded here rather than inside: an OverflowBox in a
+        // column is asked for an unbounded height and throws, which took the
+        // whole screen with it.
         SizedBox(
           height: 140,
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: widget.pages.length,
-            onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (context, i) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: _Node(node: widget.pages[i], incoming: widget.incoming),
+          child: OverflowBox(
+            maxWidth: _Phone.width,
+            child: SizedBox(
+              width: _Phone.width,
+              child: PageView.builder(
+                controller: _controller,
+                onPageChanged: (i) => setState(() => _page = i % n),
+                itemBuilder: (context, i) =>
+                    _Node(node: widget.pages[i % n], incoming: widget.incoming),
+              ),
             ),
           ),
         ),
         if (widget.pages.length > 1)
           Padding(
-            padding: const EdgeInsets.only(top: Vaulet.sm),
+            // Room on both sides. Dots against the card read as part of it.
+            padding: const EdgeInsets.only(top: Vaulet.lg, bottom: Vaulet.sm),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1025,6 +1061,10 @@ class _NodeState extends State<_Node> {
         final action = (args['onTap'] as String?)?.trim();
         final scheme = Theme.of(context).colorScheme;
         return Card(
+          // The pager runs to the edge; the banner keeps the screen's own
+          // margin, so a page turning slides one card past another rather than
+          // one full-bleed rectangle past another.
+          margin: const EdgeInsets.symmetric(horizontal: kScreenPadH),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: action == null ? null : () => _tap(action),
