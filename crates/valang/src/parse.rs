@@ -5,6 +5,15 @@
 
 use crate::ast::*;
 use crate::diag::Diagnostic;
+
+/// Words nothing uses yet.
+///
+/// A package is signed, published and then run by hosts on their own schedule,
+/// so a word that turns into a keyword after the fact breaks a package its
+/// author is no longer editing. `export` and `import` are held for the day a
+/// Micro App wants a component from another package — see the guide's note on
+/// why that day has not come.
+const RESERVED: &[&str] = &["export", "import"];
 use crate::lex::{Kind, Lexer, Token};
 
 pub struct Parser {
@@ -69,7 +78,17 @@ impl Parser {
     fn ident(&mut self) -> String {
         self.skip_newlines();
         if self.peek().kind == Kind::Ident {
-            self.bump().text
+            let t = self.bump();
+            if RESERVED.contains(&t.text.as_str()) {
+                self.diagnostics.push(Diagnostic::error(
+                    t.span,
+                    format!(
+                        "`{}` is reserved. Nothing in this language uses it yet, and a name that becomes a keyword later is a package that stops building on somebody else's release",
+                        t.text
+                    ),
+                ));
+            }
+            t.text
         } else {
             let t = self.peek().clone();
             self.diagnostics.push(Diagnostic::error(t.span, format!("expected a name, found `{}`", t.text)));

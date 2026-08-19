@@ -76,7 +76,11 @@ screen … { … }                  // what the person sees
   an issuer keep their own spelling: `purchased_at`, `document_number`.
 - **Arguments are named once there are two**: `payment.request(to: merchant,
   amount: 12000)`. One argument may be positional.
-- **Keywords are reserved.** A dot is always field access.
+- **Keywords are reserved, including two nothing uses yet.** `export` and
+  `import` are held for the day a Micro App wants a component from another
+  package. A package is signed and then run by hosts on their own schedule, so a
+  word that becomes a keyword afterwards breaks a package whose author has moved
+  on. A dot is always field access.
 - **A directive marks a declaration; a setting configures one.** `@main` is
   written on its own line above a `screen`. A directive may take arguments —
   `@name(value)` — and `@main` takes none. The set of directives belongs to the
