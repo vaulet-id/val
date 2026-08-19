@@ -74,6 +74,9 @@ pub fn analyse_with_packages(
     // A package's own components become the host's catalogue before anything
     // else looks at a screen, so every later pass — the checks, the capability
     // report, the renderer — sees one kind of node.
+    // Before expansion, because a component's call site and the parameter it
+    // fills are both gone afterwards.
+    diagnostics.extend(typeck::check_component_calls(&program));
     diagnostics.extend(expand::expand(&mut program, packages));
     // Before `check`, which asks whether a declared capability goes unused and
     // needs to know that drawing a video is a use of `media.video`.

@@ -255,3 +255,109 @@ screen Home {{
         assert!(!names.contains(&"note".to_string()), "{label}: `note` survived: {names:?}");
     }
 }
+
+/// Until this, nothing in a screen's tree was typed at all: a condition could be
+/// a number and a component could be handed anything.
+#[test]
+fn a_condition_is_true_or_false() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+@main
+screen Home {
+  column {
+    if (state.points) {
+      card("a")
+    }
+  }
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.iter().any(|m| m.contains("a condition is true or false")), "{msgs:?}");
+}
+
+#[test]
+fn a_component_is_handed_what_it_declared() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+component C(label: string) {
+  text(label)
+}
+
+@main
+screen Home {
+  column {
+    C(label: state.points)
+  }
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(
+        msgs.iter().any(|m| m.contains("`C` takes `label` as string, and this is int")),
+        "{msgs:?}"
+    );
+}
+
+/// A screen with parameters is one too — it is reached by a press that hands it
+/// values, and those are the screen's declared parameters.
+#[test]
+fn a_screen_is_moved_to_with_what_it_declared() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+@main
+screen Home {
+  column {
+    tile(text: "go", onTap: Detail(id: state.points))
+  }
+}
+
+screen Detail(id: string) {
+  column {
+    text(id)
+  }
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.iter().any(|m| m.contains("`Detail` takes `id` as string")), "{msgs:?}");
+}

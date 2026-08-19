@@ -12,6 +12,44 @@ use crate::ast::*;
 use crate::diag::{Diagnostic, Span};
 use crate::types::{Provenance, Ty, Typed};
 
+/// What a component is handed, checked where both halves are still present.
+///
+/// A component is expanded into the screen that drew it before anything else
+/// looks at the tree, so by the time types are checked the call site is gone
+/// and the parameter it filled is gone with it. This runs over the program as
+/// it was written, and reports only the call — everything else about it is
+/// checked after expansion, once.
+pub fn check_component_calls(p: &Program) -> Vec<Diagnostic> {
+    let mut cx = Cx::new(p);
+    for s in &p.screens {
+        cx.push();
+        for f in &s.params {
+            let t = cx.resolve(&f.ty);
+            cx.bind(&f.name, Typed::plain(t));
+        }
+        for d in &s.data {
+            cx.bind(&d.name, Typed::unknown());
+        }
+        for st in &s.compute {
+            if let Stmt::Let { name, .. } = st {
+                cx.bind(name, Typed::unknown());
+            }
+        }
+        cx.calls(&s.tree);
+        cx.pop();
+    }
+    for c in &p.components {
+        cx.push();
+        for f in &c.params {
+            let t = cx.resolve(&f.ty);
+            cx.bind(&f.name, Typed::plain(t));
+        }
+        cx.calls(&c.tree);
+        cx.pop();
+    }
+    cx.diagnostics
+}
+
 pub fn check_types(p: &Program) -> Vec<Diagnostic> {
     let mut cx = Cx::new(p);
     for f in &p.functions {
@@ -22,6 +60,12 @@ pub fn check_types(p: &Program) -> Vec<Diagnostic> {
     }
     for s in &p.screens {
         cx.screen(s);
+    }
+    // A component's body, with its parameters bound to what they were declared
+    // as. Nothing else looks inside one before it is expanded, and a component
+    // in a package with no screens is expanded by nobody.
+    for c in &p.components {
+        cx.component(c);
     }
     cx.refinements();
     cx.diagnostics
@@ -163,10 +207,211 @@ impl<'a> Cx<'a> {
             };
             self.bind(&d.name, t);
         }
+        // What a press handed this screen. Declared the way a component
+        // declares its parameters, and in scope for everything it draws.
+        for f in &s.params {
+            let t = self.resolve(&f.ty);
+            self.bind(&f.name, Typed::plain(t));
+        }
         for st in &s.compute {
             self.stmt(st, None);
         }
+        if let Some(title) = &s.title {
+            self.tree(std::slice::from_ref(title));
+        }
+        self.tree(&s.tree);
         self.pop();
+    }
+
+    /// Component call sites, and nothing else.
+    fn calls(&mut self, nodes: &[UiNode]) {
+        for n in nodes {
+            if let Some(decl) = self.p.components.iter().find(|c| c.name == n.kind) {
+                let params = decl.params.clone();
+                for a in &n.args {
+                    let Some(argname) = &a.name else { continue };
+                    let Some(param) = params.iter().find(|p| p.name == *argname) else {
+                        continue; // `bind` in expansion reports an unknown one.
+                    };
+                    let want = self.resolve(&param.ty);
+                    if let Some(got) = self.typed(&a.value) {
+                        if !fits(&got.ty, &want) {
+                            self.err(
+                                a.span,
+                                format!(
+                                    "`{}` takes `{argname}` as {want}, and this is {}",
+                                    n.kind, got.ty
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+            self.push();
+            if let Some(bind) = &n.lambda {
+                self.bind(bind, Typed::unknown());
+            }
+            self.calls(&n.children);
+            self.calls(&n.otherwise);
+            self.pop();
+        }
+    }
+
+    fn component(&mut self, c: &ComponentDecl) {
+        self.push();
+        for f in &c.params {
+            let t = self.resolve(&f.ty);
+            self.bind(&f.name, Typed::plain(t));
+        }
+        self.tree(&c.tree);
+        self.pop();
+    }
+
+    /// Every expression a screen draws.
+    ///
+    /// Until this existed, nothing in a tree was typed at all: `if
+    /// (state.points)` took an int for a condition and the renderer read it as
+    /// false, and a component was handed whatever the call site had.
+    fn tree(&mut self, nodes: &[UiNode]) {
+        for n in nodes {
+            if n.kind == "if" {
+                if let Some(a) = n.args.first() {
+                    if let Some(t) = self.typed(&a.value) {
+                        if !matches!(t.ty.inner(), Ty::Bool | Ty::Unknown) {
+                            self.err(
+                                a.span,
+                                format!(
+                                    "a condition is true or false, and this is {}. A screen that showed one thing or another on a number would show whichever the host guessed",
+                                    t.ty
+                                ),
+                            );
+                        }
+                    }
+                }
+            } else {
+                for a in &n.args {
+                    self.value(&a.value);
+                }
+            }
+
+            // `list(receipts) { r -> … }` introduces the row, and it is the one
+            // name in this language that an interface introduces rather than
+            // the program.
+            self.push();
+            if let Some(bind) = &n.lambda {
+                let row = n
+                    .args
+                    .first()
+                    .and_then(|a| self.typed(&a.value))
+                    .map(|t| match t.ty.inner() {
+                        Ty::List(inner) => (**inner).clone(),
+                        _ => Ty::Unknown,
+                    })
+                    .unwrap_or(Ty::Unknown);
+                self.bind(bind, Typed::plain(row));
+            }
+            self.tree(&n.children);
+            self.tree(&n.otherwise);
+            self.pop();
+        }
+    }
+
+    /// One value written on a node.
+    ///
+    /// Three shapes, because a screen's arguments are not only expressions:
+    /// `onTap: Receipt(merchant: …)` moves to a screen and its arguments are
+    /// that screen's parameters, and `onTap: navigation.back(with: …)` calls
+    /// something the host provides, whose name this crate does not have.
+    fn value(&mut self, e: &Expr) {
+        match e {
+            Expr::Call { callee, args, span } => {
+                if let Expr::Ident { name, .. } = &**callee {
+                    if let Some(screen) = self.p.screens.iter().find(|s| s.name == *name) {
+                        let params = screen.params.clone();
+                        for a in args {
+                            self.value(&a.value);
+                            let Some(argname) = &a.name else { continue };
+                            let Some(param) = params.iter().find(|p| p.name == *argname) else {
+                                self.err(
+                                    a.span,
+                                    format!("`{name}` takes no `{argname}`"),
+                                );
+                                continue;
+                            };
+                            let want = self.resolve(&param.ty);
+                            if let Some(got) = self.typed(&a.value) {
+                                if !fits(&got.ty, &want) {
+                                    self.err(
+                                        a.span,
+                                        format!("`{name}` takes `{argname}` as {want}, and this is {}", got.ty),
+                                    );
+                                }
+                            }
+                        }
+                        for param in &params {
+                            let given = args.iter().any(|a| a.name.as_deref() == Some(&param.name));
+                            if !given && !param.ty.optional {
+                                self.err(
+                                    *span,
+                                    format!("`{name}` takes `{}` and this does not give it", param.name),
+                                );
+                            }
+                        }
+                        return;
+                    }
+                }
+                // Something the host provides. Its arguments are still this
+                // package's expressions, so they are checked; the call is not,
+                // because what it takes is in the host's registry.
+                if self.is_word(callee) {
+                    for a in args {
+                        self.value(&a.value);
+                    }
+                    return;
+                }
+                self.typed(e);
+            }
+            _ => {
+                self.typed(e);
+            }
+        }
+    }
+
+    /// The type of an expression, or nothing where the expression is a word.
+    ///
+    /// A screen is full of words from the host's vocabulary — `primary`,
+    /// `money`, `foreground.primary` — which parse as names and are bound by
+    /// nothing. The same rule the runtime uses: a path whose root is not in
+    /// scope is a word, not a mistake.
+    fn typed(&mut self, e: &Expr) -> Option<Typed> {
+        if self.is_word(e) {
+            return None;
+        }
+        Some(self.expr(e))
+    }
+
+    fn is_word(&self, e: &Expr) -> bool {
+        let mut root = e;
+        loop {
+            match root {
+                Expr::Member { obj, .. } => root = obj,
+                Expr::Ident { name, .. } => {
+                    // The roots the runtime binds. `state` is not a field of
+                    // itself, and reading it as a word is how `if (state.points)`
+                    // went unchecked.
+                    if matches!(name.as_str(), "state" | "input" | "context" | "next") {
+                        return false;
+                    }
+                    return self.lookup(name).is_none()
+                        && self.p.state.iter().all(|f| f.name != *name)
+                        && self.p.enums.iter().all(|d| d.name != *name)
+                        && self.p.functions.iter().all(|f| f.name != *name)
+                        && self.p.credentials.iter().all(|c| c.name != *name)
+                        && self.p.types.iter().all(|t| t.name != *name)
+                }
+                _ => return false,
+            }
+        }
     }
 
     fn action(&mut self, a: &ActionDecl) {
@@ -831,5 +1076,28 @@ fn builtin_type(name: &str) -> Ty {
     match name {
         "duration" => Ty::Int,
         _ => Ty::Int,
+    }
+}
+
+/// Whether a value of one type may stand where another is declared.
+///
+/// Deliberately forgiving: `Unknown` is what a query answers with, and a screen
+/// that refused every value the host had not described would refuse most real
+/// applications. What it catches is the mistake somebody makes — an int where a
+/// sentence goes.
+fn fits(got: &Ty, want: &Ty) -> bool {
+    if matches!(got, Ty::Unknown) || matches!(want, Ty::Unknown) {
+        return true;
+    }
+    match (got, want) {
+        // A record literal carries no name — `{ padding: 12 }` is written where
+        // a `CardStyle` goes and is one. Matching them by name would refuse
+        // every literal, and checking their fields is a different pass than
+        // this one.
+        (Ty::Record(_), Ty::Record(_)) => true,
+        (_, Ty::Optional(inner)) => matches!(got, Ty::Optional(_)) || fits(got, inner),
+        (Ty::Optional(inner), _) => fits(inner, want),
+        (Ty::List(a), Ty::List(b)) => fits(a, b),
+        _ => got == want,
     }
 }

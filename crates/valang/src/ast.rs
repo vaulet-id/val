@@ -3,7 +3,7 @@
 
 use crate::diag::Span;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Program {
     pub app: Option<String>,
     pub version: Option<String>,
