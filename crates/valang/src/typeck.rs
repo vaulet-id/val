@@ -949,6 +949,14 @@ impl<'a> Cx<'a> {
 
                 // Named once there are two of them (§2).
                 let constructing = args.len() == 1 && matches!(args[0].value, Expr::Record { .. });
+                // A phrase's words come first and are not named: the sentence
+                // is the thing, and its values are named beside it.
+                if name == crate::expand::PHRASE {
+                    for a in args.iter().skip(1) {
+                        self.value(&a.value);
+                    }
+                    return Typed::plain(Ty::Str);
+                }
                 // `fold(0) { acc, x -> … }` reads as one argument and a block,
                 // which is how it is written and how it should be counted.
                 let named_count = args.iter().filter(|a| !matches!(a.value, Expr::Lambda { .. })).count();
@@ -1169,11 +1177,16 @@ fn is_combinator(name: &str) -> bool {
 
 /// The closed set (§3). Adding to it is a language change, deliberately.
 fn is_builtin(name: &str) -> bool {
-    matches!(name, "duration" | "min" | "max" | "abs")
+    // `phrase` is not a function anybody calls at run time — it is flattened
+    // into the node it sits on, and its words are checked against the signed
+    // bundle. It is known here because a component argument is typed before
+    // expansion, which is the one place a phrase is still a call.
+    matches!(name, "duration" | "min" | "max" | "abs" | crate::expand::PHRASE)
 }
 
 fn builtin_type(name: &str) -> Ty {
     match name {
+        crate::expand::PHRASE => Ty::Str,
         "duration" => Ty::Int,
         _ => Ty::Int,
     }

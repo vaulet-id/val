@@ -421,3 +421,40 @@ function f(xs: List<int>): List<int> {
         "{msgs:?}"
     );
 }
+
+/// A component takes text, and text with values in it is a phrase — which had
+/// never worked, because a component's arguments are typed before expansion and
+/// that is the one place a phrase is still a call.
+#[test]
+fn a_component_may_be_handed_a_phrase() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 1
+}
+
+component Badge(label: string) {
+  card(label)
+}
+
+@main
+screen Home {
+  column {
+    Badge(label: phrase("row {n}", n: state.points))
+    Badge(label: `row ${state.points}`)
+  }
+}
+"#;
+    let msgs: Vec<String> = valang::analyse(src)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.is_empty(), "{msgs:?}");
+}
