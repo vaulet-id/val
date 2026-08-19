@@ -80,8 +80,8 @@ export function FileTree({
           goes near the phone. */}
       {serverFiles?.length ? <Group label="server" files={serverFiles} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} canRemove={canRemove} /> : null}
       <div className="mt-auto border-t border-[var(--color-border)] px-3 py-2 text-[10px] leading-snug text-[var(--color-muted-foreground)]">
-        A package is several files sharing one scope. Nothing is imported across
-        one.
+        A package is several files sharing one scope. What crosses to another
+        package is what that package exports.
       </div>
     </aside>
   )

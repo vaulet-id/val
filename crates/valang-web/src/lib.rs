@@ -71,10 +71,11 @@ pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
         .unwrap_or_default();
 
     let hosts = hosts(&input["hosts"]);
+    let packages = packages(&input["packages"]);
     let (program, diagnostics) = if bundle.is_empty() {
-        valang::analyse_fully(source, None, &hosts)
+        valang::analyse_with_packages(source, None, &hosts, &packages)
     } else {
-        valang::analyse_fully(source, Some((&bundle, &locales)), &hosts)
+        valang::analyse_with_packages(source, Some((&bundle, &locales)), &hosts, &packages)
     };
 
     write(
@@ -104,7 +105,8 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
     let action = input["action"].as_str().unwrap_or("");
     let wallet = input["wallet"].to_string();
 
-    let (program, diagnostics) = valang::analyse(source);
+    let (program, diagnostics) =
+        valang::analyse_with_packages(source, None, &hosts(&input["hosts"]), &packages(&input["packages"]));
     let errors: Vec<String> = diagnostics
         .iter()
         .filter(|d| d.severity == valang::Severity::Error)
@@ -168,15 +170,6 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
     )
 }
 
-/// A screen, resolved against the wallet: the data the host answered with, the
-/// values the derived block computed, and a tree whose slots are values rather
-/// than the expressions that produced them.
-///
-/// The renderer used to resolve these itself, in Dart, which put `limit`,
-/// `order by` and `verified with` in a second language — and then in whatever
-/// the next renderer is written in. What is left over there is drawing and
-/// formatting, which is what a toolkit is for.
-#[no_mangle]
 /// One screen, resolved with what a press handed it.
 ///
 /// A parameterised screen cannot be resolved ahead of time — its content depends
@@ -188,7 +181,8 @@ pub extern "C" fn val_screen(ptr: *const u8, len: usize) -> *mut u8 {
     let name = input["screen"].as_str().unwrap_or("");
     let wallet = input["wallet"].to_string();
 
-    let (program, _) = valang::analyse(source);
+    let (program, _) =
+        valang::analyse_with_packages(source, None, &hosts(&input["hosts"]), &packages(&input["packages"]));
     let Ok(host) = Fixture::parse(&wallet) else {
         return write(json!({ "error": "the wallet is not valid JSON" }).to_string());
     };
@@ -201,13 +195,22 @@ pub extern "C" fn val_screen(ptr: *const u8, len: usize) -> *mut u8 {
     }
 }
 
+/// Every screen, resolved against the wallet: the data the host answered with,
+/// the values the derived block computed, and a tree whose slots are values
+/// rather than the expressions that produced them.
+///
+/// The renderer used to resolve these itself, in Dart, which put `limit`,
+/// `order by` and `verified with` in a second language — and then in whatever
+/// the next renderer is written in. What is left over there is drawing and
+/// formatting, which is what a toolkit is for.
 #[no_mangle]
 pub extern "C" fn val_render(ptr: *const u8, len: usize) -> *mut u8 {
     let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
     let source = input["source"].as_str().unwrap_or("");
     let wallet = input["wallet"].to_string();
 
-    let (program, _) = valang::analyse(source);
+    let (program, _) =
+        valang::analyse_with_packages(source, None, &hosts(&input["hosts"]), &packages(&input["packages"]));
     let Ok(host) = Fixture::parse(&wallet) else {
         return write(json!({ "screens": [] }).to_string());
     };
@@ -361,6 +364,25 @@ fn json_state(j: &Json) -> BTreeMap<String, valang_runtime::value::Value> {
 
 /// What the caller says it provides. A host hands this in; the language carries
 /// no list of what anybody can do or draw.
+/// The other packages this build can reach — every other project the editor has
+/// open, so importing across two of them is the same thing here as importing a
+/// published package.
+///
+/// Parsed rather than checked: whether that package builds is its own build's
+/// answer, and its unrelated mistakes have no business appearing in this one's
+/// panel. What is taken from it is checked on the way in.
+fn packages(j: &Json) -> valang::expand::Packages {
+    let mut loaded = Vec::new();
+    if let Some(list) = j.as_array() {
+        for entry in list {
+            if let Some(source) = entry.as_str() {
+                loaded.push(valang::parse::parse(source).0);
+            }
+        }
+    }
+    valang::expand::Packages::of(loaded)
+}
+
 fn hosts(j: &Json) -> valang::capability::Hosts {
     let mut loaded = Vec::new();
     if let Some(list) = j.as_array() {

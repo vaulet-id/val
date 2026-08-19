@@ -132,12 +132,17 @@ export function analyse(
   source: string,
   text?: Record<string, Record<string, string>>,
   locales?: string[],
+  packages?: string[],
 ): Analysis {
-  return call('val_analyse', { source, text, locales, hosts: HOSTS }) as Analysis
+  return call('val_analyse', { source, text, locales, hosts: HOSTS, packages }) as Analysis
 }
 
-export function resolve(source: string, wallet: unknown): { screens: Resolved[] } {
-  return call('val_render', { source, wallet }) as { screens: Resolved[] }
+export function resolve(
+  source: string,
+  wallet: unknown,
+  packages?: string[],
+): { screens: Resolved[] } {
+  return call('val_render', { source, wallet, packages }) as { screens: Resolved[] }
 }
 
 export type VerifyResult = {
@@ -162,8 +167,9 @@ export function screen(
   name: string,
   wallet: unknown,
   args: Record<string, unknown> = {},
+  packages?: string[],
 ): { name: string; tree: unknown[]; title?: unknown; error?: string } {
-  return call('val_screen', { source, screen: name, wallet, args }) as {
+  return call('val_screen', { source, screen: name, wallet, args, packages }) as {
     name: string
     tree: unknown[]
     error?: string
@@ -177,6 +183,7 @@ export function run(
   action: string,
   wallet: unknown,
   input: Record<string, unknown> = {},
+  packages?: string[],
 ): RunResult {
-  return call('val_run', { source, action, wallet, input }) as RunResult
+  return call('val_run', { source, action, wallet, input, packages }) as RunResult
 }

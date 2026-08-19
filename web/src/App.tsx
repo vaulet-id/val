@@ -105,14 +105,29 @@ export default function App() {
 
   const bundle = React.useMemo(() => bundleOf(packageFiles, sources), [packageFiles, sources])
 
+  // Every other project, as packages this build can reach. A project is one
+  // Micro App is one package, so importing across two of them here is the same
+  // thing as importing one that was published — which is the only way to find
+  // out whether it is, before publishing anything.
+  const others = React.useMemo(
+    () =>
+      projects
+        .filter((p) => p.id !== here.id)
+        .map((p) =>
+          p.files.filter((f) => f.path.endsWith('.val')).map((f) => sources[f.path] ?? '').join('\n'),
+        )
+        .filter((s) => s.trim() !== ''),
+    [projects, here, sources],
+  )
+
   const analysis = React.useMemo(() => {
     if (!ready) return null
     try {
-      return val.analyse(packageSource, bundle.keys, bundle.locales)
+      return val.analyse(packageSource, bundle.keys, bundle.locales, others)
     } catch {
       return null
     }
-  }, [ready, packageSource, bundle])
+  }, [ready, packageSource, bundle, others])
 
   const wallet = React.useMemo(() => {
     try {
@@ -127,11 +142,11 @@ export default function App() {
   const resolved = React.useMemo(() => {
     if (!ready || !analysis) return []
     try {
-      return val.resolve(packageSource, wallet).screens
+      return val.resolve(packageSource, wallet, others).screens
     } catch {
       return []
     }
-  }, [ready, analysis, packageSource, wallet])
+  }, [ready, analysis, packageSource, wallet, others])
 
   /// A screen the preview moved to, resolved with what the press handed it.
   ///
@@ -141,13 +156,13 @@ export default function App() {
     (name: string, args: Record<string, unknown>) => {
       if (!ready) return
       try {
-        const s = val.screen(packageSource, name, wallet, args) as unknown as Resolved
+        const s = val.screen(packageSource, name, wallet, args, others) as unknown as Resolved
         setOpened((all) => ({ ...all, [name]: s }))
       } catch {
         /* the screen stays as it was resolved without arguments */
       }
     },
-    [ready, packageSource, wallet],
+    [ready, packageSource, wallet, others],
   )
 
   // One press, both sides. The action runs on the device and the record it
@@ -159,7 +174,7 @@ export default function App() {
       setRunning(true)
       setDebug(true)
 
-      const run = val.run(packageSource, action, wallet, input)
+      const run = val.run(packageSource, action, wallet, input, others)
       let decision: Decision | undefined
       if (run.token && run.deviceKey) {
         decision = await runHandler(
@@ -189,7 +204,7 @@ export default function App() {
       setLog((l) => [...l, { at: Date.now(), run, decision }])
       setRunning(false)
     },
-    [ready, packageSource, wallet, monaco, sources, here],
+    [ready, packageSource, wallet, monaco, sources, here, others],
   )
 
   /// A project of somebody's own. The examples are a starting point; this is
