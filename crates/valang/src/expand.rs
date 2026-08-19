@@ -467,7 +467,17 @@ fn bind(call: &UiNode, decl: &ComponentDecl, d: &mut Vec<Diagnostic>) -> BTreeMa
     }
 
     for p in &decl.params {
-        if !out.contains_key(&p.name) && !p.ty.optional {
+        if out.contains_key(&p.name) {
+            continue;
+        }
+        // A parameter with a default is one the call site may leave out, and
+        // what it then means is written once where the component is, not once
+        // per call site.
+        if let Some(value) = &p.default {
+            out.insert(p.name.clone(), value.clone());
+            continue;
+        }
+        if !p.ty.optional {
             d.push(Diagnostic::error(
                 call.span,
                 format!("`{}` needs `{}`", decl.name, p.name),

@@ -949,7 +949,10 @@ fn narrowing_before_use(p: &Program, d: &mut Vec<Diagnostic>) {
                     })
                 };
                 match s {
-                    Stmt::Let { value, .. } | Stmt::Expr { value, .. } | Stmt::Return { value, .. } => check_expr(value),
+                    Stmt::Let { value, .. }
+                    | Stmt::Destructure { value, .. }
+                    | Stmt::Expr { value, .. }
+                    | Stmt::Return { value, .. } => check_expr(value),
                     Stmt::Patch { value, path, span } => {
                         check_expr(value);
                         let head = &path[0];
@@ -1030,7 +1033,11 @@ fn updates_take_paths(p: &Program, d: &mut Vec<Diagnostic>) {
 fn for_each_expr(p: &Program, f: &mut impl FnMut(&Expr)) {
     let visit_stmts = |stmts: &[Stmt], f: &mut dyn FnMut(&Expr)| {
         walk_stmts(stmts, &mut |s| match s {
-            Stmt::Let { value, .. } | Stmt::Expr { value, .. } | Stmt::Return { value, .. } | Stmt::Patch { value, .. } => {
+            Stmt::Let { value, .. }
+            | Stmt::Destructure { value, .. }
+            | Stmt::Expr { value, .. }
+            | Stmt::Return { value, .. }
+            | Stmt::Patch { value, .. } => {
                 value.walk(f)
             }
             Stmt::Effect { args, .. } => {

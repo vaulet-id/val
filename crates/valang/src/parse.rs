@@ -483,7 +483,16 @@ impl Parser {
                 let pname = self.ident();
                 self.eat(":");
                 let ty = self.type_ref();
-                params.push(Field { name: pname, ty, default: None, span: pspan });
+                // `note: string default "none"` — the same word a state field
+                // uses, because it is the same thing: a value for when nobody
+                // supplied one.
+                let default = if self.at("default") {
+                    self.bump();
+                    Some(self.expr(0))
+                } else {
+                    None
+                };
+                params.push(Field { name: pname, ty, default, span: pspan });
                 // Neither a name nor a type consumes anything when it is
                 // neither, and a parameter list that spins is a hang rather
                 // than a message.
@@ -573,6 +582,41 @@ impl Parser {
 
         if self.at("const") {
             self.bump();
+
+            // `const { merchant, amount } = row` — the fields, by their own
+            // names. One statement, so the right-hand side is read once.
+            if self.at("{") {
+                self.bump();
+                let mut names = Vec::new();
+                loop {
+                    self.skip_newlines();
+                    if self.eof() || self.eat("}") {
+                        break;
+                    }
+                    if self.eat(",") {
+                        continue;
+                    }
+                    if self.peek().kind == Kind::Ident {
+                        names.push(self.bump().text);
+                    } else {
+                        let bad = self.bump();
+                        self.diagnostics.push(Diagnostic::error(
+                            bad.span,
+                            format!("`{}` is not a field name", bad.text),
+                        ));
+                    }
+                }
+                self.expect("=");
+                let value = self.expr(0);
+                if names.is_empty() {
+                    self.diagnostics.push(Diagnostic::error(
+                        span,
+                        "this takes nothing out of the record. Name the fields you want",
+                    ));
+                }
+                return Some(Stmt::Destructure { names, value, span });
+            }
+
             let name = self.ident();
             self.expect("=");
             // An action may re-declare the data a screen declared, because it

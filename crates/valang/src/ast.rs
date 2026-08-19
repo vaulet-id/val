@@ -299,6 +299,11 @@ pub struct Directive {
 pub enum Stmt {
     /// `const x = …`
     Let { name: String, value: Expr, span: Span },
+    /// `const { merchant, amount } = row`
+    ///
+    /// One statement rather than one per name, so the right-hand side is read
+    /// once. Written out as several would read a credential once per field.
+    Destructure { names: Vec<String>, value: Expr, span: Span },
     /// A bare predicate in `require` or `verify`
     Expr { value: Expr, span: Span },
     /// `member.tier: tier` in `update` — a patch, not an assignment
@@ -326,6 +331,7 @@ impl Stmt {
     pub fn span(&self) -> Span {
         match self {
             Stmt::Let { span, .. }
+            | Stmt::Destructure { span, .. }
             | Stmt::Expr { span, .. }
             | Stmt::Patch { span, .. }
             | Stmt::Binding { span, .. }

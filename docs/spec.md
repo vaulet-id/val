@@ -432,6 +432,24 @@ nothing again is how that belief reaches a person as a blank card. `?.` says
 there might not be one, and makes the whole path optional; `?: ` supplies what
 to use instead. Neither evaluates its left side twice.
 
+### Taking a record apart, and leaving an argument out
+
+```val
+const { merchant, amount } = row
+
+component Badge(label: string, tone: string default "neutral") { … }
+Badge(label: "one")
+```
+
+Destructuring is one statement rather than one binding per field, so the
+right-hand side is read once — a record here can be a credential the host had to
+be asked for. Every field keeps the record's provenance: pulling `amount` out of
+a verified receipt does not make it a number somebody typed.
+
+`default` is the same word a state field uses, and means the same thing: what a
+value is when nobody supplied one. It is written where the parameter is, so it
+is written once rather than at every call site.
+
 ### Across packages
 
 A component is visible to every file in its package — a package's files share

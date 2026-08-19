@@ -71,6 +71,30 @@ impl<'a> Eval<'a> {
                 Ok(())
             }
 
+            // Read once, then taken apart. Written as one binding per field it
+            // would read the record once per field, and a record here can be a
+            // credential the host had to be asked for.
+            Stmt::Destructure { names, value, span } => {
+                let v = self.expr(value, state)?;
+                for name in names {
+                    let field = match &v {
+                        Value::Map(m) => m.get(name).cloned().unwrap_or(Value::Null),
+                        Value::Credential { claims, .. } => {
+                            claims.get(name).cloned().unwrap_or(Value::Null)
+                        }
+                        Value::Null => {
+                            return Err(Trap::Defect(format!(
+                                "`{name}` was read from nothing at line {}",
+                                span.line
+                            )))
+                        }
+                        _ => Value::Null,
+                    };
+                    self.bind(name, field);
+                }
+                Ok(())
+            }
+
             Stmt::Return { value, .. } => {
                 let v = self.expr(value, state)?;
                 self.bind("__return", v);

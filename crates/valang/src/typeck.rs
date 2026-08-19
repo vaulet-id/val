@@ -354,7 +354,7 @@ impl<'a> Cx<'a> {
                         }
                         for param in &params {
                             let given = args.iter().any(|a| a.name.as_deref() == Some(&param.name));
-                            if !given && !param.ty.optional {
+                            if !given && !param.ty.optional && param.default.is_none() {
                                 self.err(
                                     *span,
                                     format!("`{name}` takes `{}` and this does not give it", param.name),
@@ -433,6 +433,16 @@ impl<'a> Cx<'a> {
             Stmt::Binding { name, ty, .. } => {
                 let t = self.resolve(ty);
                 self.bind(name, Typed::plain(t));
+            }
+            // Every field takes the record's provenance, because that is where
+            // it came from: pulling `amount` out of a verified receipt does not
+            // make it a number somebody typed.
+            Stmt::Destructure { names, value, span } => {
+                let t = self.expr(value);
+                for n in names {
+                    let field = self.member(value, n, *span);
+                    self.bind(n, Typed { ty: field.ty, from: t.from.clone(), origins: t.origins.clone() });
+                }
             }
             Stmt::Data { name, source, .. } => {
                 let t = match source {
