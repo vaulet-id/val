@@ -228,3 +228,23 @@ screen Home {
     let msgs: Vec<String> = d.into_iter().map(|x| x.message).collect();
     assert!(msgs.iter().any(|m| m.contains("`Loop` uses itself")), "{msgs:?}");
 }
+
+/// A parser loop whose body can consume nothing is a hang, not a message — and
+/// in the editor a hang is a tab that stops responding. `List(int)`, the wrong
+/// bracket, spun forever in the type-argument loop and again in the parameter
+/// list.
+///
+/// The assertion is that it returns at all: what it says is a second question.
+#[test]
+fn a_type_written_with_the_wrong_bracket_reports_rather_than_spinning() {
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction f(rows: List(int)): int {\n  return 1\n}\n";
+    let e = errors(src);
+    assert!(!e.is_empty(), "a malformed type said nothing at all");
+}
+
+#[test]
+fn a_parameter_that_is_neither_a_name_nor_a_type_reports() {
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction f(: , 9): int {\n  return 1\n}\n";
+    let e = errors(src);
+    assert!(!e.is_empty(), "a malformed parameter list said nothing at all");
+}

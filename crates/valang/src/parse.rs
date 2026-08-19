@@ -383,7 +383,15 @@ impl Parser {
                 if self.eat(",") {
                     continue;
                 }
+                // A type that is not a name consumes nothing, so without this
+                // the loop spins on it forever. `List(int)` — the wrong bracket
+                // — hung the compiler rather than reporting anything, and in
+                // the editor that is a tab that stops responding.
+                let before = self.i;
                 args.push(self.type_ref());
+                if self.i == before {
+                    self.bump();
+                }
             }
         }
         let optional = self.eat("?");
@@ -470,10 +478,17 @@ impl Parser {
                     continue;
                 }
                 let pspan = self.peek().span;
+                let before = self.i;
                 let pname = self.ident();
                 self.eat(":");
                 let ty = self.type_ref();
                 params.push(Field { name: pname, ty, default: None, span: pspan });
+                // Neither a name nor a type consumes anything when it is
+                // neither, and a parameter list that spins is a hang rather
+                // than a message.
+                if self.i == before {
+                    self.bump();
+                }
             }
         }
         params
