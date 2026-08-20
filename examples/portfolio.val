@@ -63,6 +63,7 @@ function returnBasisPoints(marketValue: int, costBasis: int): int {
   return costBasis == 0 ? 0 : (marketValue - costBasis) * 10_000 / costBasis
 }
 
+@main
 screen Portfolio {
   // Declared, resolved before the screen is drawn. `verified with` means a
   // stale or unlicensed holding cannot appear in the list — not "is filtered

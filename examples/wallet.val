@@ -10,6 +10,7 @@
 // sharing one scope, and the list of what this application may do is not a sum
 // of lists — a person consented to one.
 
+@main
 screen Wallet {
   title: phrase("walletTitle")
 

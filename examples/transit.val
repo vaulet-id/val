@@ -67,6 +67,7 @@ action Tap {
   }
 }
 
+@main
 screen Pass {
   title: phrase("passTitle")
 

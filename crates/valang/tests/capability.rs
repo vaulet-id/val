@@ -186,12 +186,14 @@ fn a_screen_setting_nothing_provides_is_reported() {
 }
 
 /// A package is several files, so "the first screen declared" would mean the
-/// order files were read decides what somebody sees.
+/// order files were read decides what somebody sees. Asked of one screen as
+/// well as of several: one screen today is two tomorrow, and the day it becomes
+/// two is not the day to find out which one opens.
 #[test]
-fn more_than_one_screen_says_where_it_opens() {
+fn a_package_with_screens_says_where_it_opens() {
     let src = BASE.replace("@main\nscreen Home", "screen Home");
     let msgs = errors(&src, false);
-    assert!(msgs.iter().any(|m| m.contains("none is marked `@main`")), "got {msgs:?}");
+    assert!(msgs.iter().any(|m| m.contains("no screen is marked `@main`")), "got {msgs:?}");
 }
 
 #[test]

@@ -287,3 +287,180 @@ fn a_component_may_use_another_component() {
     );
     assert!(e.is_empty(), "{e:?}");
 }
+
+/// A package that exports something built out of what it imported.
+#[test]
+fn an_export_may_be_built_from_an_import() {
+    let base = r#"
+app "org.base"
+version 1
+
+capabilities {
+}
+
+export component Chip(label: string) {
+  section(label)
+}
+"#;
+    let middle = r#"
+app "org.middle"
+version 1
+
+capabilities {
+}
+
+import "org.base/1" { Chip }
+
+export component Row(label: string) {
+  column {
+    Chip(label: label)
+  }
+}
+"#;
+    let app = r#"
+app "org.app"
+version 1
+
+capabilities {
+}
+
+import "org.middle/1" { Row }
+
+@main
+screen Home {
+  column {
+    Row(label: "one")
+  }
+}
+"#;
+    let e = errors(app, &[base, middle]);
+    assert!(e.is_empty(), "{e:?}");
+}
+
+/// A package that imports itself.
+#[test]
+fn a_package_that_imports_itself_says_so() {
+    let me = r#"
+app "org.me"
+version 1
+
+capabilities {
+}
+
+import "org.me/1" { Chip }
+
+export component Chip(label: string) {
+  section(label)
+}
+
+@main
+screen Home {
+  column {
+    Chip(label: "x")
+  }
+}
+"#;
+    let e = errors(me, &[me]);
+    assert!(!e.is_empty(), "a package imported itself and nothing was said");
+}
+
+/// An exported component whose default argument reads state.
+#[test]
+fn a_default_may_not_reach_for_state_either() {
+    let leaky = r#"
+app "org.leaky"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+export component Badge(label: string, n: int default state.points) {
+  keyValue {
+    text: label
+    value: n
+  }
+}
+"#;
+    let e = errors(leaky, &[]);
+    assert!(
+        e.iter().any(|m| m.contains("exported and reads `state`")),
+        "a default reached into the package it lands in: {e:?}"
+    );
+}
+
+/// One screen and no `@main`.
+#[test]
+fn one_screen_still_says_where_it_opens() {
+    let one = r#"
+app "org.one"
+version 1
+
+capabilities {
+}
+
+screen Home {
+  column {
+    section("hi")
+  }
+}
+"#;
+    let e = errors(one, &[]);
+    assert!(!e.is_empty(), "a package with a screen nobody opens at built clean");
+}
+
+/// Two packages that import each other.
+#[test]
+fn two_packages_that_import_each_other_terminate() {
+    let a = r#"
+app "org.a"
+version 1
+
+capabilities {
+}
+
+import "org.b/1" { FromB }
+
+export component FromA(label: string) {
+  column {
+    FromB(label: label)
+  }
+}
+"#;
+    let b = r#"
+app "org.b"
+version 1
+
+capabilities {
+}
+
+import "org.a/1" { FromA }
+
+export component FromB(label: string) {
+  column {
+    FromA(label: label)
+  }
+}
+"#;
+    let app = r#"
+app "org.app"
+version 1
+
+capabilities {
+}
+
+import "org.a/1" { FromA }
+
+@main
+screen Home {
+  column {
+    FromA(label: "x")
+  }
+}
+"#;
+    let e = errors(app, &[a, b]);
+    assert!(!e.is_empty(), "a cycle across packages built clean");
+}

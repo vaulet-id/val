@@ -457,10 +457,13 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
 
     // Where a package opens. A package is several files, so "the first screen
     // declared" would mean the order files were read decides what somebody sees.
-    if program.screens.len() > 1 && starts == 0 {
+    // One screen and no mark used to be allowed, which left a package whose
+    // only screen nothing opens at: every screen said `start: false` and a host
+    // had nothing to draw first.
+    if !program.screens.is_empty() && starts == 0 {
         d.push(Diagnostic::error(
             program.screens[0].span,
-            "more than one screen, and none is marked `@main`. A package opens at one, and which one is not the order the files were read".to_string(),
+            "no screen is marked `@main`, and a package opens at one. Which one is not the order the files were read, and one screen today is two tomorrow".to_string(),
         ));
     }
     if starts > 1 {

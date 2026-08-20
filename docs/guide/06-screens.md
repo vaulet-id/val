@@ -32,9 +32,9 @@ screen Wallet { … }
 screen Receipt(id: string) { … }
 ```
 
-A package with more than one screen and no `@main` does not build: which screen
-somebody sees first would otherwise depend on the order the files happened to be
-read.
+A package with a screen and no `@main` does not build, even when there is only
+one: which screen somebody sees first would otherwise depend on the order the
+files happened to be read, and one screen today is two tomorrow.
 
 ## A screen may show one thing or another
 

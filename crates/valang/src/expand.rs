@@ -121,6 +121,11 @@ pub fn expand(program: &mut Program, packages: &Packages) -> Vec<Diagnostic> {
             for node in &c.tree {
                 reaches_outside_its_arguments(node, &c.name, &mut d);
             }
+            for p in &c.params {
+                if let Some(value) = &p.default {
+                    reaches_outside_its_arguments_expr(value, &c.name, p.span, &mut d);
+                }
+            }
         }
     }
 
@@ -169,10 +174,45 @@ fn resolve_imports(
     packages: &Packages,
     d: &mut Vec<Diagnostic>,
 ) -> (BTreeMap<String, ComponentDecl>, std::collections::BTreeSet<String>) {
+    let mut chain = Vec::new();
+    if let (Some(app), Some(version)) = (&program.app, &program.version) {
+        chain.push(format!("{app}/{version}"));
+    }
+    take(&program.imports, packages, &mut chain, d)
+}
+
+/// What a list of imports brings in.
+///
+/// Recursive, because a package may export something built out of what it
+/// imported: resolving only the exporting package's own components left that
+/// name unexpanded, and it arrived at the host as a component nobody ships.
+///
+/// The chain is the packages being resolved, so that two packages importing
+/// each other are told about rather than expanded until the memory runs out.
+fn take(
+    imports: &[crate::ast::ImportDecl],
+    packages: &Packages,
+    chain: &mut Vec<String>,
+    d: &mut Vec<Diagnostic>,
+) -> (BTreeMap<String, ComponentDecl>, std::collections::BTreeSet<String>) {
     let mut out: BTreeMap<String, ComponentDecl> = BTreeMap::new();
     let mut unresolved = std::collections::BTreeSet::new();
 
-    for import in &program.imports {
+    for import in imports {
+        if chain.contains(&import.package) {
+            d.push(Diagnostic::error(
+                import.span,
+                format!(
+                    "`{}` is imported by something it imports: {} → {}. A package is built out of the ones it names, so a circle among them has no bottom",
+                    import.package,
+                    chain.join(" → "),
+                    import.package
+                ),
+            ));
+            unresolved.extend(import.names.iter().cloned());
+            continue;
+        }
+
         let Some(source) = packages.find(&import.package) else {
             let known: Vec<&String> = packages.ids().collect();
             d.push(Diagnostic::error(
@@ -191,8 +231,18 @@ fn resolve_imports(
             continue;
         };
 
-        let theirs: BTreeMap<String, ComponentDecl> =
+        // What that package can build with: its own components, and whatever it
+        // imported in turn.
+        chain.push(import.package.clone());
+        let (theirs_imported, _) = take(&source.imports, packages, chain, d);
+        chain.pop();
+
+        let mut theirs: BTreeMap<String, ComponentDecl> =
             source.components.iter().map(|c| (c.name.clone(), c.clone())).collect();
+        for (name, decl) in theirs_imported {
+            theirs.entry(name).or_insert(decl);
+        }
+
         let their_types: BTreeMap<String, CredentialDecl> =
             source.types.iter().map(|t| (t.name.clone(), t.clone())).collect();
 
@@ -212,6 +262,18 @@ fn resolve_imports(
                 unresolved.insert(name.clone());
                 continue;
             };
+            // A component that reaches back into the package that imported it
+            // expands forever. The per-package check cannot see this one: it is
+            // a circle drawn through two packages, and neither half of it is a
+            // cycle on its own.
+            if let Some(path) = cycle_from(name, &theirs) {
+                d.push(Diagnostic::error(
+                    import.span,
+                    format!("`{name}` uses itself, through the packages it was built from: {path}"),
+                ));
+                unresolved.insert(name.clone());
+                continue;
+            }
             if !decl.exported {
                 d.push(Diagnostic::error(
                     import.span,
@@ -231,6 +293,11 @@ fn resolve_imports(
             for node in &tree {
                 reaches_outside_its_arguments(node, name, d);
             }
+            for p in &decl.params {
+                if let Some(value) = &p.default {
+                    reaches_outside_its_arguments_expr(value, name, p.span, d);
+                }
+            }
 
             out.insert(name.clone(), ComponentDecl { tree, ..decl.clone() });
         }
@@ -247,17 +314,38 @@ fn resolve_imports(
 /// the body.
 fn reaches_outside_its_arguments(node: &UiNode, component: &str, d: &mut Vec<Diagnostic>) {
     for a in &node.args {
-        if let Some(root) = root_of(&a.value) {
-            if NOT_IN_AN_EXPORT.contains(&root.as_str()) {
-                d.push(Diagnostic::error(
-                    a.span,
-                    format!("`{component}` is exported and reads `{root}`, which belongs to whichever package it is expanded into. An exported component takes what it draws as an argument"),
-                ));
-            }
-        }
+        reaches_outside_its_arguments_expr(&a.value, component, a.span, d);
     }
     for child in node.children.iter().chain(node.otherwise.iter()) {
         reaches_outside_its_arguments(child, component, d);
+    }
+}
+
+/// The same rule for one expression, so that a parameter's default is held to
+/// it as well: `n: int default state.points` is read where the component lands,
+/// which is a package whose state it has never seen.
+fn reaches_outside_its_arguments_expr(
+    value: &Expr,
+    component: &str,
+    span: Span,
+    d: &mut Vec<Diagnostic>,
+) {
+    let mut found = None;
+    value.walk(&mut |e| {
+        if found.is_some() {
+            return;
+        }
+        if let Some(root) = root_of(e) {
+            if NOT_IN_AN_EXPORT.contains(&root.as_str()) {
+                found = Some(root);
+            }
+        }
+    });
+    if let Some(root) = found {
+        d.push(Diagnostic::error(
+            span,
+            format!("`{component}` is exported and reads `{root}`, which belongs to whichever package it is expanded into. An exported component takes what it draws as an argument"),
+        ));
     }
 }
 

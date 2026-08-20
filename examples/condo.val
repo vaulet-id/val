@@ -124,6 +124,7 @@ action VoteAgainst {
   }
 }
 
+@main
 screen Meeting {
   title: phrase("meetingTitle")
 

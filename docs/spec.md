@@ -379,9 +379,13 @@ screen Wallet {
 ```
 
 **One screen carries `@main`.** It is where the application opens; every other
-screen is reached by a press. A package with more than one screen and no `@main`
-is rejected, because otherwise the first screen somebody sees would depend on
-the order the package's files were read.
+screen is reached by a press. A package with any screen and no `@main` is
+rejected — one screen included — because otherwise the first screen somebody
+sees would depend on the order the package's files were read.
+
+**Imports are resolved through.** A package may export something built out of
+what it imported, and a circle among packages is reported rather than expanded:
+neither half of it is a cycle on its own, so the check is made where they meet.
 
 **A screen may show one tree or another.**
 
