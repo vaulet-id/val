@@ -114,3 +114,24 @@ fn the_state_root_is_of_the_state_and_nothing_else() {
     assert_ne!(root_of(1), root_of(2), "two different states shared a root");
     assert_eq!(root_of(7), root_of(7), "one state gave two roots");
 }
+
+/// Totality bounds how many steps a program takes and says nothing about how
+/// large a value becomes. The host carries the second bound, and an action that
+/// would put more in state than it carries does not commit.
+#[test]
+fn a_state_larger_than_the_host_carries_does_not_commit() {
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  rows: List<int> default []\n}\n\naction Fill {\n  compute {\n    const many = (1...9000).map { r -> r }\n  }\n\n  update {\n    rows: many\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Fill }\n  }\n}\n";
+    let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
+    let (compiled, d) = valang::analyse_fully(src, None, &hosts);
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    let host = valang_runtime::fixture::Fixture::parse(WALLET).unwrap();
+    let mut state = BTreeMap::new();
+    state.insert("rows".to_string(), Value::List(Vec::new()));
+    let run = valang_runtime::run_action(&compiled, src, "Fill", &state, &BTreeMap::new(), &host);
+    assert!(
+        !matches!(run.outcome, valang_runtime::Outcome::Committed),
+        "a state of nine thousand rows committed against a host carrying four thousand: {:?}",
+        run.outcome
+    );
+}

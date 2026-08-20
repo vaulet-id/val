@@ -130,3 +130,38 @@ fn a_nullifier_already_spent_is_refused() {
     assert!(check_spent("fresh", &expect).is_ok());
     assert!(matches!(check_spent("already-used", &expect), Err(Refusal::AlreadySpent(_))));
 }
+
+/// Base64url with bits left over.
+///
+/// 64 bytes of signature is 86 base64url characters, which is 516 bits: the
+/// last character carries four bits nobody reads. The decoder threw them away,
+/// so sixteen different last characters decoded to the same signature and one
+/// record verified under sixteen token strings — a server that remembers what
+/// it has seen by the token it was handed would have seen sixteen.
+#[test]
+fn a_token_with_bits_left_over_is_not_the_same_token() {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+    let (token, key, code) = a_run();
+    let expect =
+        Expectation { code_hash: &code, device_key: &key, last_root: None, spent: &never_spent };
+    verify(&token, &expect).expect("the record it was made from verifies");
+
+    let parts: Vec<&str> = token.split('.').collect();
+    let sig = parts[2];
+    let last = sig.as_bytes()[sig.len() - 1];
+    let value = ALPHABET.iter().position(|c| *c == last).expect("base64url") as u8;
+
+    // Another character whose top two bits are the same: the four bits below
+    // them are discarded, so it decodes to the same 64 bytes.
+    let other = ALPHABET[((value & 0b11_0000) | ((value.wrapping_add(1)) & 0b00_1111)) as usize];
+    let mut bytes = sig.as_bytes().to_vec();
+    *bytes.last_mut().unwrap() = other;
+    let twin = format!("{}.{}.{}", parts[0], parts[1], String::from_utf8(bytes).unwrap());
+    assert_ne!(twin, token, "the test did not change the token");
+
+    assert!(
+        verify(&twin, &expect).is_err(),
+        "one record verified under two token strings: the bits nobody reads were not checked"
+    );
+}

@@ -42,6 +42,12 @@ fn b64(bytes: &[u8]) -> String {
 }
 
 pub fn b64_decode(s: &str) -> Option<Vec<u8>> {
+    // A length that leaves one character over encodes nothing: six bits cannot
+    // finish a byte, and a decoder that accepted it would be reading a string
+    // nobody could have written.
+    if s.len() % 4 == 1 {
+        return None;
+    }
     let mut out = Vec::with_capacity(s.len() * 3 / 4);
     let mut acc = 0u32;
     let mut bits = 0u32;
@@ -60,6 +66,14 @@ pub fn b64_decode(s: &str) -> Option<Vec<u8>> {
             bits -= 8;
             out.push((acc >> bits) as u8);
         }
+    }
+    // The bits left over are not part of any byte, and every encoder writes
+    // them as zero. Accepting anything else made one signature reachable from
+    // sixteen strings: the same record, verifying under sixteen tokens, and a
+    // server that remembers what it has seen by the token it was handed would
+    // have seen sixteen of them.
+    if bits > 0 && acc & ((1 << bits) - 1) != 0 {
+        return None;
     }
     Some(out)
 }
