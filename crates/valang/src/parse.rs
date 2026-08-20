@@ -1137,6 +1137,12 @@ impl Parser {
                     bad.span,
                     format!("a loop reads `for (row in rows)`, and this says `{}`", bad.text),
                 ));
+                // Eaten, so that what follows is read as the list rather than
+                // as a syntax error three tokens later. One mistake that spills
+                // messages down the line buries the one that taught the rule.
+                if bad.kind == Kind::Ident {
+                    self.bump();
+                }
             }
             let over = self.expr(0);
             self.expect(")");

@@ -242,3 +242,64 @@ action Floats {
     const price = 12.50
   }
 }
+
+// 13. Writing a `const` again.
+action WriteAConst {
+  compute {
+    const fixed = 1
+    // error: `fixed` is a `const`, so it is what it was defined as. A definition
+    //        can be read from anywhere in the block; a variable has to be read
+    //        downwards, so the language makes you say which one you meant.
+    fixed = 2
+  }
+}
+
+// 14. Writing a name where nothing is worked out.
+action WriteInRequire {
+  require {
+    let x = 1
+    // error: `require` holds conditions. The two places a value is worked out
+    //        are `compute` and a function, and a name is written again in those.
+    x = 2
+  }
+}
+
+// 15. A range longer than a screen can be made of.
+@main
+screen TooManyRows {
+  column {
+    // error: every list in this language is bounded. A range is written, so its
+    //        bound is written too — ten thousand, refused here rather than
+    //        found by a phone.
+    for (i in 1...999999) {
+      text(i)
+    }
+  }
+}
+
+// 16. A combinator with no function.
+function nothingToApply(xs: List<int>): List<int> {
+  // error: `map` is given a function — written where it is used, or the name of
+  //        one this package declares. Given neither it used to return the list
+  //        unchanged, which compiled, ran, and did nothing.
+  return xs.map(notAFunction)
+}
+
+// 17. A loop that does not say what it reads over.
+screen WrongLoopWord {
+  column {
+    // error: a loop reads `for (row in rows)`.
+    for (i of 1...3) {
+      text(i)
+    }
+  }
+}
+
+// 18. A keyword as a name.
+action KeywordName {
+  compute {
+    // error: a keyword is never a name, so reading a declaration never depends
+    //        on knowing what else the package declared.
+    const screen = 1
+  }
+}

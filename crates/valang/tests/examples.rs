@@ -119,6 +119,12 @@ fn rejected_is_rejected_for_the_reasons_it_says() {
         "a list has no index in this language",   // inside the recursion example
         "expected `Verified<ReceiptFromMerchant>`, found `Credential<PurchaseReceipt>`", // 5.
         "found `Verified<SignatureOnly>`",        // 6. verified against the wrong policy
+        "is a `const`, so it is what it was defined as", // 13. writing a const again
+        "is not where a value is worked out",     // 14. writing where nothing is worked out
+        "more steps than a screen can be made of", // 15. a range longer than a screen
+        "is given a function",                    // 16. a combinator with no function
+        "a loop reads `for (row in rows)`",       // 17. a loop that says `of`
+        "is a keyword, and a keyword is never a name", // 18. a keyword as a name
     ] {
         assert!(
             joined.contains(want),

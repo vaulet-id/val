@@ -4,8 +4,8 @@ These are the fixtures. `crates/valang/tests` compiles them, the playground
 opens them, and an example that stops compiling is a change somebody made — which
 is the point of keeping them here rather than in a document.
 
-`rejected.val` is the other kind: each numbered program in it must *not* compile,
-and carries the error it is owed in a comment. It was written by reading the
+`rejected.val` is the other kind: each of its eighteen numbered programs must
+*not* compile, and carries the error it is owed in a comment. It was written by reading the
 specification rather than the compiler, so it is the one place the two are made
 to disagree on purpose.
 
