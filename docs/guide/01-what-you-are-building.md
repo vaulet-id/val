@@ -34,8 +34,9 @@ not a copy of the document.
 **You cannot do anything you did not declare.** Capabilities are checked before
 your code runs. Declaring one you never use fails the build.
 
-**Some things are not in the language.** No floating point, no loops, no
-recursion, no string building. See [the reference](../spec.md).
+**Some things are not in the language.** No floating point, no recursion, no
+loop whose end is not known, and no concatenating sentences together. See
+[the reference](../spec.md).
 
 ## VAL or a webview
 

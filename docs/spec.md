@@ -128,8 +128,9 @@ state {
 }
 ```
 
-State fields use `default`, not `=`. There is no assignment anywhere in the
-language.
+State fields use `default`, not `=`: state is changed by an `update` block, so
+that every change to it is a line in the record somebody can read. A local `let`
+is a different thing and may be written again.
 
 ### Working with values
 

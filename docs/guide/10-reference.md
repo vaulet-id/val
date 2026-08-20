@@ -75,8 +75,9 @@ min  max  abs
 map  filter  fold  any  all  count  first
 ```
 
-Bounded by the list they visit. No recursion, no loops, no index — every program
-halts and the compiler knows it.
+Bounded by the list they visit. No recursion and no index — and a `for` over a
+screen runs over a list the host answered with or a range whose length is
+written down, so every program halts and the compiler knows it.
 
 ## Phases
 

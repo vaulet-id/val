@@ -74,7 +74,8 @@ min  max  abs
 map  filter  fold  any  all  count  first
 ```
 
-มีขอบเขตเท่ากับ list ที่มันเดิน ไม่มี recursion ไม่มี loop ไม่มี index —
+มีขอบเขตเท่ากับ list ที่มันเดิน ไม่มี recursion ไม่มี index และ `for` บนหน้าจอวนบน list
+ที่ host ตอบมา หรือ range ที่เขียนความยาวไว้ —
 ทุกโปรแกรมหยุด และคอมไพเลอร์รู้
 
 ## เฟส
