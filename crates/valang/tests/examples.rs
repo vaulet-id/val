@@ -295,7 +295,13 @@ action Reachable { compute { const a = 1 } }
 action Orphan    { compute { const b = 2 } }
 screen S { column { button(text: "go", onTap: Reachable) } }
 "#;
-    let (_, d) = analyse(src);
+    // Against a registry: which props hold an action is the registry's answer,
+    // and without one nothing here can tell a press from any other argument.
+    let hosts = valang::capability::Hosts::of(vec![valang::capability::Host::parse(include_str!(
+        "../../../hosts/core.json"
+    ))
+    .expect("the core registry parses")]);
+    let (_, d) = valang::analyse_fully(src, None, &hosts);
     let said: Vec<&str> = d.iter().map(|d| d.message.as_str()).collect();
     assert!(said.iter().any(|m| m.contains("no screen names `Orphan`")), "{said:?}");
     assert!(!said.iter().any(|m| m.contains("Reachable")), "{said:?}");

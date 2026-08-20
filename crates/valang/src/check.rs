@@ -51,6 +51,13 @@ fn every_action_is_reachable(p: &Program, d: &mut Vec<Diagnostic>) {
         return;
     }
 
+    // Which props hold an action is the registry's answer, and without one this
+    // check has no way to tell a press from any other argument. Asked anyway,
+    // it would call every action unreachable — so it does not ask.
+    if p.handlers.is_empty() {
+        return;
+    }
+
     let mut pressed: HashSet<String> = HashSet::new();
     for s in &p.screens {
         for n in s.title.iter().chain(s.tree.iter()) {

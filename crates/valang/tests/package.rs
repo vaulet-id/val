@@ -8,8 +8,15 @@
 const LOYALTY: &str = include_str!("../../../examples/loyalty.val");
 const WALLET: &str = include_str!("../../../examples/wallet.val");
 
+/// Against a registry, because half of what is checked here needs one: which
+/// props hold an action is the registry's answer, and a press cannot be told
+/// from any other argument without it.
 fn errors(src: &str) -> Vec<String> {
-    let (_, d) = valang::analyse(src);
+    let hosts = valang::capability::Hosts::of(vec![valang::capability::Host::parse(include_str!(
+        "../../../hosts/core.json"
+    ))
+    .expect("the core registry parses")]);
+    let (_, d) = valang::analyse_fully(src, None, &hosts);
     d.iter()
         .filter(|x| x.severity == valang::diag::Severity::Error)
         .map(|x| x.message.clone())
