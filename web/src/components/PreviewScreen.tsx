@@ -46,11 +46,27 @@ export function PreviewScreen({
   }, [ready, screens, text, locale, dark])
 
   // Not checked in: forty megabytes of CanvasKit, and a repository keeps its
-  // history forever. So the panel has to be honest about not being built.
+  // history forever. So the panel has to be honest about not being built — and
+  // has to ask, rather than wait.
+  //
+  // It waited two and a half seconds for the iframe to say hello and called
+  // anything slower missing. That is one timer answering two questions, and on
+  // a deployment — where CanvasKit is fetched over a network rather than off a
+  // disk — the answer it gave was that a preview which was there and loading
+  // had never been built, with a shell script to run to fix it.
   React.useEffect(() => {
-    const timer = setTimeout(() => setMissing(!ready), 2500)
-    return () => clearTimeout(timer)
-  }, [ready])
+    let live = true
+    fetch(`${import.meta.env.BASE_URL}preview/flutter_bootstrap.js`, { method: 'HEAD' })
+      .then((r) => {
+        if (live && !r.ok) setMissing(true)
+      })
+      .catch(() => {
+        if (live) setMissing(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [])
 
   if (missing && !ready)
     return (
