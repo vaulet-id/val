@@ -36,6 +36,14 @@ pub struct Program {
     /// `media.video`. Filled in by the pass that reads the host's registry, and
     /// read by the one that asks whether a declared capability goes unused.
     pub uses: Vec<String>,
+    /// The props that hold an action, as the host's registry names them —
+    /// `onTap`, and `onRemove` on a list. Filled by the pass that reads the
+    /// registry and read by the one that asks whether a press names something
+    /// that exists, which has no registry of its own.
+    ///
+    /// It was the string `"onTap"`, written in three places, so `onRemove` named
+    /// an action nothing declared and nobody said so.
+    pub handlers: Vec<String>,
     /// Every `//` line in the file, where it was. Held on the program rather
     /// than on the nodes: a comment belongs to a position, and which node it is
     /// about is a guess the printer makes rather than a fact the parser has.

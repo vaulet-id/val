@@ -225,3 +225,48 @@ screen Home {
         "a state field took its starting value from something outside the declaration"
     );
 }
+
+/// "A press names an action." Every handler does, not only `onTap` — the core
+/// registry gives `list` an `onRemove`, and a target nothing declares is the
+/// same mistake wherever it is written.
+#[test]
+fn every_handler_names_something_that_exists() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+action Go {
+  update {
+    n: 1
+  }
+}
+
+@main
+screen Home {
+  column {
+    list([1, 2]) { r ->
+      text(r)
+    }
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    assert!(errors(src).is_empty(), "{:?}", errors(src));
+
+    let broken = src.replace(
+        "    list([1, 2]) { r ->",
+        "    list([1, 2]) { r ->\n      onRemove: Nowhere",
+    );
+    let e = errors(&broken);
+    assert!(
+        e.iter().any(|m| m.contains("Nowhere")),
+        "`onRemove` named an action nothing declares and nobody said so: {e:?}"
+    );
+}

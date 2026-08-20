@@ -385,7 +385,8 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
     for screen in &program.screens {
         walk_ui(&screen.tree, &mut |node| {
             for a in &node.args {
-                if a.name.as_deref() != Some("onTap") {
+                let Some(prop) = a.name.as_deref() else { continue };
+                if !is_handler(&usable, prop) {
                     continue;
                 }
                 let Some(target) = a.value.path() else { continue };
@@ -475,6 +476,21 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
 
     program.uses = uses;
 
+    // Which props hold an action, from the registry rather than from a name
+    // written into the compiler.
+    let mut handlers: Vec<String> = Vec::new();
+    for host in &usable.loaded {
+        for cap in host.capabilities.values() {
+            for (prop, ty) in &cap.props {
+                if ty.trim_end_matches('?') == "Action" && !handlers.contains(prop) {
+                    handlers.push(prop.clone());
+                }
+            }
+        }
+    }
+    handlers.sort();
+    program.handlers = handlers;
+
     for id in &program.hosts {
         if !hosts.loaded.iter().any(|h| &h.id() == id) {
             d.push(Diagnostic::error(
@@ -530,6 +546,15 @@ fn check_word(
         span,
         format!("`{word}` is not one of {key}: {}", vocab.words.join(", ")),
     ));
+}
+
+/// Whether a prop holds an action, according to the registries in reach.
+fn is_handler(hosts: &Hosts, prop: &str) -> bool {
+    hosts.loaded.iter().any(|h| {
+        h.capabilities.values().any(|c| {
+            c.props.get(prop).is_some_and(|ty| ty.trim_end_matches('?') == "Action")
+        })
+    })
 }
 
 fn lower_first(s: &str) -> String {

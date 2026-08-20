@@ -56,7 +56,9 @@ fn every_action_is_reachable(p: &Program, d: &mut Vec<Diagnostic>) {
         for n in s.title.iter().chain(s.tree.iter()) {
             walk_ui(n, &mut |node| {
                 for a in &node.args {
-                    if a.name.as_deref() == Some("onTap") {
+                    // Every prop that holds an action, which the registry
+                    // named and this pass was told.
+                    if a.name.as_deref().is_some_and(|n| p.handlers.iter().any(|h| h == n)) {
                         if let Some(target) = a.value.path() {
                             pressed.insert(target);
                         }
@@ -178,9 +180,9 @@ fn navigation_goes_somewhere(p: &Program, d: &mut Vec<Diagnostic>) {
         for n in s.title.iter().chain(s.tree.iter()) {
             walk_ui(n, &mut |node| {
                 for a in &node.args {
-                    if a.name.as_deref() == Some("onTap") {
+                    if a.name.as_deref().is_some_and(|n| p.handlers.iter().any(|h| h == n)) {
                         if let Some(target) = a.value.path() {
-                            // `onTap` names an action or a screen; either has to
+                            // A handler names an action or a screen; either has to
                             // exist, and which one it is decides what happens.
                             // A dotted target is a capability's operation —
                             // `navigation.back(with: …)`. Which operations exist

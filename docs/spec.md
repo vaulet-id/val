@@ -420,9 +420,10 @@ cannot appear — not "is filtered out".
 `limit` is required on a list you compute over. It bounds the work, which is
 what lets a total over the list compile to a circuit.
 
-**A press names an action.** `onTap` is the only kind of handler, so everything
-a screen can start goes through the six phases with the same consent and the
-same record.
+**A press names an action.** Every handler does — `onTap`, and `onRemove` on a
+list — so everything a screen can start goes through the six phases with the
+same consent and the same record. Which props are handlers is the host's
+registry's answer, not a name written into the compiler.
 
 **A screen may derive, and may not act.** Its `compute` block follows an
 action's rules: pure, no effects — a credential issued while a screen was being
