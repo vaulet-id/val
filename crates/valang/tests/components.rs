@@ -544,3 +544,81 @@ screen Home {
         .collect();
     assert!(msgs.iter().any(|m| m.contains("may not exist")), "{msgs:?}");
 }
+
+/// A bare name in a tree is bound, or a word the host has, or the name of an
+/// action or screen. A fourth thing was drawn as itself: `text(pointss)` put the
+/// word `pointss` on the screen and nobody was told.
+#[test]
+fn a_misspelt_name_in_a_tree_is_not_a_word() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+@main
+screen Home {
+  column {
+    text(pointss)
+  }
+}
+"#;
+    let hosts = valang::capability::Hosts::of(vec![
+        valang::capability::Host::parse(include_str!("../../../hosts/core.json")).unwrap(),
+    ]);
+    let msgs: Vec<String> = valang::analyse_fully(src, None, &hosts)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.iter().any(|m| m.contains("`pointss` is neither")), "{msgs:?}");
+}
+
+/// And the three kinds that are not mistakes still are not: a word from an open
+/// vocabulary the application invented, a field name a form introduces, and an
+/// action a press names.
+#[test]
+fn the_names_a_tree_is_allowed_to_carry() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  points: int default 0
+}
+
+action Go {
+  update {
+    points: 1
+  }
+}
+
+@main
+screen Home {
+  column {
+    card(text: "hi", color: brandPink, style: title)
+    checkbox("Remind me") { into: remind }
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    let hosts = valang::capability::Hosts::of(vec![
+        valang::capability::Host::parse(include_str!("../../../hosts/core.json")).unwrap(),
+    ]);
+    let msgs: Vec<String> = valang::analyse_fully(src, None, &hosts)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.is_empty(), "{msgs:?}");
+}

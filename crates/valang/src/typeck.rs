@@ -55,7 +55,19 @@ pub fn check_component_calls(p: &Program) -> Vec<Diagnostic> {
 }
 
 pub fn check_types(p: &Program) -> Vec<Diagnostic> {
+    check_types_against(p, &Default::default())
+}
+
+/// Type checking, with the host's words as well.
+///
+/// A screen is full of names nothing declared — `primary`, `money`,
+/// `foreground.primary` — and they are words rather than mistakes. Without the
+/// registry there is no way to tell them from a misspelt binding, so a typo in
+/// a tree was drawn as itself and nobody was told.
+pub fn check_types_against(p: &Program, hosts: &crate::capability::Hosts) -> Vec<Diagnostic> {
     let mut cx = Cx::new(p);
+    cx.words = hosts.words();
+    cx.hosts = hosts.clone();
     for f in &p.functions {
         cx.function(f);
     }
@@ -78,6 +90,13 @@ pub fn check_types(p: &Program) -> Vec<Diagnostic> {
 struct Cx<'a> {
     p: &'a Program,
     scope: Vec<HashMap<String, Typed>>,
+    /// Every word the host's registries define, so that a name which is
+    /// neither in scope nor declared here can be told from a typo.
+    words: std::collections::BTreeSet<String>,
+    /// The registries themselves, for the props that introduce a name rather
+    /// than reading one — a form field is called something, and that something
+    /// is written where a value would go.
+    hosts: crate::capability::Hosts,
     /// The names in each scope that were declared `let`. Held beside the types
     /// rather than inside them: what a name means and whether it may be written
     /// again are different questions, and only one of them is a type.
@@ -110,7 +129,7 @@ impl<'a> Cx<'a> {
     }
 
     fn new(p: &'a Program) -> Self {
-        Cx { p, scope: vec![HashMap::new()], mutable: vec![HashSet::new()], diagnostics: Vec::new() }
+        Cx { p, words: Default::default(), hosts: Default::default(), scope: vec![HashMap::new()], mutable: vec![HashSet::new()], diagnostics: Vec::new() }
     }
 
     fn err(&mut self, span: Span, msg: impl Into<String>) {
@@ -303,6 +322,31 @@ impl<'a> Cx<'a> {
                 }
             } else {
                 for a in &n.args {
+                    // What this prop was declared to hold, if the registry
+                    // knows the node. Three types hold a name rather than read
+                    // one — `into:` calls the field the wallet will keep what
+                    // is typed under, and `onTap:` names an action or a screen,
+                    // which something else checks and better — and a prop whose
+                    // type is a vocabulary holds a word, checked where the
+                    // registry is read. What is left reads a value, and a bare
+                    // name in one is either bound or a mistake.
+                    // A capability's own props, then the ones every drawn
+                    // thing has — layout, accessibility, style. `color` is on
+                    // none of them and on all of them.
+                    let common = self.hosts.common();
+                    let declared = a.name.as_ref().and_then(|name| {
+                        self.hosts
+                            .find(&n.kind)
+                            .and_then(|(_, cap)| cap.props.get(name).cloned())
+                            .or_else(|| common.get(name).cloned())
+                    });
+                    let elsewhere = declared.as_deref().is_some_and(|ty| {
+                        matches!(ty.trim_end_matches('?'), "Name" | "Action" | "Screen")
+                            || self.hosts.vocabulary_for_type(ty).is_some()
+                    });
+                    if !elsewhere {
+                        self.a_name_or_a_word(&a.value);
+                    }
                     self.value(&a.value);
                 }
             }
@@ -326,6 +370,33 @@ impl<'a> Cx<'a> {
             self.tree(&n.children);
             self.tree(&n.otherwise);
             self.pop();
+        }
+    }
+
+    /// A bare name in a tree is one of three things, and a fourth is a mistake.
+    ///
+    /// It is bound — state, data, a computed value, a parameter, a row — or it
+    /// is a word the host's registry defines, or it names an action or a screen
+    /// a press moves to. Anything else was drawn as itself: a misspelt binding
+    /// reached the screen as the word somebody typed.
+    fn a_name_or_a_word(&mut self, e: &Expr) {
+        let (name, span) = match e {
+            Expr::Ident { name, span } => (name.clone(), *span),
+            Expr::Member { obj, .. } => return self.a_name_or_a_word(obj),
+            _ => return,
+        };
+        if !self.is_word(e) || self.words.is_empty() {
+            return;
+        }
+        let known = self.words.contains(&name)
+            || self.p.actions.iter().any(|a| a.name == name)
+            || self.p.screens.iter().any(|s| s.name == name)
+            || self.p.trusts.iter().any(|t| t.name == name);
+        if !known {
+            self.err(
+                span,
+                format!("`{name}` is neither something this program declares nor a word this host has"),
+            );
         }
     }
 

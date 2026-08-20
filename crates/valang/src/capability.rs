@@ -203,6 +203,30 @@ impl Hosts {
     /// The words a prop accepts, from whichever registry defines them. Shared
     /// across a host's registries rather than repeated, because `emphasis`
     /// meaning two things on one phone is worse than a duplicate.
+    /// Every word every vocabulary holds, across every registry loaded.
+    ///
+    /// A screen is full of them — `primary`, `money`, `sheet` — and they are
+    /// written as bare names because that is what they read like. Somewhere has
+    /// to know the whole set, or a name that is neither a word nor anything the
+    /// program declared cannot be told apart from a typo.
+    pub fn words(&self) -> std::collections::BTreeSet<String> {
+        let mut out = std::collections::BTreeSet::new();
+        for h in &self.loaded {
+            for v in h.vocabularies.values() {
+                out.extend(v.words.iter().cloned());
+            }
+            out.extend(h.capabilities.keys().cloned());
+        }
+        out
+    }
+
+    /// The vocabulary a prop's declared type names — `ColorToken?` is
+    /// `colorToken`. A prop that has one holds a word, and which words it may
+    /// hold is checked where the registry is read.
+    pub fn vocabulary_for_type(&self, ty: &str) -> Option<&Vocabulary> {
+        self.vocabulary(&lower_first(ty.trim_end_matches('?')))
+    }
+
     pub fn vocabulary(&self, prop: &str) -> Option<&Vocabulary> {
         self.loaded.iter().find_map(|h| h.vocabularies.get(prop))
     }

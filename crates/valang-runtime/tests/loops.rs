@@ -103,12 +103,43 @@ fn a_loop_inside_a_loop_keeps_its_own_row() {
     );
 }
 
-/// And the name is the loop's, not the block's: the line after it does not see
-/// whatever the last turn left behind.
+/// And the name is the loop's, not the block's. It used to be drawn as whatever
+/// the last turn left; now the line after the loop does not compile, because a
+/// name that is neither bound nor a word the host has is a mistake.
 #[test]
 fn a_row_does_not_outlive_the_loop() {
-    let out = drawn("    for (i in 1...2) {\n      text(i)\n    }\n    section(i)");
-    assert_ne!(out.last().map(String::as_str), Some("section(2)"), "the loop left its row behind");
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 3
+}
+
+@main
+screen Home {
+  column {
+    for (i in 1...2) {
+      text(i)
+    }
+    section(i)
+  }
+}
+"#;
+    let hosts = Hosts::of(vec![Host::parse(CORE).expect("the core registry parses")]);
+    let (_, d) = valang::analyse_fully(src, None, &hosts);
+    let msgs: Vec<String> = d
+        .into_iter()
+        .filter(|x| x.severity == valang::diag::Severity::Error)
+        .map(|x| x.message)
+        .collect();
+    assert!(
+        msgs.iter().any(|m| m.contains("`i` is neither something this program declares")),
+        "{msgs:?}"
+    );
 }
 
 /// A list is the same shape and had the same mistake.

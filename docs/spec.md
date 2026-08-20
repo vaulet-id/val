@@ -452,6 +452,21 @@ a verified receipt does not make it a number somebody typed.
 value is when nobody supplied one. It is written where the parameter is, so it
 is written once rather than at every call site.
 
+### A bare name on a screen
+
+It is one of three things, and a fourth is a mistake:
+
+- something the program declares — state, a screen's `data`, a computed value, a
+  parameter, the row a loop reads;
+- a word the host's registry has — `primary`, `money`, `foreground.primary`. A
+  prop whose type is an open vocabulary takes a word of the application's own,
+  because a token is guidance rather than a fence;
+- the name of an action or a screen, where the prop holds one — `onTap:`, and
+  `into:`, which calls the field the host will keep what is typed under.
+
+Anything else is refused. It used to be drawn as itself, so a misspelt binding
+reached the screen as the word somebody typed.
+
 ### Across packages
 
 A component is visible to every file in its package — a package's files share

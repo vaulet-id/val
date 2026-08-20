@@ -82,7 +82,7 @@ pub fn analyse_with_packages(
     // needs to know that drawing a video is a use of `media.video`.
     diagnostics.extend(capability::check(&mut program, hosts));
     diagnostics.extend(check::check(&program));
-    diagnostics.extend(typeck::check_types(&program));
+    diagnostics.extend(typeck::check_types_against(&program, hosts));
     if let Some((bundle, locales)) = bundle {
         diagnostics.extend(check::check_bundle(&program, bundle, locales));
     }

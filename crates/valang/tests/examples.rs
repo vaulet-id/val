@@ -133,6 +133,23 @@ fn rejected_is_rejected_for_the_reasons_it_says() {
     }
 }
 
+/// 19 needs the registry: a name is told from a word by asking the host what
+/// its words are, and `analyse` on its own has no host to ask.
+#[test]
+fn a_misspelt_name_in_a_tree_is_refused_against_a_registry() {
+    let hosts = valang::capability::Hosts::of(vec![valang::capability::Host::parse(include_str!(
+        "../../../hosts/core.json"
+    ))
+    .expect("the core registry parses")]);
+    let msgs: Vec<String> = valang::analyse_fully(REJECTED, None, &hosts)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert!(msgs.iter().any(|m| m.contains("nor a word this host has")), "{msgs:?}");
+}
+
 /// No cascade. A file of deliberately broken programs will have many errors —
 /// that is the point of it — but one mistake that spills six messages down the
 /// line buries the sentence that taught the rule, which is the failure mode

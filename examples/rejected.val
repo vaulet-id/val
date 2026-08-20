@@ -265,7 +265,6 @@ action WriteInRequire {
 }
 
 // 15. A range longer than a screen can be made of.
-@main
 screen TooManyRows {
   column {
     // error: every list in this language is bounded. A range is written, so its
@@ -301,5 +300,18 @@ action KeywordName {
     // error: a keyword is never a name, so reading a declaration never depends
     //        on knowing what else the package declared.
     const screen = 1
+  }
+}
+
+// 19. A name in a tree that is neither bound nor a word.
+@main
+screen Typo {
+  column {
+    // error: a bare name on a screen is bound — state, data, a computed value,
+    //        a parameter, a row — or it is a word the host's registry has, or
+    //        it names an action a press moves to. Anything else was drawn as
+    //        itself, so a misspelt binding reached the screen as the word
+    //        somebody typed.
+    text(pointss)
   }
 }
