@@ -106,9 +106,82 @@ impl Cap {
             // `read` and `query` name what they want in the import itself, so
             // there is nothing left to pass.
             Cap::Read(_) | Cap::Query(_) => 0,
+            // **`prove` takes nothing either**, and that is the whole of what
+            // makes it a proof: the host evaluates the statement and builds the
+            // proof, because the host is the only one that can. Handing the
+            // claim to the module would be the same answer with the privacy
+            // removed, which is the thing `prove` exists instead of.
+            Cap::Prove(_) => 0,
             // The rest are handed the value they act on.
-            Cap::Disclose(_) | Cap::Prove(_) | Cap::Issue(_) | Cap::Pay(_) | Cap::Write(_) => 1,
+            Cap::Disclose(_) | Cap::Issue(_) | Cap::Pay(_) | Cap::Write(_) => 1,
         }
+    }
+}
+
+/// What a module reaches for that is not a capability.
+///
+/// The runtime's own values: the input it was handed, the state it is running
+/// against, the clock. None of it is a line in the report, because none of it
+/// is something a person is being asked to agree to — reading state this
+/// application wrote is not reading anything of theirs.
+///
+/// They are still named imports, and still refused when unknown: a hole in this
+/// namespace would be a hole in the other one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Op {
+    /// One of the fixed arithmetic and value operations.
+    Fixed(String),
+    /// `state:member.points` — a field of state, read.
+    State(String),
+    /// `input:receipt` — something the host collected before the action ran.
+    Input(String),
+    /// `context:time.now`
+    Context(String),
+    /// `refuse:tooSmallToEarn` — the application declining, in words from the
+    /// signed text bundle. An outcome, not an effect.
+    Refuse(String),
+    /// A `require` that did not hold: a defect, and the action stops.
+    Defect,
+    /// A `verify` that did not hold. A different outcome from a defect, because
+    /// a credential failing its policy is not a mistake in this program.
+    Unverified,
+}
+
+impl Op {
+    pub fn name(&self) -> String {
+        match self {
+            Op::Fixed(x) => x.clone(),
+            Op::State(x) => format!("state:{x}"),
+            Op::Input(x) => format!("input:{x}"),
+            Op::Context(x) => format!("context:{x}"),
+            Op::Refuse(x) => format!("refuse:{x}"),
+            Op::Defect => "defect".into(),
+            Op::Unverified => "unverified".into(),
+        }
+    }
+
+    pub fn parse(name: &str, is_fixed: impl Fn(&str) -> bool) -> Option<Op> {
+        if is_fixed(name) {
+            return Some(Op::Fixed(name.to_string()));
+        }
+        if name == "defect" {
+            return Some(Op::Defect);
+        }
+        if name == "unverified" {
+            return Some(Op::Unverified);
+        }
+        let (kind, what) = name.split_once(':')?;
+        if what.is_empty() {
+            return None;
+        }
+        let what = what.to_string();
+        Some(match kind {
+            "state" => Op::State(what),
+            "input" => Op::Input(what),
+            "context" => Op::Context(what),
+            "refuse" => Op::Refuse(what),
+            _ => return None,
+        })
     }
 }
 
@@ -128,6 +201,35 @@ pub struct Wants {
 }
 
 impl Wants {
+    /// What it reads, as a person is shown it: the claims of one credential on
+    /// one line, under the policy they were checked against.
+    ///
+    /// The set is finer than the sentence — `PurchaseReceipt under Policy` and
+    /// `PurchaseReceipt.amount` are two facts, and a person reads one line. The
+    /// joining is presentation and lives here rather than in the derivation,
+    /// because a report that dropped the difference could not answer "which
+    /// claims" later.
+    pub fn reads_as_lines(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        for entry in &self.reads {
+            // `Type under Policy` and `Type — unverified` carry a policy; a
+            // bare `Type.claim` is one of the claims under one of them.
+            let Some((ty, rest)) = entry.split_once(' ') else { continue };
+            let touched: Vec<&str> = self
+                .reads
+                .iter()
+                .filter(|c| c.starts_with(&format!("{ty}.")))
+                .map(String::as_str)
+                .collect();
+            if touched.is_empty() {
+                out.insert(entry.clone());
+            } else {
+                out.insert(format!("{} {rest}", touched.join(", ")));
+            }
+        }
+        out
+    }
+
     pub fn of(caps: impl IntoIterator<Item = Cap>) -> Wants {
         let mut w = Wants::default();
         for c in caps {
@@ -155,13 +257,25 @@ impl Wants {
 /// linked it anyway would be running something it could not describe, and a
 /// host that dropped it would be describing something less than what runs.
 pub fn wants_of(bytes: &[u8]) -> Result<Wants, String> {
+    wants_with(bytes, |name| crate::compile::IMPORTS.iter().any(|(n, _)| *n == name))
+}
+
+/// The same, told which names are the fixed operations. Split out so the check
+/// can be run without the compiler beside it — a wallet has the second half of
+/// this crate and none of the first.
+pub fn wants_with(bytes: &[u8], is_fixed: impl Fn(&str) -> bool) -> Result<Wants, String> {
     let engine = wasmi::Engine::default();
     let module = wasmi::Module::new(&engine, bytes).map_err(|e| e.to_string())?;
 
     let mut caps = Vec::new();
     for import in module.imports() {
         match import.module() {
-            OPS => continue,
+            OPS => {
+                Op::parse(import.name(), &is_fixed).ok_or_else(|| {
+                    format!("`{}` is not an operation this host provides", import.name())
+                })?;
+                continue;
+            }
             CAPS => {}
             other => return Err(format!("a module may import `{OPS}` and `{CAPS}`, and this one imports `{other}`")),
         }

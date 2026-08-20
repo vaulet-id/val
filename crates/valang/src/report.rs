@@ -314,7 +314,12 @@ fn collect(stmts: &[Stmt], p: &Program, r: &mut Report) {
     }
 }
 
-fn render(e: Option<&Expr>) -> String {
+/// How a predicate or an argument is written down where a person reads it.
+///
+/// Public because the back end names an import with it — `prove:` carries the
+/// statement it proves, and the two have to be the same string or the report a
+/// wallet derives from a module would not be the report this says.
+pub fn render(e: Option<&Expr>) -> String {
     match e {
         None => "—".into(),
         Some(Expr::Num { value, .. }) => value.to_string(),

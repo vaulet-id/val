@@ -83,9 +83,32 @@ fn import_index(name: &str) -> u32 {
 struct Ctx<'a> {
     program: &'a Program,
     konsts: Vec<Konst>,
+    /// Everything this module imports beyond the fixed operations —
+    /// `(namespace, name)` to how many handles it takes. Filled on the first
+    /// pass and indexed on the second: an index cannot be known until every
+    /// import is, and a call has to name one. A `BTreeMap`, because two builds
+    /// of one source must be one module.
+    dynamic: BTreeMap<(&'static str, String), usize>,
+    /// Where each of them landed, once they were all known.
+    dyn_index: BTreeMap<(&'static str, String), u32>,
+    /// Which pass this is. The same emit code runs twice — once into a buffer
+    /// nobody keeps, to find out what is imported, and once for real. A second
+    /// walk that decided for itself what to collect would be a second answer to
+    /// what this module does, and the first thing it would get wrong is the
+    /// report.
+    collecting: bool,
     locals: BTreeMap<String, u32>,
     /// Function index in the module: imports first, then VAL functions.
     fn_index: BTreeMap<String, u32>,
+    /// Which phase is being lowered. A predicate that does not hold means
+    /// different things in `require` and in `verify` — a defect in this program
+    /// against a credential that did not satisfy its policy — and the outcome
+    /// is the difference.
+    phase: Option<Phase>,
+    /// Names bound by `x with Policy`, to the credential type behind the
+    /// policy. Built while lowering rather than by a walk of its own: what an
+    /// import is called has to come from the same pass that emits the call.
+    verified: BTreeMap<String, String>,
     /// What this back end met and does not emit.
     unsupported: Vec<String>,
     /// The next scratch slot, for the expressions that need somewhere to put a
@@ -122,6 +145,35 @@ impl Ctx<'_> {
     fn call_op(&mut self, op: &str, f: &mut Function) {
         f.instruction(&Instruction::Call(import_index(op)));
     }
+
+    /// Call something outside the fixed table. On the collecting pass this only
+    /// records that the module needs it; the index it emits then is discarded
+    /// with the body it emitted into.
+    fn call_dyn(&mut self, ns: &'static str, name: String, arity: usize, f: &mut Function) {
+        let key = (ns, name);
+        if self.collecting {
+            self.dynamic.insert(key, arity);
+            f.instruction(&Instruction::Call(0));
+            return;
+        }
+        let index = self.dyn_index[&key];
+        f.instruction(&Instruction::Call(index));
+    }
+
+    fn call_cap(&mut self, cap: &crate::abi::Cap, f: &mut Function) {
+        self.call_dyn(crate::abi::CAPS, cap.name(), cap.arity(), f);
+    }
+
+    fn call_val(&mut self, op: &crate::abi::Op, arity: usize, f: &mut Function) {
+        self.call_dyn(crate::abi::OPS, op.name(), arity, f);
+    }
+
+    /// The credential type behind a name bound by `x with Policy`, which is what
+    /// a report calls a claim read through it: the author wrote
+    /// `checked.claims.amount` and the person is being told `PurchaseReceipt`.
+    fn verified_type(&self, binding: &str) -> Option<String> {
+        self.verified.get(binding).cloned()
+    }
 }
 
 /// Compile every `function` in the program. Actions are not compiled: their
@@ -135,9 +187,29 @@ impl Ctx<'_> {
 /// with the other one is worse than a back end that is missing: the parity test
 /// is what says the two agree, and it can only run on what both of them have.
 pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
+    compile(program, false)
+}
+
+/// The whole program: its functions, and its actions.
+///
+/// **This is the artifact.** A wallet downloads it, reads its imports to find
+/// out what it can do, shows the person that, and runs it. There is no compiler
+/// on the other end and no source — so what a module imports has to be the
+/// whole truth about it, which is why an effect this back end cannot emit is an
+/// error here rather than a body that quietly does less.
+pub fn compile_program(program: &Program) -> Result<Module, Vec<String>> {
+    compile(program, true)
+}
+
+fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
     let mut ctx = Ctx {
         program,
         konsts: Vec::new(),
+        dynamic: BTreeMap::new(),
+        dyn_index: BTreeMap::new(),
+        collecting: false,
+        phase: None,
+        verified: BTreeMap::new(),
         locals: BTreeMap::new(),
         fn_index: BTreeMap::new(),
         unsupported: Vec::new(),
@@ -145,7 +217,31 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
         scratch_used: 0,
     };
 
-    let import_count = IMPORTS.len() as u32;
+    // The first pass emits every body into buffers nobody keeps, to find out
+    // what this module imports. Indices cannot be handed out before that: an
+    // import section is one list, and a call names a position in it.
+    ctx.collecting = true;
+    for f in &program.functions {
+        ctx.fn_index.insert(f.name.clone(), 0);
+    }
+    for f in &program.functions {
+        body_of(&mut ctx, &f.params, &f.body);
+    }
+    if actions {
+        for a in &program.actions {
+            action_body(&mut ctx, a);
+        }
+    }
+
+    let fixed = IMPORTS.len() as u32;
+    let dynamic: Vec<((&'static str, String), usize)> =
+        ctx.dynamic.iter().map(|(k, v)| (k.clone(), *v)).collect();
+    for (i, (key, _)) in dynamic.iter().enumerate() {
+        ctx.dyn_index.insert(key.clone(), fixed + i as u32);
+    }
+    ctx.collecting = false;
+
+    let import_count = fixed + dynamic.len() as u32;
     for (i, f) in program.functions.iter().enumerate() {
         ctx.fn_index.insert(f.name.clone(), import_count + i as u32);
     }
@@ -173,11 +269,29 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
             arity_type.insert(n, id);
         }
     }
+    // An action takes nothing: what it needs, it asks the host for.
+    for (_, arity) in &dynamic {
+        if !arity_type.contains_key(arity) {
+            let id = types.len();
+            types.ty().function(vec![ValType::I32; *arity], [ValType::I32]);
+            arity_type.insert(*arity, id);
+        }
+    }
+    if !arity_type.contains_key(&0) {
+        let id = types.len();
+        types.ty().function([], [ValType::I32]);
+        arity_type.insert(0, id);
+    }
 
     let mut imports = ImportSection::new();
     for (name, arity) in IMPORTS {
         let ty = arity_type[&(*arity as usize)];
-        imports.import("val", name, wasm_encoder::EntityType::Function(ty));
+        imports.import(crate::abi::OPS, name, wasm_encoder::EntityType::Function(ty));
+    }
+    // Then everything the program itself reaches for, in the order the map
+    // holds them — sorted, so one source is one module.
+    for ((ns, name), arity) in &dynamic {
+        imports.import(ns, name.as_str(), wasm_encoder::EntityType::Function(arity_type[arity]));
     }
 
     let mut funcs = FunctionSection::new();
@@ -189,30 +303,19 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
         funcs.function(arity_type[&f.params.len()]);
         exports.export(&f.name, wasm_encoder::ExportKind::Func, import_count + i as u32);
         names.push(f.name.clone());
-
-        ctx.locals.clear();
-        for (j, p) in f.params.iter().enumerate() {
-            ctx.locals.insert(p.name.clone(), j as u32);
-        }
-        // `const` bindings become extra locals, allocated as they are met, and
-        // the expressions that read a value once and use it twice take a slot
-        // each after them.
-        let extra = count_lets(&f.body);
-        let scratch = count_scratch(&f.body);
-        let total = extra + scratch;
-        let mut body = Function::new(if total > 0 { vec![(total, ValType::I32)] } else { vec![] });
-        let mut next_local = f.params.len() as u32;
-        ctx.next_scratch = next_local + extra;
-        ctx.scratch_used = ctx.next_scratch;
-        // A function whose branches all return still needs a value on the stack
-        // for the paths Wasm can see but the language cannot reach.
-        if !emit_body(&mut ctx, &f.body, &mut body, &mut next_local) {
-            ctx.push_konst(Konst::Bool(false), &mut body);
-        } else {
-            ctx.push_konst(Konst::Bool(false), &mut body);
-        }
-        body.instruction(&Instruction::End);
+        let body = body_of(&mut ctx, &f.params, &f.body);
         code.function(&body);
+    }
+
+    if actions {
+        for (i, a) in program.actions.iter().enumerate() {
+            funcs.function(arity_type[&0]);
+            let index = import_count + (program.functions.len() + i) as u32;
+            exports.export(&format!("action:{}", a.name), wasm_encoder::ExportKind::Func, index);
+            names.push(format!("action:{}", a.name));
+            let body = action_body(&mut ctx, a);
+            code.function(&body);
+        }
     }
 
     let mut module = Enc::new();
@@ -324,6 +427,9 @@ fn count_lets(body: &[Stmt]) -> u32 {
         s.walk(&mut |x| {
             n += match x {
                 Stmt::Let { .. } => 1,
+                // A declared input and a `data` line each name a value the
+                // host answers with, and a name needs a slot to live in.
+                Stmt::Binding { .. } | Stmt::Data { .. } => 1,
                 // One for the record itself, and one per name taken out of it.
                 Stmt::Destructure { names, .. } => 1 + names.len() as u32,
                 _ => 0,
@@ -381,6 +487,15 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
     for s in body {
         match s {
             Stmt::Let { name, value, .. } => {
+                // `const checked = receipt with Policy` — what this name means
+                // for the rest of the action, recorded as it is lowered so the
+                // claims read through it can be named after the credential
+                // rather than after the binding.
+                if let Expr::With { policy, .. } = value {
+                    if let Some(t) = ctx.program.trusts.iter().find(|t| t.name == *policy) {
+                        ctx.verified.insert(name.clone(), t.subject_type.clone());
+                    }
+                }
                 emit(ctx, value, f);
                 let slot = *next_local;
                 *next_local += 1;
@@ -438,12 +553,199 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
                 }
                 f.instruction(&Instruction::End);
             }
-            // Nothing else can appear in a function: it is pure and total, and
-            // `check.rs` has already refused anything that was not.
-            _ => {}
+            // `receipt: Credential<PurchaseReceipt>` — what the host collected
+            // before any of this ran. It is not state and not a capability:
+            // somebody handed it over, and the sheet they agreed to said so.
+            Stmt::Binding { name, .. } => {
+                let slot = *next_local;
+                *next_local += 1;
+                ctx.call_val(&crate::abi::Op::Input(name.clone()), 0, f);
+                f.instruction(&Instruction::LocalSet(slot));
+                ctx.locals.insert(name.clone(), slot);
+            }
+
+            // `const rows = credentials of Receipt verified with Policy`
+            Stmt::Data { name, source, .. } => {
+                match source {
+                    DataSource::Credentials { ty, policy, .. } => {
+                        ctx.call_cap(&crate::abi::Cap::Read(read_line(ty, policy.as_deref())), f);
+                    }
+                    DataSource::Query { audience } => {
+                        ctx.call_cap(&crate::abi::Cap::Query(audience.clone()), f);
+                    }
+                    DataSource::Unknown => {
+                        ctx.unsupported.push("a data source the front end could not read".into());
+                        ctx.push_konst(Konst::Bool(false), f);
+                    }
+                }
+                let slot = *next_local;
+                *next_local += 1;
+                f.instruction(&Instruction::LocalSet(slot));
+                ctx.locals.insert(name.clone(), slot);
+            }
+
+            // `member.points: total` — a patch, and the only way state moves.
+            // The host writes it, which is why it is an import and why the line
+            // it becomes is in the report.
+            Stmt::Patch { path, value, .. } => {
+                emit(ctx, value, f);
+                ctx.call_cap(&crate::abi::Cap::Write(path.join(".")), f);
+                f.instruction(&Instruction::Drop);
+            }
+
+            // `refuse "tooSmallToEarn"` — an outcome, and the action stops.
+            Stmt::Refuse { key, .. } => {
+                ctx.call_val(&crate::abi::Op::Refuse(key.clone()), 0, f);
+                f.instruction(&Instruction::Return);
+                return true;
+            }
+
+            // A bare predicate: `state.member exists` in `require`, a trust
+            // check in `verify`. Holding is the ordinary case and emits nothing.
+            Stmt::Expr { value, .. } => {
+                emit(ctx, value, f);
+                ctx.call_op("truthy", f);
+                f.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                f.instruction(&Instruction::Else);
+                let out = match ctx.phase {
+                    Some(Phase::Verify) => crate::abi::Op::Unverified,
+                    _ => crate::abi::Op::Defect,
+                };
+                ctx.call_val(&out, 0, f);
+                f.instruction(&Instruction::Return);
+                f.instruction(&Instruction::End);
+            }
+
+            Stmt::Effect { name, args, body, .. } => {
+                emit_effect(ctx, name, args, f);
+                emit_body(ctx, body, f, next_local);
+            }
         }
     }
     false
+}
+
+/// One function body, set up and emitted. Both passes call this — a first pass
+/// that decided for itself how a body was laid out would be a second compiler.
+fn body_of(ctx: &mut Ctx, params: &[Field], body: &[Stmt]) -> Function {
+    ctx.locals.clear();
+    for (j, p) in params.iter().enumerate() {
+        ctx.locals.insert(p.name.clone(), j as u32);
+    }
+    let extra = count_lets(body);
+    let scratch = count_scratch(body);
+    let total = extra + scratch;
+    let mut out = Function::new(if total > 0 { vec![(total, ValType::I32)] } else { vec![] });
+    let mut next_local = params.len() as u32;
+    ctx.next_scratch = next_local + extra;
+    ctx.scratch_used = ctx.next_scratch;
+    emit_body(ctx, body, &mut out, &mut next_local);
+    // A body whose branches all return still needs a value on the stack for the
+    // paths Wasm can see and the language cannot reach.
+    ctx.push_konst(Konst::Bool(false), &mut out);
+    out.instruction(&Instruction::End);
+    out
+}
+
+/// An action, as one function: the phases in the order the language runs them.
+///
+/// Nothing here decides an outcome. `require` that does not hold calls out and
+/// returns, `refuse` calls out and returns, and everything else is the host's
+/// to judge from the effects it was handed — which is the same division the
+/// tree-walking evaluator makes.
+fn action_body(ctx: &mut Ctx, a: &ActionDecl) -> Function {
+    ctx.verified.clear();
+    let stmts: Vec<Stmt> = a.phases.iter().flat_map(|b| b.stmts.iter().cloned()).collect();
+    ctx.locals.clear();
+    let extra = count_lets(&stmts);
+    let scratch = count_scratch(&stmts);
+    let total = extra + scratch;
+    let mut out = Function::new(if total > 0 { vec![(total, ValType::I32)] } else { vec![] });
+    let mut next_local = 0;
+    ctx.next_scratch = extra;
+    ctx.scratch_used = ctx.next_scratch;
+    for block in &a.phases {
+        ctx.phase = Some(block.phase);
+        if emit_body(ctx, &block.stmts, &mut out, &mut next_local) {
+            break;
+        }
+    }
+    ctx.phase = None;
+    ctx.push_konst(Konst::Bool(false), &mut out);
+    out.instruction(&Instruction::End);
+    out
+}
+
+/// How a credential read is written where a person reads it. One string, and
+/// the same one whether it came from a screen, a declared input or a `data`
+/// line — a report with two spellings of one thing reads as two things.
+fn read_line(ty: &str, policy: Option<&str>) -> String {
+    match policy {
+        Some(p) => format!("{ty} under {p}"),
+        None => format!("{ty} — unverified"),
+    }
+}
+
+/// The effects, which are the whole reason a person is asked anything.
+///
+/// **`prove` takes nothing.** The host evaluates the statement and builds the
+/// proof, because the host is the only one that can; handing the claim to the
+/// module would be the same answer with the privacy removed, which is the thing
+/// `prove` exists instead of. Everything else is handed the value it acts on.
+fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
+    let first = args.first().map(|a| &a.value);
+    match name {
+        "disclose" => {
+            let path = first.and_then(|e| e.path()).unwrap_or_else(|| "—".into());
+            emit_first(ctx, first, f);
+            ctx.call_cap(&crate::abi::Cap::Disclose(ctx_claim(ctx, &path)), f);
+            f.instruction(&Instruction::Drop);
+        }
+        "prove" => {
+            let said = valang::report::render(first);
+            ctx.call_cap(&crate::abi::Cap::Prove(said), f);
+            f.instruction(&Instruction::Drop);
+        }
+        "credential.issue" => {
+            let ty = match first {
+                Some(Expr::Call { callee, .. }) => callee.path().unwrap_or_else(|| "?".into()),
+                Some(Expr::Record { .. }) => "record".into(),
+                other => other.and_then(|e| e.path()).unwrap_or_else(|| "?".into()),
+            };
+            emit_first(ctx, first, f);
+            ctx.call_cap(&crate::abi::Cap::Issue(ty), f);
+            f.instruction(&Instruction::Drop);
+        }
+        // `present { disclose …; prove … }` groups the effects that go out
+        // together. It is not a line in the report itself — what it holds is —
+        // so it emits nothing and its body is lowered by the caller.
+        "present" => {}
+        other => {
+            // Loud rather than wrong. An effect this back end does not emit is
+            // an effect that would be missing from the import section, and a
+            // report short of a line is worse than no module at all.
+            ctx.unsupported.push(format!("the effect `{other}`"));
+        }
+    }
+}
+
+/// `checked.claims.country` is what the author wrote; `NationalId.country` is
+/// what the person is asked about.
+fn ctx_claim(ctx: &Ctx, path: &str) -> String {
+    match path.split_once(".claims.") {
+        Some((base, rest)) => match ctx.verified_type(base) {
+            Some(ty) => format!("{ty}.{rest}"),
+            None => path.to_string(),
+        },
+        None => path.to_string(),
+    }
+}
+
+fn emit_first(ctx: &mut Ctx, first: Option<&Expr>, f: &mut Function) {
+    match first {
+        Some(e) => emit(ctx, e, f),
+        None => ctx.push_konst(Konst::Bool(false), f),
+    }
 }
 
 fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
@@ -459,8 +761,44 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
             None => ctx.push_konst(Konst::Str(name.clone()), f),
         },
 
+        // The only way to a credential's words: the host checks it against the
+        // policy and hands back what it checked. It is a read, and the line it
+        // becomes says which policy — "your receipts, checked against the
+        // merchant's key" is a different sentence from "your receipts".
+        Expr::With { subject, policy, .. } => {
+            let _ = subject;
+            let ty = ctx
+                .program
+                .trusts
+                .iter()
+                .find(|t| t.name == *policy)
+                .map(|t| t.subject_type.clone())
+                .unwrap_or_else(|| "?".into());
+            ctx.call_cap(&crate::abi::Cap::Read(read_line(&ty, Some(policy))), f);
+        }
+
         // `Tier.gold` is one value, not a lookup: an enum member is a constant.
         Expr::Member { obj, name, .. } => {
+            // Everything outside the module is an import, and which import it
+            // is depends on what the path is rooted at. Read before the general
+            // case, because the general case is a field of a value the module
+            // is already holding.
+            if let Some(path) = e.path() {
+                if let Some(rest) = path.strip_prefix("state.").or_else(|| path.strip_prefix("next.")) {
+                    ctx.call_val(&crate::abi::Op::State(rest.to_string()), 0, f);
+                    return;
+                }
+                if let Some(rest) = path.strip_prefix("context.") {
+                    ctx.call_val(&crate::abi::Op::Context(rest.to_string()), 0, f);
+                    return;
+                }
+                if let Some((base, claim)) = path.split_once(".claims.") {
+                    if let Some(ty) = ctx.verified_type(base) {
+                        ctx.call_cap(&crate::abi::Cap::Read(format!("{ty}.{claim}")), f);
+                        return;
+                    }
+                }
+            }
             if let Expr::Ident { name: ty, .. } = obj.as_ref() {
                 if ctx.program.enums.iter().any(|en| en.name == *ty) {
                     ctx.push_konst(Konst::Enum(ty.clone(), name.clone()), f);
@@ -574,6 +912,24 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
                 ctx.push_konst(Konst::Bool(false), f);
                 return;
             };
+            // `LoyaltyMember { points: … }` is a record being built, not a
+            // call: the name is the credential's, and every argument is named.
+            // It reached the arm below and pushed its arguments onto a stack
+            // nothing took them off — a module that would not even validate,
+            // which is what says this was never exercised.
+            if ctx.fn_index.get(&name).is_none()
+                && !args.is_empty()
+                && args.iter().all(|a| a.name.is_some())
+            {
+                ctx.push_konst(Konst::EmptyRecord, f);
+                for a in args {
+                    let field = a.name.clone().unwrap_or_default();
+                    ctx.push_konst(Konst::Str(field), f);
+                    emit(ctx, &a.value, f);
+                    ctx.call_op("set", f);
+                }
+                return;
+            }
             for a in args {
                 emit(ctx, &a.value, f);
             }
@@ -582,9 +938,14 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
                     let i = *i;
                     f.instruction(&Instruction::Call(i));
                 }
-                // A builtin the host owns, or something `check.rs` refused. Pop
-                // the arguments by producing a value in their place.
-                None => ctx.push_konst(Konst::Bool(false), f),
+                // A builtin the host owns, or something the checks refused.
+                // Every argument still has to come off the stack.
+                None => {
+                    for _ in args {
+                        f.instruction(&Instruction::Drop);
+                    }
+                    ctx.push_konst(Konst::Bool(false), f);
+                }
             }
         }
 
