@@ -626,18 +626,36 @@ impl Parser {
                 return Some(Stmt::Data { name, source, span });
             }
             let value = self.expr(0);
-            return Some(Stmt::Let { name, value, span });
+            return Some(Stmt::Let { name, value, mutable: false, span });
         }
-        if self.at("let") || self.at("var") {
-            let word = self.bump().text;
+
+        // `let x = …` — a name that may be written again.
+        if self.at("let") {
+            self.bump();
+            let name = self.ident();
+            self.expect("=");
+            let value = self.expr(0);
+            return Some(Stmt::Let { name, value, mutable: true, span });
+        }
+        if self.at("var") {
+            self.bump();
             self.diagnostics.push(Diagnostic::error(
                 span,
-                format!("bindings use `const`; there is no `{word}` and nothing here is reassigned"),
+                "a variable is `let`; there is no `var`".to_string(),
             ));
             let name = self.ident();
             self.expect("=");
             let value = self.expr(0);
-            return Some(Stmt::Let { name, value, span });
+            return Some(Stmt::Let { name, value, mutable: true, span });
+        }
+
+        // `x = …`. A name on its own followed by `=` is an assignment and
+        // nothing else — `=` appears in no expression this language has.
+        if self.peek().kind == Kind::Ident && self.peek_at(1).is("=") {
+            let name = self.bump().text;
+            self.bump();
+            let value = self.expr(0);
+            return Some(Stmt::Assign { name, value, span });
         }
         if self.at("refuse") {
             self.bump();

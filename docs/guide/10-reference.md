@@ -39,11 +39,17 @@ screen Name { … }
 ## Expressions
 
 ```val
-const x = …                      // no var, no assignment
+const x = …                      // a definition
+let x = …                        // a variable; `x = …` writes it again
 a ? b : c                        // if is a statement; this is the expression
+a ?: b                           // a, unless it is nothing
+a?.b                             // nothing, if a is
 if (cond) { … } else { … }
-switch (x) { A => 1, B => 2, }   // no default over an enum; unreachable arms error
+switch (x) { A => 1, B => 2 }    // no default over an enum; unreachable arms error
 { ...record, field: value }      // derive; never mutate
+{ a, b } = record                // after `const` or `let`
+0...10                           // both ends included
+`words ${value} words`           // a phrase, filled by the host
 x with Policy                    // the only way to get Verified<P>
 x exists                         // narrowing, in require
 value from { Policy }            // provenance, on an issued claim

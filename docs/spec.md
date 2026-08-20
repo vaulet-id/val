@@ -32,11 +32,11 @@ You get four things without building them:
 | --- | --- |
 | Declare before you use | Everything the app can do is in `capabilities`. Using something you did not declare fails the build; declaring something you do not use fails the build too. |
 | No floating point | Money is in minor units — satang, cents. Percentages are basis points. |
-| No loops, no recursion | Lists are consumed by `map`, `filter`, `fold`, `any`, `all`, `count`, `first`. Every program halts. |
-| No string building | No `+`, no interpolation. Every sentence a person reads comes from `text.json`, by key. |
+| Every program halts | No recursion, and no loop whose end is not known: lists are consumed by `map`, `filter`, `fold`, `any`, `all`, `count`, `first`, and a `for` over a screen runs over a list the host answered with or a range whose length is written down. |
+| No string building | Sentences are not concatenated. `` `you have ${points} points` `` is a phrase, and the host fills and formats it — which is how one language's numbers are right in every application at once. |
 | No screens of your own | You declare `card`, `row`, `button`; the wallet draws them. |
-| No assignment | `const` only. Records are derived with spread; state is changed by an `update` block. |
-| Errors are outcomes | No `Result`, no exceptions, no early return. An action commits or it does not. |
+| State is changed by an `update` block | Not by assignment. A local `let` may be written again; `state` may not, and a record is derived with spread. |
+| Errors are outcomes | No `Result` and no exceptions. An action commits or it does not. |
 
 **New here?** Start with [your first application](guide/02-your-first-application.md),
 which builds a working loyalty card. This document is the reference you come
@@ -864,11 +864,17 @@ navigate Screen
 ### Expressions
 
 ```val
-const x = …                      // no var, no assignment
+const x = …                      // a definition
+let x = …                        // a variable; `x = …` writes it again
 a ? b : c                        // if is a statement; this is the expression
+a ?: b                           // a, unless it is nothing
+a?.b                             // nothing, if a is
 if (cond) { … } else { … }
-switch (x) { A => 1, B => 2, }   // no default over an enum
+switch (x) { A => 1, B => 2 }    // no default over an enum
 { ...record, field: value }      // derive; never mutate
+{ a, b } = record                // after `const` or `let`
+0...10                           // both ends included
+`words ${value} words`           // a phrase, filled by the host
 x with Policy                    // the only way to get Verified<P>
 x exists                         // narrowing, in require
 value from { Policy }            // provenance, on an issued claim

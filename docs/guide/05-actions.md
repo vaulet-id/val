@@ -70,6 +70,25 @@ this language is pure.
 Arithmetic traps rather than wraps: overflow and division by zero stop the
 action.
 
+`const` is a definition and `let` is a variable:
+
+```val
+compute {
+  let label = "bronze"
+  if (points >= 1000) {
+    label = "gold"
+  }
+  const fee = amount > 100_000 ? 0 : 20
+}
+```
+
+A name written again may only be written in `compute` or in a function — the
+other phases are not places a value is worked out. `state` is never assigned; it
+changes in `update`, and every change to it is a line in the record.
+
+Prefer `const` where it reads the same. A block of definitions can be read in
+any order; a block of variables has to be read in one.
+
 Note: a sequence of effects used by three actions has to be written out three
 times. In exchange, everything an action can do is in its `execute` block.
 

@@ -297,8 +297,14 @@ pub struct Directive {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    /// `const x = …`
-    Let { name: String, value: Expr, span: Span },
+    /// `const x = …`, and `let x = …` where `mutable` is set.
+    ///
+    /// A `const` is a definition: what the name means does not depend on how
+    /// far down the block a reader has got. A `let` is a variable, and exists
+    /// because most people arrive already knowing what one is.
+    Let { name: String, value: Expr, mutable: bool, span: Span },
+    /// `x = …`, to a name that was declared `let`.
+    Assign { name: String, value: Expr, span: Span },
     /// `const { merchant, amount } = row`
     ///
     /// One statement rather than one per name, so the right-hand side is read
@@ -331,6 +337,7 @@ impl Stmt {
     pub fn span(&self) -> Span {
         match self {
             Stmt::Let { span, .. }
+            | Stmt::Assign { span, .. }
             | Stmt::Destructure { span, .. }
             | Stmt::Expr { span, .. }
             | Stmt::Patch { span, .. }

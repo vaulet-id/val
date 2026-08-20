@@ -44,6 +44,20 @@ impl<'a> Eval<'a> {
     pub fn bind(&mut self, name: &str, v: Value) {
         self.scope.last_mut().unwrap().insert(name.to_string(), v);
     }
+    /// Write a name that is already bound, in the scope that bound it.
+    ///
+    /// Not `bind`, which would put a second name in the innermost scope: an
+    /// assignment inside an `if` would then be a new name that stopped existing
+    /// at the closing brace, and the value outside it would be the old one.
+    fn assign(&mut self, name: &str, v: Value) {
+        for s in self.scope.iter_mut().rev() {
+            if let Some(slot) = s.get_mut(name) {
+                *slot = v;
+                return;
+            }
+        }
+        self.bind(name, v);
+    }
     fn lookup(&self, name: &str) -> Option<&Value> {
         self.scope.iter().rev().find_map(|s| s.get(name))
     }
@@ -92,6 +106,12 @@ impl<'a> Eval<'a> {
                     };
                     self.bind(name, field);
                 }
+                Ok(())
+            }
+
+            Stmt::Assign { name, value, .. } => {
+                let v = self.expr(value, state)?;
+                self.assign(name, v);
                 Ok(())
             }
 

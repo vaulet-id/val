@@ -31,11 +31,11 @@ Micro App อ่าน credential ที่ผู้ใช้ถืออยู�
 | --- | --- |
 | ประกาศก่อนใช้ | ทุกอย่างที่แอปทำได้อยู่ในบล็อก `capabilities` ใช้สิ่งที่ไม่ได้ประกาศ = build ล้มเหลว ประกาศแล้วไม่ใช้ = build ล้มเหลวเช่นกัน |
 | ไม่มี floating point | เงินเป็นหน่วยย่อย เช่นสตางค์ เปอร์เซ็นต์เป็น basis point |
-| ไม่มี loop ไม่มี recursion | ใช้ `map` `filter` `fold` `any` `all` `count` `first` กับ list ทุกโปรแกรมหยุด |
-| ประกอบ string ไม่ได้ | ไม่มี `+` ไม่มี interpolation ทุกประโยคที่ผู้ใช้อ่านมาจาก `text.json` ผ่าน key |
+| ทุกโปรแกรมหยุด | ไม่มี recursion และไม่มีลูปที่ไม่รู้จุดจบ: list ถูกใช้ผ่าน `map` `filter` `fold` `any` `all` `count` `first` ส่วน `for` บนหน้าจอวนบน list ที่ host ตอบมา หรือ range ที่เขียนความยาวไว้ |
+| ประกอบ string ไม่ได้ | ประโยคไม่ได้ถูกต่อกัน `` `you have ${points} points` `` เป็น phrase และ host เป็นคนเติมกับจัดรูปแบบ — ซึ่งเป็นวิธีที่ตัวเลขของภาษาหนึ่งถูกต้องในทุกแอปพร้อมกัน |
 | วาดหน้าจอเองไม่ได้ | คุณประกาศ `card` `row` `button` แล้ว wallet เป็นคนวาด |
-| ไม่มีการกำหนดค่า | มีแต่ `const` record สร้างต่อยอดด้วย spread ส่วน state เปลี่ยนผ่านบล็อก `update` |
-| error เป็นผลลัพธ์ | ไม่มี `Result` ไม่มี exception ไม่มี early return action จะ commit หรือไม่ commit |
+| state เปลี่ยนผ่านบล็อก `update` | ไม่ใช่ผ่านการกำหนดค่า `let` ในเครื่องเขียนซ้ำได้ แต่ `state` ไม่ได้ และ record สร้างต่อยอดด้วย spread |
+| error เป็นผลลัพธ์ | ไม่มี `Result` ไม่มี exception action จะ commit หรือไม่ commit |
 
 **เพิ่งเริ่ม?** ไปที่ [แอปแรกของคุณ](../guide/th/02-your-first-application.md)
 ซึ่งสร้างบัตรสะสมแต้มที่ใช้งานได้จริง เอกสารนี้คือที่ที่คุณกลับมาเปิดดูทีหลัง
@@ -828,7 +828,13 @@ navigate Screen
 ### นิพจน์
 
 ```val
-const x = …                      // ไม่มี var ไม่มีการกำหนดค่า
+const x = …                      // นิยาม
+let x = …                        // ตัวแปร เขียนซ้ำด้วย `x = …`
+a ?: b                           // a เว้นแต่มันไม่มี
+a?.b                             // ไม่มีค่า ถ้า a ไม่มี
+{ a, b } = record                // ตามหลัง `const` หรือ `let`
+0...10                           // รวมปลายทั้งสองข้าง
+`words ${value} words`           // phrase ที่ host เป็นคนเติม
 a ? b : c                        // if เป็นคำสั่ง อันนี้เป็นนิพจน์
 if (cond) { … } else { … }
 switch (x) { A => 1, B => 2, }   // enum ไม่มี default

@@ -7,8 +7,10 @@ state {
 }
 ```
 
-Yours, on their device, changed only by `update` in an action. Use `default`,
-never `=` — there is no assignment in this language.
+Yours, on their device, changed only by `update` in an action. A state field
+declares its starting value with `default`, never `=`: a local `let` can be
+written again, and state cannot — every change to it is a line in the record
+somebody can read.
 
 ## It is hashed
 

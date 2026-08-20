@@ -6,7 +6,7 @@
 //! in `verify`, which policy it checked them against — and the type it gets
 //! back names that policy, so a stricter and a laxer check cannot be confused.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 use crate::diag::{Diagnostic, Span};
@@ -78,6 +78,10 @@ pub fn check_types(p: &Program) -> Vec<Diagnostic> {
 struct Cx<'a> {
     p: &'a Program,
     scope: Vec<HashMap<String, Typed>>,
+    /// The names in each scope that were declared `let`. Held beside the types
+    /// rather than inside them: what a name means and whether it may be written
+    /// again are different questions, and only one of them is a type.
+    mutable: Vec<HashSet<String>>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -106,7 +110,7 @@ impl<'a> Cx<'a> {
     }
 
     fn new(p: &'a Program) -> Self {
-        Cx { p, scope: vec![HashMap::new()], diagnostics: Vec::new() }
+        Cx { p, scope: vec![HashMap::new()], mutable: vec![HashSet::new()], diagnostics: Vec::new() }
     }
 
     fn err(&mut self, span: Span, msg: impl Into<String>) {
@@ -115,9 +119,14 @@ impl<'a> Cx<'a> {
 
     fn push(&mut self) {
         self.scope.push(HashMap::new());
+        self.mutable.push(HashSet::new());
     }
     fn pop(&mut self) {
         self.scope.pop();
+        self.mutable.pop();
+    }
+    fn is_mutable(&self, name: &str) -> bool {
+        self.mutable.iter().rev().any(|s| s.contains(name))
     }
     fn bind(&mut self, name: &str, t: Typed) {
         self.scope.last_mut().unwrap().insert(name.to_string(), t);
@@ -460,9 +469,46 @@ impl<'a> Cx<'a> {
                 };
                 self.bind(name, t);
             }
-            Stmt::Let { name, value, .. } => {
+            Stmt::Let { name, value, mutable, .. } => {
                 let t = self.expr(value);
                 self.bind(name, t);
+                if *mutable {
+                    self.mutable.last_mut().unwrap().insert(name.clone());
+                }
+            }
+
+            // A phase is what it is: `require` and `verify` hold conditions,
+            // `update` is a patch and `execute` is a batch of effects. What is
+            // left is the two places whose whole purpose is working a value
+            // out, and those are where a name may be written again.
+            Stmt::Assign { name, value, span } => {
+                let t = self.expr(value);
+                let allowed = matches!(phase, None | Some(Phase::Compute));
+                if !allowed {
+                    let p = phase.map(|p| p.name()).unwrap_or("this block");
+                    self.err(
+                        *span,
+                        format!("`{p}` is not where a value is worked out, so nothing is written again here"),
+                    );
+                } else if self.lookup(name).is_none() {
+                    self.err(*span, format!("`{name}` was never declared. Write `let {name} = …` first"));
+                } else if !self.is_mutable(name) {
+                    self.err(
+                        *span,
+                        format!("`{name}` is a `const`, so it is what it was defined as. Declare it `let` to write it again"),
+                    );
+                } else {
+                    let want = self.lookup(name).map(|x| x.ty.clone());
+                    if let Some(want) = want {
+                        if !fits(&t.ty, &want) {
+                            self.err(
+                                *span,
+                                format!("`{name}` is {want}, and this is {}", t.ty),
+                            );
+                        }
+                    }
+                    self.bind(name, t);
+                }
             }
             Stmt::Return { value, .. } => {
                 self.expr(value);

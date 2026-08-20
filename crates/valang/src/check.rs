@@ -224,7 +224,7 @@ fn effects_do_not_read_each_other(p: &Program, d: &mut Vec<Diagnostic>) {
             let mut bound: HashSet<String> = HashSet::new();
             for s in &block.stmts {
                 match s {
-                    Stmt::Let { name, value, span } => {
+                    Stmt::Let { name, value, span, .. } => {
                         let mut reads_effect = None;
                         value.walk(&mut |e| {
                             if let Expr::Call { callee, .. } = e {
@@ -957,6 +957,7 @@ fn narrowing_before_use(p: &Program, d: &mut Vec<Diagnostic>) {
                 };
                 match s {
                     Stmt::Let { value, .. }
+                    | Stmt::Assign { value, .. }
                     | Stmt::Destructure { value, .. }
                     | Stmt::Expr { value, .. }
                     | Stmt::Return { value, .. } => check_expr(value),
@@ -1041,6 +1042,7 @@ fn for_each_expr(p: &Program, f: &mut impl FnMut(&Expr)) {
     let visit_stmts = |stmts: &[Stmt], f: &mut dyn FnMut(&Expr)| {
         walk_stmts(stmts, &mut |s| match s {
             Stmt::Let { value, .. }
+            | Stmt::Assign { value, .. }
             | Stmt::Destructure { value, .. }
             | Stmt::Expr { value, .. }
             | Stmt::Return { value, .. }

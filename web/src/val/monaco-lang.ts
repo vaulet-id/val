@@ -8,7 +8,7 @@ const SHELL = [
   'input', 'require', 'verify', 'compute', 'update', 'execute', 'present',
   'component', 'host', 'import', 'export',
 ]
-const EXPR = ['const', 'if', 'else', 'switch', 'default', 'return', 'with', 'exists', 'from', 'of', 'as', 'order', 'by', 'limit', 'desc', 'asc']
+const EXPR = ['const', 'let', 'for', 'in', 'if', 'else', 'switch', 'default', 'return', 'with', 'exists', 'from', 'of', 'as', 'order', 'by', 'limit', 'desc', 'asc']
 const EFFECT = ['disclose', 'prove', 'navigate']
 const TYPES = ['string', 'int', 'bool', 'date', 'datetime', 'bytes', 'List', 'Credential', 'Verified', 'Proof']
 
