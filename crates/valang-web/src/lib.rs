@@ -93,6 +93,21 @@ pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
             "report": report_json(&program),
             "screens": screens_json(&program),
             "actions": program.actions.iter().map(|a| a.name.clone()).collect::<Vec<_>>(),
+            // What this program declares, so an editor offers the names that
+            // exist here rather than every word it has seen in the file.
+            "names": {
+                "state": program.state.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+                "credentials": program.credentials.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
+                "types": program.types.iter().map(|t| t.name.clone()).collect::<Vec<_>>(),
+                "trusts": program.trusts.iter().map(|t| t.name.clone()).collect::<Vec<_>>(),
+                "functions": program.functions.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+                "components": program.components.iter().map(|c| c.name.clone()).collect::<Vec<_>>(),
+                "screens": program.screens.iter().map(|s| s.name.clone()).collect::<Vec<_>>(),
+                "enums": program.enums.iter().map(|e| json!({
+                    "name": e.name,
+                    "members": e.members,
+                })).collect::<Vec<_>>(),
+            },
         })
         .to_string(),
     )
@@ -169,6 +184,27 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
                 "value": value_json(&l.value),
                 "hash": hex(&l.hash),
             })).collect::<Vec<_>>(),
+        })
+        .to_string(),
+    )
+}
+
+/// The language's own words, for an editor that would otherwise keep a second
+/// copy of them.
+///
+/// A list of keywords written into the editor is a list that drifts: the day
+/// `let` was added, the editor did not know it, and the day one is removed it
+/// will still offer it. This is the same table the parser refuses names
+/// against.
+#[no_mangle]
+pub extern "C" fn val_words(_ptr: *const u8, _len: usize) -> *mut u8 {
+    write(
+        json!({
+            "keywords": valang::parse::RESERVED,
+            // The phases, in the order an action runs them.
+            "phases": ["input", "require", "verify", "compute", "update", "execute"],
+            // What a statement in `execute` can be, beside a capability call.
+            "effects": ["present", "disclose", "prove", "navigate", "refuse"],
         })
         .to_string(),
     )

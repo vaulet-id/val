@@ -2,6 +2,10 @@ import type * as Monaco from 'monaco-editor'
 
 // The shell and the expression layer are highlighted apart, because they are
 // read by different people (spec §1, Two readers).
+//
+// These are for colour only. What the editor *offers* comes from the compiler —
+// `val_words` — because a list of keywords written here is a list that drifts,
+// and the day one is added the editor would go on not knowing it.
 const SHELL = [
   'app', 'version', 'capabilities', 'enum', 'credential', 'type', 'state',
   'trust', 'anchor', 'refines', 'function', 'action', 'screen', 'data',

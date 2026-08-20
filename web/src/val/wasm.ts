@@ -65,6 +65,34 @@ export type Analysis = {
   report: Report
   screens: Screen[]
   actions: string[]
+  /// What this program declares. An editor offers the names that exist here
+  /// rather than every word it has seen in the file.
+  names: Declared
+}
+
+export type Declared = {
+  state: string[]
+  credentials: string[]
+  types: string[]
+  trusts: string[]
+  functions: string[]
+  components: string[]
+  screens: string[]
+  enums: { name: string; members: string[] }[]
+}
+
+/// The language's own words, from the compiler rather than from a copy.
+///
+/// A list of keywords written into the editor is a list that drifts: the day
+/// `let` was added the editor did not know it, and the day one is removed it
+/// will still offer it.
+export type Words = { keywords: string[]; phases: string[]; effects: string[] }
+
+let cachedWords: Words | null = null
+
+export function words(): Words {
+  if (!cachedWords) cachedWords = call('val_words', {}) as Words
+  return cachedWords
 }
 
 export type RunResult = {
@@ -97,6 +125,7 @@ type Exports = {
   val_alloc: (len: number) => number
   val_free: (ptr: number, len: number) => void
   val_analyse: (ptr: number, len: number) => number
+  val_words: (ptr: number, len: number) => number
   val_screen: (ptr: number, len: number) => number
   val_render: (ptr: number, len: number) => number
   val_verify: (ptr: number, len: number) => number
@@ -112,7 +141,7 @@ export async function load(): Promise<void> {
 }
 
 function call(
-  fn: 'val_analyse' | 'val_render' | 'val_screen' | 'val_run' | 'val_verify',
+  fn: 'val_analyse' | 'val_render' | 'val_screen' | 'val_run' | 'val_verify' | 'val_words',
   input: unknown,
 ): unknown {
   if (!wasm) throw new Error('the compiler is not loaded')

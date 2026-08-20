@@ -12,6 +12,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ALLOWED, blankFile, bundleOf, examples, type Group, HOST, hostFiles, newProject, type Project } from '@/examples'
 import { registerVal } from '@/val/monaco-lang'
+import { registerCompletion, rememberActions } from '@/val/completion'
 import * as val from '@/val/wasm'
 import type { Resolved } from '@/val/wasm'
 import { runHandler, type Decision } from '@/val/server-runtime'
@@ -66,9 +67,25 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark)
   }, [dark])
 
+  // What the editor knows about the language, and what it offers. The second
+  // needs the compiler loaded — its words come from there rather than from a
+  // list in the editor, which would be a list that drifts.
+  const latest = React.useRef<val.Declared>({
+    state: [],
+    credentials: [],
+    types: [],
+    trusts: [],
+    functions: [],
+    components: [],
+    screens: [],
+    enums: [],
+  })
+
   React.useEffect(() => {
-    if (monaco) registerVal(monaco)
-  }, [monaco])
+    if (!monaco) return
+    registerVal(monaco)
+    if (ready) registerCompletion(monaco, () => latest.current)
+  }, [monaco, ready])
 
   // The real compiler, in the page. What a reader is told here is what a host
   // would say, because it is the same code.
@@ -123,7 +140,12 @@ export default function App() {
   const analysis = React.useMemo(() => {
     if (!ready) return null
     try {
-      return val.analyse(packageSource, bundle.keys, bundle.locales, others)
+      const out = val.analyse(packageSource, bundle.keys, bundle.locales, others)
+      // What the editor offers is what this package declares, as of the last
+      // time it was read.
+      if (out?.names) latest.current = out.names
+      rememberActions(out?.actions ?? [])
+      return out
     } catch {
       return null
     }

@@ -9,7 +9,7 @@ use crate::diag::{Diagnostic, Span};
 /// The language's own words. A dot is always field access and a keyword is
 /// never a name, so that reading a declaration never depends on knowing what
 /// else the package declared.
-const RESERVED: &[&str] = &[
+pub const RESERVED: &[&str] = &[
     // The shell.
     "app", "version", "capabilities", "enum", "credential", "type", "state",
     "trust", "anchor", "refines", "function", "action", "screen", "data",
