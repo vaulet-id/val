@@ -196,6 +196,33 @@ pub extern "C" fn val_run(ptr: *const u8, len: usize) -> *mut u8 {
 /// `let` was added, the editor did not know it, and the day one is removed it
 /// will still offer it. This is the same table the parser refuses names
 /// against.
+/// Which blocks a position is inside, outermost first.
+///
+/// **The parser's answer, not the editor's guess.** Completion used to read the
+/// text backwards counting braces and indentation, which is a second grammar
+/// kept in TypeScript, and it disagreed with this one for every form it had not
+/// been taught. This parses the file — including a file that is still being
+/// typed, where the block the cursor sits in has no closing brace yet — and says
+/// what it opened.
+#[no_mangle]
+pub extern "C" fn val_context(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let source = input["source"].as_str().unwrap_or("");
+    // One-based, as an editor counts and as a diagnostic reports.
+    let line = input["line"].as_u64().unwrap_or(0) as u32;
+    let column = input["column"].as_u64().unwrap_or(0) as u32;
+
+    let (program, _) = valang::parse::parse(source);
+    let path: Vec<Json> = program
+        .scopes
+        .iter()
+        .filter(|s| (line, column) >= (s.from.line, s.from.col) && (line, column) <= (s.to.line, s.to.col))
+        .map(|s| json!({ "kind": s.kind.as_str(), "name": s.name }))
+        .collect();
+
+    write(json!({ "path": path }).to_string())
+}
+
 #[no_mangle]
 pub extern "C" fn val_words(_ptr: *const u8, _len: usize) -> *mut u8 {
     write(

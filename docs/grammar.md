@@ -90,6 +90,37 @@ Reading them the first time is what showed that several diagnostics underlined
 the punctuation of the thing rather than the thing: three characters under the
 dots of a range, the `.` of a path, the `(` of a call.
 
+## A program that is still being typed
+
+A grammar describes finished programs, and an editor is never looking at one.
+Completion used to answer "what may I write here" by walking the text backwards
+with a stack of braces and a rule about indentation — a second grammar, written
+in TypeScript, that this one had never heard of. It disagreed for every shape it
+had not been taught, silently, because a wrong answer looks exactly like a right
+one.
+
+So the parser records every block it opens: what kind it is, what it is called,
+and where it ran from and to. `val_context(source, line, column)` filters those
+to a position and hands back the path, outermost first —
+
+```
+screen Home {
+  column {
+    button("go") {
+      onTap: ‹cursor›
+```
+
+```
+[screen Home] [node column] [node button]
+```
+
+**A block the file ends inside runs to the end of the file**, which is what
+makes the answer usable while somebody is typing: closing it at the last token
+read would put the cursor outside every block at the one moment an editor most
+needs to know where it is. It is still an error for the compiler — *this block
+is never closed* — and it was reported nowhere before, because nothing had ever
+had to notice.
+
 ## Keeping the two honest
 
 `crates/valang/tests/grammar.rs` holds one test per production the grammar

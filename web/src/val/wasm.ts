@@ -95,6 +95,39 @@ export function words(): Words {
   return cachedWords
 }
 
+/// The blocks a position is inside, outermost first — `screen Home`, then the
+/// `column` in it, then the `button` in that.
+export type Block = { kind: BlockKind; name: string }
+
+export type BlockKind =
+  | 'capabilities'
+  | 'enum'
+  | 'fields'
+  | 'trust'
+  | 'require'
+  | 'function'
+  | 'action'
+  | 'phase'
+  | 'screen'
+  | 'data'
+  | 'compute'
+  | 'component'
+  | 'tree'
+  | 'node'
+  | 'statements'
+  | 'switch'
+  | 'record'
+
+/// Where the cursor is, according to the parser.
+///
+/// Line and column are one-based, the way the editor counts and the way a
+/// diagnostic reports. A file that is still being typed answers too: a block
+/// with no closing brace yet runs to the end of the file, which is exactly the
+/// case an editor is asking about.
+export function context(source: string, line: number, column: number): Block[] {
+  return (call('val_context', { source, line, column }) as { path: Block[] }).path
+}
+
 export type RunResult = {
   action?: string
   wouldNotBuild?: string[]
@@ -126,6 +159,7 @@ type Exports = {
   val_free: (ptr: number, len: number) => void
   val_analyse: (ptr: number, len: number) => number
   val_words: (ptr: number, len: number) => number
+  val_context: (ptr: number, len: number) => number
   val_screen: (ptr: number, len: number) => number
   val_render: (ptr: number, len: number) => number
   val_verify: (ptr: number, len: number) => number
@@ -141,7 +175,14 @@ export async function load(): Promise<void> {
 }
 
 function call(
-  fn: 'val_analyse' | 'val_render' | 'val_screen' | 'val_run' | 'val_verify' | 'val_words',
+  fn:
+    | 'val_analyse'
+    | 'val_render'
+    | 'val_screen'
+    | 'val_run'
+    | 'val_verify'
+    | 'val_words'
+    | 'val_context',
   input: unknown,
 ): unknown {
   if (!wasm) throw new Error('the compiler is not loaded')

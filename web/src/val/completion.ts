@@ -9,7 +9,7 @@
 
 import type * as Monaco from 'monaco-editor'
 
-import { HOSTS, words, type Declared } from './wasm'
+import { HOSTS, context, words, type Block, type Declared } from './wasm'
 
 type Capability = {
   draws?: boolean
@@ -58,35 +58,23 @@ const vocabulary = (ty: string) => {
   return undefined
 }
 
-/// The node a property belongs to: the nearest line above that opens a block
-/// and is less indented than this one.
-function enclosingKind(lines: string[], at: number): string | undefined {
-  const indent = (s: string) => s.length - s.trimStart().length
-  const mine = indent(lines[at] ?? '')
-  for (let i = at - 1; i >= 0; i--) {
-    const line = lines[i]
-    if (!line.trim() || line.trimStart().startsWith('//')) continue
-    if (indent(line) >= mine) continue
-    const opens = /^\s*([a-zA-Z][\w.]*)\s*(\([^)]*\))?\s*\{/.exec(line)
-    if (opens) return opens[1]
-    return undefined
-  }
-  return undefined
-}
+/// The node whose block the cursor is in, or nothing if it is not in one.
+///
+/// This used to walk upwards looking for a line that was less indented and
+/// looked like an opener, and the sibling of that walked the same text with a
+/// stack of braces. Both were a second grammar, written in TypeScript, that the
+/// compiler had never heard of — so every form they had not been taught (a
+/// template string with a brace in it, an `if` in a tree, a block still being
+/// typed) put the cursor in the wrong place, quietly.
+const innermost = (path: Block[]): Block | undefined => path[path.length - 1]
 
-/// Which block the cursor is in, by the nearest unclosed opener above it.
-function enclosingBlock(before: string): string | undefined {
-  const stack: string[] = []
-  for (const raw of before.split('\n')) {
-    const line = raw.split('//')[0]
-    const opener = /^\s*(?:@\w+\s*)?([a-zA-Z][\w.]*)/.exec(line)?.[1]
-    for (const ch of line) {
-      if (ch === '{') stack.push(opener ?? '')
-      else if (ch === '}') stack.pop()
-    }
-  }
-  return stack.filter(Boolean).pop()
-}
+const nodeAround = (path: Block[]): string | undefined =>
+    [...path].reverse().find((b) => b.kind === 'node')?.name
+
+/// Where something drawn may be written: under a node, in a screen's body, in a
+/// component's, or in an `if`/`else` branch.
+const draws = (b: Block | undefined): boolean =>
+    b !== undefined && (b.kind === 'node' || b.kind === 'screen' || b.kind === 'component' || b.kind === 'tree')
 
 export function registerCompletion(monaco: typeof Monaco, declared: () => Declared) {
   monaco.languages.registerCompletionItemProvider('val', {
@@ -97,13 +85,6 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
       const names = declared()
       const line = model.getLineContent(position.lineNumber)
       const prefix = line.slice(0, position.column - 1)
-      const before = model.getValueInRange({
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: position.lineNumber,
-        endColumn: position.column,
-      })
-      const lines = model.getValue().split('\n')
       const word = model.getWordUntilPosition(position)
       const range = {
         startLineNumber: position.lineNumber,
@@ -130,7 +111,10 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
         range,
       })
 
-      const block = enclosingBlock(before)
+      // The parser's answer to where the cursor is. It parses the file as it
+      // stands, half-written blocks and all.
+      const path = context(model.getValue(), position.lineNumber, position.column)
+      const here = innermost(path)
 
       // `credentials of ‹type›` and `verified with ‹policy›`, which name things
       // this program declares and nothing else.
@@ -149,9 +133,9 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
 
       // A property's value. What may go there is the registry's answer.
       const prop = /([a-zA-Z]\w*)\s*:\s*\w*$/.exec(prefix)?.[1]
-      if (prop && block) {
-        const kind = enclosingKind(lines, position.lineNumber - 1) ?? block
-        const ty = capability(kind)?.props?.[prop] ?? common()[prop]
+      const node = nodeAround(path)
+      if (prop && node) {
+        const ty = capability(node)?.props?.[prop] ?? common()[prop]
         if (ty) {
           const bare = ty.replace(/\?$/, '')
           if (bare === 'Action' || bare === 'Screen') {
@@ -181,7 +165,7 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
       }
 
       // Inside `capabilities { … }`: everything this host does.
-      if (block === 'capabilities') {
+      if (here?.kind === 'capabilities') {
         const out: Monaco.languages.CompletionItem[] = []
         for (const r of registries) {
           for (const [name, cap] of Object.entries(r.capabilities ?? {})) {
@@ -193,7 +177,7 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
       }
 
       // At the start of a line inside something that draws: the components.
-      if (block && (capability(block)?.children || block === 'column' || isBody(block, names))) {
+      if (draws(here)) {
         const out: Monaco.languages.CompletionItem[] = []
         for (const r of registries) {
           for (const [name, cap] of Object.entries(r.capabilities ?? {})) {
@@ -215,8 +199,7 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
         out.push(item('if', Kind.Keyword, 'one tree or another', 'if ($1) {\n\t$0\n}'))
         out.push(item('for', Kind.Keyword, 'the body once per row', 'for ($1 in $2) {\n\t$0\n}'))
         // And the props this node itself takes.
-        const kind = enclosingKind(lines, position.lineNumber - 1)
-        const cap = kind ? capability(kind) : undefined
+        const cap = node ? capability(node) : undefined
         for (const [name, ty] of Object.entries({ ...(cap?.props ?? {}), ...common() })) {
           out.push(item(name, Kind.Property, ty, `${name}: $0`))
         }
@@ -224,11 +207,33 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
       }
 
       // Inside an action: its phases, and the effects `execute` allows.
-      if (block && declaredActions(names).includes(block)) {
+      if (here?.kind === 'action') {
         return {
           suggestions: w.phases.map((p) =>
             item(p, Kind.Keyword, 'a phase', `${p} {\n\t$0\n}`),
           ),
+        }
+      }
+
+      // Inside `execute { … }`: the effects, which are legal in that phase and
+      // in no other. The parser is what says which phase this is, so an effect
+      // is not offered in `compute` where it would not compile.
+      if (here?.kind === 'phase' && here.name === 'execute') {
+        return {
+          suggestions: [
+            ...w.effects.map((e) => item(e, Kind.Event, 'an effect')),
+            ...w.keywords.map((k) => item(k, Kind.Keyword, 'a keyword')),
+          ],
+        }
+      }
+
+      // Inside a screen's `data { … }`: the one form it takes.
+      if (here?.kind === 'data') {
+        return {
+          suggestions: [
+            item('credentials of', Kind.Snippet, 'the rows a screen draws', 'credentials of $1'),
+            item('query', Kind.Snippet, 'rows from an audience', 'query $1'),
+          ],
         }
       }
 
@@ -258,10 +263,4 @@ export function rememberActions(actions: string[]) {
 }
 function declaredActions(_: Declared): string[] {
   return lastActions
-}
-
-/// Whether this block is a screen or a component body — the places a component
-/// may be written.
-function isBody(block: string, names: Declared): boolean {
-  return names.screens.includes(block) || names.components.includes(block)
 }

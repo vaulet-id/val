@@ -42,14 +42,19 @@ pub struct Parser {
     toks: Vec<Token>,
     i: usize,
     pub diagnostics: Vec<Diagnostic>,
+    /// The blocks opened so far, closed as they end. What an editor asks
+    /// instead of counting braces.
+    pub scopes: Vec<Scope>,
+    open: Vec<usize>,
 }
 
 pub fn parse(src: &str) -> (Program, Vec<Diagnostic>) {
     let (toks, lex_diags, comments, blanks) = Lexer::new(src).run();
-    let mut p = Parser { toks, i: 0, diagnostics: lex_diags };
+    let mut p = Parser { toks, i: 0, diagnostics: lex_diags, scopes: Vec::new(), open: Vec::new() };
     let mut program = p.program();
     program.comments = comments;
     program.blank_lines = blanks;
+    program.scopes = std::mem::take(&mut p.scopes);
     (program, p.diagnostics)
 }
 
@@ -66,6 +71,33 @@ impl Parser {
     /// what it read.
     fn previous(&self) -> &Token {
         self.toks.get(self.i.saturating_sub(1)).unwrap_or(self.peek())
+    }
+
+    /// A block starts here. Paired with `close`, and left open if the file ends
+    /// first — which is what a program being typed looks like.
+    fn open(&mut self, kind: ScopeKind, name: impl Into<String>) {
+        let from = self.peek().span;
+        self.scopes.push(Scope { kind, name: name.into(), from, to: Span { line: u32::MAX, col: 0, len: 0 } });
+        self.open.push(self.scopes.len() - 1);
+    }
+
+    /// A block ends here — unless the file ended first.
+    ///
+    /// A block the author never closed runs to the end of the file, because
+    /// that is where their cursor is: closing it at the last token read would
+    /// put the position they are typing at outside every block, which is the
+    /// one moment an editor most needs an answer. It is still an error, and
+    /// reported once, at the brace that opened it.
+    fn close(&mut self) {
+        let Some(i) = self.open.pop() else { return };
+        if self.eof() && !self.previous().is("}") {
+            self.diagnostics.push(Diagnostic::error(
+                self.scopes[i].from,
+                "this block is never closed — the file ends inside it",
+            ));
+            return;
+        }
+        self.scopes[i].to = self.previous().span;
     }
 
     fn at(&self, s: &str) -> bool {
@@ -212,7 +244,9 @@ impl Parser {
                 "capabilities" => {
                     let at = self.peek().span;
                     self.bump();
+                    self.open(ScopeKind::Capabilities, "capabilities");
                     let more = self.capabilities();
+                    self.close();
                     // One block per package. A package is several files sharing
                     // one scope, and "which file says what this app may do" is
                     // exactly the question that has to have one answer —
@@ -335,6 +369,7 @@ impl Parser {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
+        self.open(ScopeKind::Enum, name.clone());
         let mut members: Vec<String> = Vec::new();
         self.expect("{");
         // A comma or a line between members, and nothing else: two names side
@@ -365,6 +400,7 @@ impl Parser {
                 self.bump();
             }
         }
+        self.close();
         EnumDecl { name, members, span }
     }
 
@@ -377,6 +413,7 @@ impl Parser {
     }
 
     fn fields(&mut self) -> Vec<Field> {
+        self.open(ScopeKind::Fields, "");
         let mut out = Vec::new();
         self.expect("{");
         loop {
@@ -410,6 +447,7 @@ impl Parser {
             };
             out.push(Field { name, ty, default, span });
         }
+        self.close();
         out
     }
 
@@ -460,6 +498,7 @@ impl Parser {
             None
         };
 
+        self.open(ScopeKind::Trust, name.clone());
         let mut anchor = None;
         let mut anchor_span = Span::default();
         let mut requires = Vec::new();
@@ -500,6 +539,7 @@ impl Parser {
                 continue;
             }
             if self.at("require") {
+                self.open(ScopeKind::Requires, "require");
                 self.bump();
                 self.expect("{");
                 loop {
@@ -509,10 +549,12 @@ impl Parser {
                     }
                     requires.push(self.expr(0));
                 }
+                self.close();
                 continue;
             }
             self.bump();
         }
+        self.close();
         TrustDecl { name, subject, subject_type, refines, anchor, anchor_span, requires, span }
     }
 
@@ -522,7 +564,9 @@ impl Parser {
         let name = self.ident();
         let params = self.param_list();
         let ret = if self.eat(":") { Some(self.type_ref()) } else { None };
+        self.open(ScopeKind::Function, name.clone());
         let body = self.stmt_block();
+        self.close();
         FunctionDecl { name, params, ret, body, span }
     }
 
@@ -569,6 +613,7 @@ impl Parser {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
+        self.open(ScopeKind::Action, name.clone());
         let mut phases = Vec::new();
         self.expect("{");
         loop {
@@ -596,10 +641,12 @@ impl Parser {
                 }
             }
         }
+        self.close();
         ActionDecl { name, phases, span }
     }
 
     fn phase_stmts(&mut self, phase: Phase) -> Vec<Stmt> {
+        self.open(ScopeKind::Phase, phase.name());
         let mut out = Vec::new();
         self.expect("{");
         loop {
@@ -615,10 +662,12 @@ impl Parser {
                 self.bump();
             }
         }
+        self.close();
         out
     }
 
     fn stmt_block(&mut self) -> Vec<Stmt> {
+        self.open(ScopeKind::Statements, "");
         let mut out = Vec::new();
         self.expect("{");
         loop {
@@ -634,6 +683,7 @@ impl Parser {
                 self.bump();
             }
         }
+        self.close();
         out
     }
 
@@ -912,6 +962,7 @@ impl Parser {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
+        self.open(ScopeKind::Screen, name.clone());
         let params = self.param_list();
 
         // Settings sit between the name and the body: `screen Confirm(x: int)
@@ -961,8 +1012,10 @@ impl Parser {
                 continue;
             }
             if self.at("compute") && self.peek_at(1).is("{") {
+                self.open(ScopeKind::Compute, "compute");
                 self.bump();
                 compute = self.stmt_block();
+                self.close();
                 continue;
             }
             let before = self.i;
@@ -973,6 +1026,7 @@ impl Parser {
                 self.bump();
             }
         }
+        self.close();
         ScreenDecl { name, directives: Vec::new(), params, settings, title, data, compute, tree, span }
     }
 
@@ -1033,6 +1087,7 @@ impl Parser {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
+        self.open(ScopeKind::Component, name.clone());
         let params = self.param_list();
 
         let mut tree = Vec::new();
@@ -1059,10 +1114,12 @@ impl Parser {
                 self.bump();
             }
         }
+        self.close();
         ComponentDecl { name, exported, params, tree, span }
     }
 
     fn data_block(&mut self) -> Vec<DataDecl> {
+        self.open(ScopeKind::ScreenData, "data");
         let mut out = Vec::new();
         self.expect("{");
         loop {
@@ -1082,6 +1139,7 @@ impl Parser {
             let source = self.data_source();
             out.push(DataDecl { name, source, span });
         }
+        self.close();
         out
     }
 
@@ -1234,7 +1292,9 @@ impl Parser {
         let mut args = if self.at("(") { self.args() } else { Vec::new() };
         let mut children = Vec::new();
         let mut lambda = None;
+        let opened = self.at("{");
         if self.at("{") {
+            self.open(ScopeKind::Node, kind.clone());
             self.bump();
             // `list(xs) { r -> … }`, and the same written over two lines. A
             // brace emits a newline now, so without stepping over it the binder
@@ -1277,14 +1337,19 @@ impl Parser {
                 }
             }
         }
+        if opened {
+            self.close();
+        }
         Some(UiNode { kind, args, lambda, children, slots: Vec::new(), otherwise: Vec::new(), span })
     }
 
     /// `{ …nodes… }` — the branches of an `if`, which hold children only.
     fn ui_block(&mut self) -> Vec<UiNode> {
+        self.open(ScopeKind::Tree, "");
         let mut out = Vec::new();
         self.skip_newlines();
         if !self.eat("{") {
+            self.close();
             return out;
         }
         loop {
@@ -1300,6 +1365,7 @@ impl Parser {
                 self.bump();
             }
         }
+        self.close();
         out
     }
 
@@ -1635,6 +1701,7 @@ impl Parser {
     }
 
     fn record(&mut self) -> Expr {
+        self.open(ScopeKind::Record, "");
         let span = self.peek().span;
         self.expect("{");
         let mut spread = None;
@@ -1655,6 +1722,7 @@ impl Parser {
             }
             self.eat(",");
         }
+        self.close();
         Expr::Record { spread, fields, span }
     }
 
@@ -1732,6 +1800,7 @@ impl Parser {
 
     fn switch_expr(&mut self) -> Expr {
         let span = self.peek().span;
+        self.open(ScopeKind::Switch, "switch");
         self.bump();
         self.expect("(");
         let subject = self.expr(0);
@@ -1758,6 +1827,7 @@ impl Parser {
             self.eat(",");
             arms.push(SwitchArm { pattern, body, span: aspan });
         }
+        self.close();
         Expr::Switch { subject: Box::new(subject), arms, span }
     }
 }
@@ -1791,7 +1861,7 @@ fn slot_name(inner: &str, taken: &[Arg]) -> String {
 /// One expression, parsed on its own. The inside of a `${…}`.
 fn parse_expr(src: &str, span: crate::diag::Span) -> (Expr, Vec<Diagnostic>) {
     let (toks, mut d, _, _) = Lexer::new(src).run();
-    let mut p = Parser { toks, i: 0, diagnostics: Vec::new() };
+    let mut p = Parser { toks, i: 0, diagnostics: Vec::new(), scopes: Vec::new(), open: Vec::new() };
     let e = p.expr(0);
     // Positions inside a template are the template's own: it is lexed as one
     // token, and a column from a second lexer would point into a string nobody

@@ -52,6 +52,9 @@ pub struct Program {
     /// grouping, and it is kept as "the line above was empty" rather than as a
     /// distance: the printer changes how many lines a thing takes.
     pub blank_lines: std::collections::BTreeSet<u32>,
+    /// Every block the parser opened, innermost last when they are filtered to
+    /// a position. What an editor asks instead of counting braces.
+    pub scopes: Vec<Scope>,
     /// Where `app`, `version` and `state` were written. The other declarations
     /// carry their own; these three are held on the program, and a printer that
     /// did not know where they were could not put a file back in the order
@@ -312,6 +315,77 @@ pub struct ImportDecl {
     pub package: String,
     pub names: Vec<String>,
     pub span: Span,
+}
+
+/// A block the parser opened, and where it ran from and to.
+///
+/// **What a program that is still being typed can answer.** An editor asking
+/// "what may I write here" was reading braces and indentation, which is a guess
+/// about the grammar made by something that does not have one. The parser knows
+/// what it opened; this is it saying so.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Scope {
+    pub kind: ScopeKind,
+    /// What it is called, where that means anything: the action's name, the
+    /// node's kind, the phase.
+    pub name: String,
+    /// The `{` and the `}`. A block nobody closed runs to the end of the file,
+    /// which is what a program being typed looks like.
+    pub from: Span,
+    pub to: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScopeKind {
+    Capabilities,
+    Enum,
+    /// A credential, a type, or `state` — the three that hold fields.
+    Fields,
+    Trust,
+    Requires,
+    Function,
+    Action,
+    Phase,
+    Screen,
+    ScreenData,
+    Compute,
+    Component,
+    /// A run of drawn things: an `if`/`else` branch, or a component's body.
+    /// A screen's own tree is the screen's block; a node's is the node's.
+    Tree,
+    /// The block on a node, which holds its props and its children.
+    Node,
+    Statements,
+    Switch,
+    Record,
+}
+
+impl ScopeKind {
+    /// The name this block goes by outside Rust — in a report, and in the
+    /// editor that asks where the cursor is. Written out rather than derived
+    /// from the variant, so renaming a variant cannot silently rename the
+    /// thing an editor matches on.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ScopeKind::Capabilities => "capabilities",
+            ScopeKind::Enum => "enum",
+            ScopeKind::Fields => "fields",
+            ScopeKind::Trust => "trust",
+            ScopeKind::Requires => "require",
+            ScopeKind::Function => "function",
+            ScopeKind::Action => "action",
+            ScopeKind::Phase => "phase",
+            ScopeKind::Screen => "screen",
+            ScopeKind::ScreenData => "data",
+            ScopeKind::Compute => "compute",
+            ScopeKind::Component => "component",
+            ScopeKind::Tree => "tree",
+            ScopeKind::Node => "node",
+            ScopeKind::Statements => "statements",
+            ScopeKind::Switch => "switch",
+            ScopeKind::Record => "record",
+        }
+    }
 }
 
 /// `@main`, `@name(argument)` — a mark on a declaration.
