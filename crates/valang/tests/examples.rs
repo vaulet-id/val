@@ -125,6 +125,7 @@ fn rejected_is_rejected_for_the_reasons_it_says() {
         "is given a function",                    // 16. a combinator with no function
         "a loop reads `for (row in rows)`",       // 17. a loop that says `of`
         "is a keyword, and a keyword is never a name", // 18. a keyword as a name
+        "is pure. Effects may only appear in `execute`", // 21. a screen that acts
     ] {
         assert!(
             joined.contains(want),

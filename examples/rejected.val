@@ -322,3 +322,24 @@ screen Typo {
 // branch nobody took. The report is checked in `crates/valang/tests/report.rs`,
 // and it is here because the failure it prevents belongs on this list: a
 // capability that runs and does not appear on the consent sheet.
+
+// 21. A screen that acts.
+screen ActingScreen {
+  compute {
+    // error: a screen derives and does not act. Its `compute` follows an
+    //        action's rules — and a credential issued while a screen is being
+    //        drawn is one nobody pressed anything to get.
+    const c = credential.issue(LoyaltyMember { member_id: "x" })
+  }
+
+  column {
+    section("x")
+  }
+}
+
+// 22. A state field that starts somewhere else.
+//
+// error: a default is read before anything has run. There is no scope to read a
+//        name from and no previous version to ask, so a name here resolves to
+//        nothing quietly — a field starting as null on a phone rather than as
+//        the number it says.

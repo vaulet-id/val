@@ -425,7 +425,8 @@ a screen can start goes through the six phases with the same consent and the
 same record.
 
 **A screen may derive, and may not act.** Its `compute` block follows an
-action's rules: pure, no effects.
+action's rules: pure, no effects — a credential issued while a screen was being
+drawn is one nobody pressed anything to get.
 
 Note: keep totals in `compute`, not in `state`. A value you can compute from
 what is already on the screen does not need to be stored, hashed and replayed.
@@ -719,6 +720,9 @@ state roots, policies used, capabilities used, effects requested and executed
   commits.
 
 ### Changing the shape is a new version
+
+A state field's `default` is a value written out. It is read before anything has
+run: there is no scope to read a name from, and no previous version to ask.
 
 **A change to the shape of `state` starts that version's state empty.** There is
 no migration, no compatibility shim and no dual reader — a migration is code

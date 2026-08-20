@@ -23,6 +23,7 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     updates_take_paths(p, &mut d);
     nothing_is_declared_twice(p, &mut d);
     effects_do_not_read_each_other(p, &mut d);
+    defaults_are_written_out(p, &mut d);
     refusals_come_before_effects(p, &mut d);
     policies_name_an_anchor(p, &mut d);
     navigation_goes_somewhere(p, &mut d);
@@ -559,7 +560,49 @@ fn walk_stmts(stmts: &[Stmt], f: &mut impl FnMut(&Stmt)) {
 
 // -------------------------------------------------------------------- effects
 
+/// A state field starts where its `default` says, and nowhere else.
+///
+/// It is read before anything has run: there is no scope, no previous version
+/// to consult and no action to have produced a value. Anything but a value
+/// written out is a name that resolves to nothing, quietly — which is a state
+/// field starting as null on a phone rather than as the number it says.
+fn defaults_are_written_out(p: &Program, d: &mut Vec<Diagnostic>) {
+    fn written_out(e: &Expr, p: &Program) -> bool {
+        match e {
+            Expr::Num { .. } | Expr::Str { .. } | Expr::Bool { .. } => true,
+            Expr::Unary { rhs, .. } => written_out(rhs, p),
+            Expr::List { items, .. } => items.iter().all(|x| written_out(x, p)),
+            Expr::Record { spread, fields, .. } => {
+                spread.is_none() && fields.iter().all(|(_, v)| written_out(v, p))
+            }
+            // `Tier.bronze` — an enum member, which is a value written out
+            // under another name.
+            Expr::Member { obj, .. } => match obj.as_ref() {
+                Expr::Ident { name, .. } => p.enums.iter().any(|e| e.name == *name),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    for f in &p.state {
+        let Some(value) = &f.default else { continue };
+        if !written_out(value, p) {
+            d.push(Diagnostic::error(
+                f.span,
+                format!("`{}` starts at a value written out here. A default is read before anything has run — there is no scope to read a name from, and no previous version to ask", f.name),
+            ));
+        }
+    }
+}
+
 fn effects_only_in_execute(p: &Program, d: &mut Vec<Diagnostic>) {
+    // A screen derives and does not act, so its `compute` is checked by the
+    // same rule as an action's — it was checked by nothing, and a screen could
+    // issue a credential while it was being drawn.
+    for s in &p.screens {
+        effects_in_pure(&s.compute, "a screen's `compute`", d);
+    }
     for a in &p.actions {
         for block in &a.phases {
             if block.phase == Phase::Execute {
@@ -598,6 +641,34 @@ fn effects_only_in_execute(p: &Program, d: &mut Vec<Diagnostic>) {
             });
         }
     }
+}
+
+/// Effects in a block that has none, named by what the block is.
+fn effects_in_pure(stmts: &[Stmt], what: &str, d: &mut Vec<Diagnostic>) {
+    walk_stmts(stmts, &mut |s| {
+        if let Stmt::Effect { name, span, .. } = s {
+            d.push(Diagnostic::error(
+                *span,
+                format!("`{name}` is an effect and {what} is pure. Effects may only appear in `execute`"),
+            ));
+        }
+        // And one hiding inside an expression, which is how it got past the
+        // rule that only looked at statements.
+        if let Stmt::Let { value, .. } | Stmt::Expr { value, .. } = s {
+            value.walk(&mut |e| {
+                if let Expr::Call { callee, span, .. } = e {
+                    if let Some(path) = callee.path() {
+                        if is_effect(&path) {
+                            d.push(Diagnostic::error(
+                                *span,
+                                format!("`{path}` is an effect and {what} is pure. Effects may only appear in `execute`"),
+                            ));
+                        }
+                    }
+                }
+            });
+        }
+    });
 }
 
 fn functions_are_pure(p: &Program, d: &mut Vec<Diagnostic>) {
