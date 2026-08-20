@@ -1563,10 +1563,16 @@ impl Parser {
             if bytes[i] == b'$' && bytes.get(i + 1) == Some(&b'{') {
                 let mut depth = 1;
                 let mut j = i + 2;
+                // A brace inside a string is not a brace. `${ f("}") }` ended
+                // the interpolation at the wrong place and the rest of the
+                // template was read as source.
+                let mut in_string = false;
                 while j < bytes.len() && depth > 0 {
                     match bytes[j] {
-                        b'{' => depth += 1,
-                        b'}' => depth -= 1,
+                        b'"' => in_string = !in_string,
+                        b'\\' if in_string => j += 1,
+                        b'{' if !in_string => depth += 1,
+                        b'}' if !in_string => depth -= 1,
                         _ => {}
                     }
                     j += 1;

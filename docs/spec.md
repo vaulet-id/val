@@ -427,7 +427,8 @@ state.member?.points          // nothing, if there is no member
 state.member?.points ?: 0     // nothing becomes zero
 ```
 
-Reading a field of nothing is a defect. An application that wrote
+An `?.` anywhere along a path stops the whole path: `a?.b.c` is nothing when `a`
+is, rather than a failure at `c`. Reading a field of nothing is a defect. An application that wrote
 `state.member.points` wrote it believing there was a member, and answering with
 nothing again is how that belief reaches a person as a blank card. `?.` says
 there might not be one, and makes the whole path optional; `?: ` supplies what

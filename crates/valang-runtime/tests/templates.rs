@@ -101,3 +101,13 @@ fn a_template_with_no_slots_is_just_words() {
     assert_eq!(a.get("text").map(String::as_str), Some("nothing to fill"));
     assert_eq!(a.len(), 1, "{a:?}");
 }
+
+/// A brace inside a string is not a brace. `${ f("}") }` ended the
+/// interpolation at the wrong place, and the rest of the template was read as
+/// source until the file ran out.
+#[test]
+fn a_brace_inside_a_string_does_not_close_the_interpolation() {
+    let a = args("    text(`a ${ \"}\" } b`)");
+    assert_eq!(a.get("text").map(String::as_str), Some("a {v0} b"));
+    assert_eq!(a.get("v0").map(String::as_str), Some("}"));
+}

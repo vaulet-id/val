@@ -121,3 +121,15 @@ fn elvis_takes_the_left_side_when_it_is_there() {
 fn elvis_takes_the_right_side_when_it_is_not() {
     assert_eq!(drawn("    const out = { a: null }.a?.b ?: \"none\""), vec!["none"]);
 }
+
+/// `a?.b.c` — an optional hop stops the whole chain, as it does in every
+/// language that spells it this way. Reading `c` from what `a?.b` gave back
+/// reported a path through nothing at the one place the author had already said
+/// it might be.
+#[test]
+fn an_optional_hop_stops_the_rest_of_the_chain() {
+    assert_eq!(
+        drawn("    const out = { a: null }.a?.b.c exists ? \"there\" : \"nothing\""),
+        vec!["nothing"]
+    );
+}

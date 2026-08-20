@@ -64,10 +64,10 @@ impl<'a> Eval<'a> {
     pub fn returned(&self) -> bool {
         self.lookup("__return").is_some()
     }
-    fn push(&mut self) {
+    pub fn push(&mut self) {
         self.scope.push(BTreeMap::new());
     }
-    fn pop(&mut self) {
+    pub fn pop(&mut self) {
         self.scope.pop();
     }
 
@@ -235,8 +235,14 @@ impl<'a> Eval<'a> {
             // `a?.b` stops at the first thing that is not there, rather than
             // failing on it. `a.b` still fails, because a path that is not
             // optional was written by somebody who believed it was there.
+            // `a?.b.c` — an optional hop stops the whole chain, as it does in
+            // every language that spells it this way. Reading `c` from what
+            // `a?.b` gave back would report a path through nothing at the one
+            // place the author had already said it might be.
             Expr::Member { obj, name, optional, .. } => {
-                if *optional && matches!(self.expr(obj, state)?, Value::Null) {
+                if (*optional || reaches_through_an_optional(obj))
+                    && matches!(self.expr(obj, state)?, Value::Null)
+                {
                     Value::Null
                 } else {
                     self.member(obj, name, state)?
@@ -604,6 +610,18 @@ fn render(e: &Expr) -> String {
 enum Callable {
     Written(Vec<String>, Expr),
     Named(String),
+}
+
+/// Whether a path has an `?.` anywhere along it.
+///
+/// The hop that may be nothing is not always the last one: in `a?.b.c` it is
+/// the first, and what makes `c` safe to ask for is that the author already
+/// said so further left.
+fn reaches_through_an_optional(e: &Expr) -> bool {
+    match e {
+        Expr::Member { obj, optional, .. } => *optional || reaches_through_an_optional(obj),
+        _ => false,
+    }
 }
 
 /// How long a range may be.

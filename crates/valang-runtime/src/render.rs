@@ -180,10 +180,16 @@ fn components(
                 None => Vec::new(),
             };
             for item in items {
+                // A scope per turn: the row belongs to the loop. Bound without
+                // one, a loop inside a loop took the outer row's name, and the
+                // line after the loop saw whatever the last turn left.
+                ev.push();
                 if let Some(bind) = &n.lambda {
                     ev.bind(bind, item);
                 }
-                out.extend(components(ev, &n.children, state)?);
+                let drawn = components(ev, &n.children, state);
+                ev.pop();
+                out.extend(drawn?);
             }
             continue;
         }
@@ -261,10 +267,16 @@ fn component(ev: &mut Eval, n: &UiNode, state: &BTreeMap<String, Value>) -> Resu
         };
         let mut rows = Vec::new();
         for item in items {
+            // A scope per row, for the same reason the loop above has one: the
+            // row is the loop's, and a list inside a list would otherwise take
+            // the outer one's name.
+            ev.push();
             if let Some(bind) = &n.lambda {
                 ev.bind(bind, item.clone());
             }
-            rows.extend(components(ev, &n.children, state)?);
+            let drawn = components(ev, &n.children, state);
+            ev.pop();
+            rows.extend(drawn?);
         }
         return Ok(Component { kind: n.kind.clone(), args, children: rows });
     }
