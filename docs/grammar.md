@@ -34,6 +34,33 @@ None of them was reachable from anything in `examples/` or in the guide, which
 is exactly why they had survived: the corpus was written by somebody who already
 knew the intended shape.
 
+## The printer
+
+`valang::print` writes a program back out in one shape, and `valc --format`
+does it in place. It exists for two reasons and the second is the important
+one: a file has a form an editor can produce, and the parser has something to
+be tested against.
+
+```
+print(parse(print(parse(x)))) == print(parse(x))
+```
+
+That property, checked over every example in `crates/valang/tests/roundtrip.rs`,
+found two disagreements the first time it ran. A lambda's binder on the line
+after its brace was silently dropped — the row a list draws from lost its name —
+and a function written as an argument rather than after the parentheses was read
+as an empty record. Both are shapes the parser claimed to accept and did not.
+
+Two more properties are checked beside it: the capability report of the printed
+program equals the original's, so a node the printer dropped shows up as a line
+that went missing; and the errors are the same errors, so a formatter cannot
+quietly repair a mistake somebody wanted to see.
+
+**It does not carry comments.** The lexer drops them and the AST does not hold
+them, so `--format` refuses a file that has any rather than deleting them.
+Attaching comments to the nodes they belong to is the work that turns this into
+a formatter somebody can run on their own code, and it has not been done.
+
 ## Keeping the two honest
 
 `crates/valang/tests/grammar.rs` holds one test per production the grammar

@@ -5,6 +5,8 @@
 //! sentence the rule is taught by — see `examples/rejected.val` in this
 //! repository, which is the checklist this crate is written against.
 
+#![forbid(unsafe_code)]
+
 pub mod ast;
 pub mod check;
 pub mod capability;
@@ -12,6 +14,7 @@ pub mod diag;
 pub mod expand;
 pub mod lex;
 pub mod parse;
+pub mod print;
 pub mod report;
 pub mod typeck;
 pub mod types;

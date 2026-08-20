@@ -69,9 +69,60 @@ fn main() -> ExitCode {
         }
     }
 
+    // `--format` writes each file back out in one shape. A formatter is worth
+    // having on its own, and it is also how the parser is tested against
+    // itself: printing what was parsed and parsing that again has to give the
+    // same text.
+    let format = args.iter().any(|a| a == "--format");
+    args.retain(|a| a != "--format");
+
     if args.is_empty() {
-        eprintln!("usage: valc [--packages <dir>] [--surface <file>] <file.val>…");
+        eprintln!("usage: valc [--format] [--packages <dir>] [--surface <file>] <file.val>…");
         return ExitCode::from(2);
+    }
+
+    if format {
+        let mut failed = false;
+        for path in &args {
+            let Ok(src) = std::fs::read_to_string(path) else {
+                eprintln!("{path}: cannot read");
+                failed = true;
+                continue;
+            };
+            let (program, diagnostics) = valang::parse::parse(&src);
+            if diagnostics.iter().any(|d| d.severity == valang::Severity::Error) {
+                // A file that does not parse is a file whose shape nobody
+                // knows. Rewriting it would be the formatter guessing.
+                eprintln!("{path}: does not parse, so it is left alone");
+                for d in &diagnostics {
+                    eprintln!("  {d}");
+                }
+                failed = true;
+                continue;
+            }
+            // The lexer drops comments and the AST does not carry them, so
+            // printing a file that has any would delete them. A formatter that
+            // destroys what it was pointed at is worse than no formatter:
+            // until the printer can carry a comment, it refuses the file.
+            if src.lines().any(|l| l.trim_start().starts_with("//")) {
+                eprintln!(
+                    "{path}: has comments, and the printer cannot carry them yet — left alone"
+                );
+                failed = true;
+                continue;
+            }
+
+            let out = valang::print::print(&program);
+            if out != src {
+                if let Err(e) = std::fs::write(path, &out) {
+                    eprintln!("{path}: {e}");
+                    failed = true;
+                } else {
+                    println!("{path}");
+                }
+            }
+        }
+        return if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS };
     }
 
     // A package is several files sharing one scope: `wallet.val` presses an

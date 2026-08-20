@@ -1210,7 +1210,15 @@ impl Parser {
         let mut lambda = None;
         if self.at("{") {
             self.bump();
-            // `list(xs) { r -> … }`
+            // `list(xs) { r -> … }`, and the same written over two lines. A
+            // brace emits a newline now, so without stepping over it the binder
+            // was not seen — and the row a list is drawn from lost its name
+            // silently, which is worse than not reading the form at all.
+            let save = self.i;
+            self.skip_newlines();
+            if !(self.peek().kind == Kind::Ident && self.peek_at(1).is("->")) {
+                self.i = save;
+            }
             if self.peek().kind == Kind::Ident && self.peek_at(1).is("->") {
                 lambda = Some(self.bump().text);
                 self.bump();
@@ -1456,6 +1464,29 @@ impl Parser {
         base
     }
 
+    /// Whether the block starting at the cursor has a `->` at its own level.
+    fn block_holds_an_arrow(&self) -> bool {
+        let mut depth = 0i32;
+        let mut k = 0usize;
+        loop {
+            let t = self.peek_at(k);
+            if t.kind == Kind::Eof {
+                return false;
+            }
+            if t.is("{") || t.is("(") || t.is("[") {
+                depth += 1;
+            } else if t.is("}") || t.is(")") || t.is("]") {
+                depth -= 1;
+                if depth == 0 {
+                    return false;
+                }
+            } else if depth == 1 && t.is("->") {
+                return true;
+            }
+            k += 1;
+        }
+    }
+
     fn lambda(&mut self) -> Expr {
         let span = self.peek().span;
         self.expect("{");
@@ -1528,6 +1559,12 @@ impl Parser {
                 inner
             }
             _ if t.is("switch") => self.switch_expr(),
+            // `{ sum, h -> … }` in an argument position is a function, not a
+            // record. Told apart by looking for a `->` before the brace closes:
+            // a record's contents are `name: value` and a function's are not,
+            // and reading one as the other produced an empty record and no
+            // complaint.
+            _ if t.is("{") && self.block_holds_an_arrow() => self.lambda(),
             _ if t.is("{") => self.record(),
             Kind::Ident if t.text == "true" || t.text == "false" => {
                 self.bump();
