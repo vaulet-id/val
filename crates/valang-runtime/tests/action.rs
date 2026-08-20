@@ -135,3 +135,51 @@ fn a_state_larger_than_the_host_carries_does_not_commit() {
         run.outcome
     );
 }
+
+/// An action commits or it does not. A trap partway through the patch must not
+/// leave the lines before it applied.
+#[test]
+fn a_trap_partway_through_an_update_leaves_no_half_state() {
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  a: int default 1\n  b: int default 1\n}\n\naction Go {\n  update {\n    a: 7\n    b: state.b * 9223372036854775807 * 2\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
+    let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
+    let (compiled, d) = valang::analyse_fully(src, None, &hosts);
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    let host = valang_runtime::fixture::Fixture::parse(WALLET).unwrap();
+    let mut state = BTreeMap::new();
+    state.insert("a".to_string(), Value::Int(1));
+    state.insert("b".to_string(), Value::Int(1));
+    let run = valang_runtime::run_action(&compiled, src, "Go", &state, &BTreeMap::new(), &host);
+
+    assert!(!matches!(run.outcome, valang_runtime::Outcome::Committed), "{:?}", run.outcome);
+    assert_eq!(
+        run.next_state.get("a"),
+        Some(&Value::Int(1)),
+        "the line before the trap was applied and the action did not commit"
+    );
+}
+
+/// The batch is offered once and the person may say no. Nothing commits then —
+/// and "nothing" has to include the state the pure phases worked out, or a
+/// refusal would leave behind exactly the change it refused.
+#[test]
+fn a_batch_the_person_refuses_commits_no_state() {
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.issue(Card)\n}\n\ncredential Card {\n  who: string\n}\n\nstate {\n  n: int default 1\n}\n\naction Go {\n  update {\n    n: 9\n  }\n\n  execute {\n    credential.issue(Card { who: \"me\" })\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
+    let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
+    let (compiled, d) = valang::analyse_fully(src, None, &hosts);
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    let mut host = valang_runtime::fixture::Fixture::parse(WALLET).unwrap();
+    host.approve = false;
+
+    let mut state = BTreeMap::new();
+    state.insert("n".to_string(), Value::Int(1));
+    let run = valang_runtime::run_action(&compiled, src, "Go", &state, &BTreeMap::new(), &host);
+
+    assert!(!matches!(run.outcome, valang_runtime::Outcome::Committed), "{:?}", run.outcome);
+    assert_eq!(
+        run.next_state.get("n"),
+        Some(&Value::Int(1)),
+        "the person refused the batch and the state changed anyway"
+    );
+}
