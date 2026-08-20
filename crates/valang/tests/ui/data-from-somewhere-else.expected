@@ -1,0 +1,6 @@
+error: a screen's data comes from `credentials of …` or from `query …`. The host resolves it before anything is drawn, which is why it is declared rather than fetched
+  --> 14:11
+   |
+14 |     rows: 1 + 2
+   |           ^
+

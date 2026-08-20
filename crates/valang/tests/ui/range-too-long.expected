@@ -1,0 +1,6 @@
+error: a range of 1 to 999999 is more steps than a screen can be made of. The limit is 10000
+  --> 14:15
+   |
+14 |     for (i in 1...999999) {
+   |               ^^^^^^^^^^
+

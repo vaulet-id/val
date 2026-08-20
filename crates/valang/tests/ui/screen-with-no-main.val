@@ -1,0 +1,15 @@
+app "ui.screen-with-no-main"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+screen Home {
+  column {
+    section("x")
+  }
+}

@@ -1,0 +1,42 @@
+app "ui.anchor-not-quoted"
+version 1
+
+capabilities {
+  credential.read(R)
+}
+
+state {
+  n: int default 0
+}
+
+credential R {
+  amount: int
+}
+
+trust FromShop(r: R) {
+  anchor: shop.example.com
+  require {
+    r.signature.valid
+  }
+}
+
+action Go {
+  input {
+    r: Credential<R>
+  }
+
+  verify {
+    const checked = r with FromShop
+  }
+
+  update {
+    n: 1
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}

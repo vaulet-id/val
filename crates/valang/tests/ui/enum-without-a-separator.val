@@ -1,0 +1,18 @@
+app "ui.enum-without-a-separator"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+enum Tier { bronze silver }
+
+@main
+screen Home {
+  column {
+    section("x")
+  }
+}

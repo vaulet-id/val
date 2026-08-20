@@ -61,6 +61,26 @@ them, so `--format` refuses a file that has any rather than deleting them.
 Attaching comments to the nodes they belong to is the work that turns this into
 a formatter somebody can run on their own code, and it has not been done.
 
+## What a diagnostic looks like
+
+```
+error: a range of 1 to 999999 is more steps than a screen can be made of. The limit is 10000
+  --> 14:15
+   |
+14 |     for (i in 1...999999) {
+   |               ^^^^^^^^^^
+```
+
+`crates/valang/tests/ui/` holds one program per rule and, beside each, exactly
+what the compiler says about it. A test that asks whether a message *contains* a
+phrase passes while the rest of the message goes to pieces, and the message is
+part of the language. To adopt a change, read it and then run
+`VAL_BLESS=1 cargo test -p valang --test ui`.
+
+Reading them the first time is what showed that several diagnostics underlined
+the punctuation of the thing rather than the thing: three characters under the
+dots of a range, the `.` of a path, the `(` of a call.
+
 ## Keeping the two honest
 
 `crates/valang/tests/grammar.rs` holds one test per production the grammar

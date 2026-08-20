@@ -60,6 +60,12 @@ impl Parser {
     fn peek_at(&self, n: usize) -> &Token {
         self.toks.get(self.i + n).unwrap_or(self.toks.last().unwrap())
     }
+    /// The token just consumed, for a diagnostic that has to reach back over
+    /// what it read.
+    fn previous(&self) -> &Token {
+        self.toks.get(self.i.saturating_sub(1)).unwrap_or(self.peek())
+    }
+
     fn at(&self, s: &str) -> bool {
         self.peek().is(s)
     }
@@ -471,6 +477,7 @@ impl Parser {
                     } else {
                         let at = self.peek().span;
                         let written = self.dotted();
+                        let at = at.to(self.previous().span);
                         self.diagnostics.push(Diagnostic::error(
                             at,
                             format!("an anchor is quoted: `anchor: \"{written}\"`. It names something outside this package, as `app`, `host` and `import` do"),
@@ -1419,8 +1426,13 @@ impl Parser {
                 self.bump();
             }
             if self.at(".") && self.peek_at(1).kind == Kind::Ident {
-                let span = self.bump().span;
+                self.bump();
+                let at = self.peek().span;
                 let name = self.bump().text;
+                // From the start of what is being read to the end of the field
+                // being read out of it. The dot's own position is where the
+                // punctuation is, not where the path is.
+                let span = base.span().to(at);
                 base = Expr::Member { obj: Box::new(base), name, optional, span };
                 continue;
             }

@@ -1,0 +1,6 @@
+error: `map` is given a function — `{ r -> … }`, or the name of one this package declares
+  --> 12:10
+   |
+12 |   return xs.map(nothing)
+   |          ^^^^^^^
+

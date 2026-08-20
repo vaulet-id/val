@@ -12,6 +12,25 @@ pub struct Span {
     pub len: u32,
 }
 
+impl Span {
+    /// From the start of this one to the end of that one.
+    ///
+    /// A diagnostic about an expression should underline the expression, and an
+    /// expression's own span is whichever token its shape hangs off — the
+    /// operator, the bracket. `1...999999` reported three characters under the
+    /// dots, which is a caret pointing at the punctuation of the thing rather
+    /// than at the thing.
+    ///
+    /// Only where both are on one line: an underline that ran down the page
+    /// would be a different drawing, and this one is a caret.
+    pub fn to(self, end: Span) -> Span {
+        if self.line != end.line || end.col < self.col {
+            return self;
+        }
+        Span { line: self.line, col: self.col, len: end.col + end.len - self.col }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     Error,

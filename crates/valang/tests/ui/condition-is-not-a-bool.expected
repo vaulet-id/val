@@ -1,0 +1,6 @@
+error: a condition is true or false, and this is int. A screen that showed one thing or another on a number would show whichever the host guessed
+  --> 14:9
+   |
+14 |     if (state.n) {
+   |         ^^^^^^^
+

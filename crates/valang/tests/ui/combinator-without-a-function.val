@@ -1,0 +1,20 @@
+app "ui.combinator-without-a-function"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+function f(xs: List<int>): List<int> {
+  return xs.map(nothing)
+}
+
+@main
+screen Home {
+  column {
+    section("x")
+  }
+}

@@ -1,0 +1,16 @@
+app "ui.name-that-is-not-a-word"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+@main
+screen Home {
+  column {
+    text(pointss)
+  }
+}

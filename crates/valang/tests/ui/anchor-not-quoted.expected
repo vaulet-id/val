@@ -1,0 +1,6 @@
+error: an anchor is quoted: `anchor: "shop.example.com"`. It names something outside this package, as `app`, `host` and `import` do
+  --> 17:11
+   |
+17 |   anchor: shop.example.com
+   |           ^^^^^^^^^^^^^^^^
+

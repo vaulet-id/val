@@ -1,0 +1,6 @@
+error: `bronze` and `silver` need a comma or a line between them
+  --> 11:20
+   |
+11 | enum Tier { bronze silver }
+   |                    ^^^^^^
+

@@ -1,0 +1,18 @@
+app "ui.range-too-long"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+@main
+screen Home {
+  column {
+    for (i in 1...999999) {
+      text(i)
+    }
+  }
+}

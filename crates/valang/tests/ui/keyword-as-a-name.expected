@@ -1,0 +1,6 @@
+error: `screen` is a keyword, and a keyword is never a name
+  --> 13:11
+   |
+13 |     const screen = 1
+   |           ^^^^^^
+

@@ -1,0 +1,20 @@
+app "ui.data-from-somewhere-else"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+@main
+screen Home {
+  data {
+    rows: 1 + 2
+  }
+
+  column {
+    section("x")
+  }
+}

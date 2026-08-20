@@ -1,0 +1,6 @@
+error: `pointss` is neither something this program declares nor a word this host has
+  --> 14:10
+   |
+14 |     text(pointss)
+   |          ^^^^^^^
+

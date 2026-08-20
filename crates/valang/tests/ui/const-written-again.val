@@ -1,0 +1,27 @@
+app "ui.const-written-again"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+action Go {
+  compute {
+    const fixed = 1
+    fixed = 2
+  }
+
+  update {
+    n: 1
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}

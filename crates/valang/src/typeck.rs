@@ -311,7 +311,7 @@ impl<'a> Cx<'a> {
                     if let Some(t) = self.typed(&a.value) {
                         if !matches!(t.ty.inner(), Ty::Bool | Ty::Unknown) {
                             self.err(
-                                a.span,
+                                a.value.span(),
                                 format!(
                                     "a condition is true or false, and this is {}. A screen that showed one thing or another on a number would show whichever the host guessed",
                                     t.ty
@@ -866,7 +866,7 @@ impl<'a> Cx<'a> {
                         {
                             if to.saturating_sub(*from).saturating_add(1) > RANGE_LIMIT {
                                 self.err(
-                                    *span,
+                                    lhs.span().to(rhs.span()),
                                     format!("a range of {from} to {to} is more steps than a screen can be made of. The limit is {RANGE_LIMIT}"),
                                 );
                             }
@@ -1022,8 +1022,9 @@ impl<'a> Cx<'a> {
                                 _ => false,
                             });
                             if !given {
+                                let at = obj.span().to(*span);
                                 self.err(
-                                    *span,
+                                    at,
                                     format!("`{name}` is given a function — `{{ r -> … }}`, or the name of one this package declares"),
                                 );
                             }

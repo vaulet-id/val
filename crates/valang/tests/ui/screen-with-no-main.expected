@@ -1,0 +1,6 @@
+error: no screen is marked `@main`, and a package opens at one. Which one is not the order the files were read, and one screen today is two tomorrow
+  --> 11:1
+   |
+11 | screen Home {
+   | ^^^^^^
+

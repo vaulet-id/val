@@ -1,0 +1,6 @@
+error: `fixed` is a `const`, so it is what it was defined as. Declare it `let` to write it again
+  --> 14:5
+   |
+14 |     fixed = 2
+   |     ^^^^^
+

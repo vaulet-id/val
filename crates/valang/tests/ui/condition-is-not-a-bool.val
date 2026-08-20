@@ -1,0 +1,18 @@
+app "ui.condition-is-not-a-bool"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+@main
+screen Home {
+  column {
+    if (state.n) {
+      section("x")
+    }
+  }
+}
