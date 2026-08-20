@@ -372,7 +372,7 @@ export default function App() {
           startLineNumber: d.line - before,
           startColumn: d.column,
           endLineNumber: d.line - before,
-          endColumn: d.column + 8,
+          endColumn: d.column + Math.max(d.length ?? 1, 1),
           message: d.message,
           severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
         })),

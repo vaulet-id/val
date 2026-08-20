@@ -168,7 +168,16 @@ fn main() -> ExitCode {
 
         println!("── {}", args.join(" "));
         for d in &diagnostics {
-            println!("  {d}");
+            // With the line it is about. A position on its own is a thing to go
+            // and look up, and the file it is in is the one this loop read.
+            let text = sources
+                .iter()
+                .find(|(p, _)| *p == *path)
+                .map(|(_, s)| s.as_str())
+                .unwrap_or(&src);
+            for line in d.render(text).lines() {
+                println!("  {line}");
+            }
         }
         let errors = diagnostics.iter().filter(|d| d.severity == valang::Severity::Error).count();
         if errors > 0 {

@@ -64,13 +64,22 @@ impl<'a> Lexer<'a> {
         Span { line: self.line, col: self.col, len }
     }
 
+    /// Advance `n` bytes, counting the column in characters.
+    ///
+    /// A column that counted bytes put every diagnostic on a line with Thai in
+    /// it several places to the right of what it was about — and half of what
+    /// these files say is Thai. A continuation byte belongs to the character
+    /// that started, so it does not move the column.
     fn bump(&mut self, n: usize) {
         for k in 0..n {
-            if self.bytes.get(self.i + k) == Some(&b'\n') {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
+            match self.bytes.get(self.i + k) {
+                Some(&b'\n') => {
+                    self.line += 1;
+                    self.col = 1;
+                }
+                // 0b10xx_xxxx — inside a character, not the start of one.
+                Some(b) if b & 0xC0 == 0x80 => {}
+                _ => self.col += 1,
             }
         }
         self.i += n;
@@ -109,7 +118,8 @@ impl<'a> Lexer<'a> {
             // decided by the parser, which turns it into the same `phrase` a
             // person would have written by hand.
             if c == b'`' {
-                let span = self.span(1);
+                let mut span = self.span(1);
+                let opened = self.i;
                 self.bump(1);
                 let mut text = String::new();
                 let mut closed = false;
@@ -148,12 +158,14 @@ impl<'a> Lexer<'a> {
                 if !closed {
                     self.diagnostics.push(Diagnostic::error(span, "this line ends inside a `` ` `` string"));
                 }
+                span.len = self.src[opened..self.i].chars().count().max(1) as u32;
                 out.push(Token { kind: Kind::Template, text, span });
                 continue;
             }
 
             if c == b'"' {
-                let span = self.span(1);
+                let mut span = self.span(1);
+                let opened = self.i;
                 self.bump(1);
                 let mut text = String::new();
                 let mut closed = false;
@@ -207,12 +219,13 @@ impl<'a> Lexer<'a> {
                 if !closed {
                     self.diagnostics.push(Diagnostic::error(span, "this string is never closed"));
                 }
+                span.len = self.src[opened..self.i].chars().count().max(1) as u32;
                 out.push(Token { kind: Kind::Str, text, span });
                 continue;
             }
 
             if c.is_ascii_digit() {
-                let span = self.span(1);
+                let mut span = self.span(1);
                 let start = self.i;
                 while self.i < self.bytes.len()
                     && (self.bytes[self.i].is_ascii_digit() || self.bytes[self.i] == b'_' || self.bytes[self.i] == b'.')
@@ -225,6 +238,10 @@ impl<'a> Lexer<'a> {
                     self.bump(1);
                 }
                 let text = self.src[start..self.i].to_string();
+                // A token's span covers the token, so that a diagnostic can
+                // underline what it is about. Fixed up here because the length
+                // is not known until the end has been read.
+                span.len = text.chars().count() as u32;
                 // Taken whole on purpose: split into `12`, `.`, `50` and the
                 // error would have been "expected field name", which teaches
                 // nothing. The message itself is the checker's, which has the
@@ -237,12 +254,14 @@ impl<'a> Lexer<'a> {
             }
 
             if c.is_ascii_alphabetic() || c == b'_' {
-                let span = self.span(1);
+                let mut span = self.span(1);
                 let start = self.i;
                 while self.i < self.bytes.len() && (self.bytes[self.i].is_ascii_alphanumeric() || self.bytes[self.i] == b'_') {
                     self.bump(1);
                 }
-                out.push(Token { kind: Kind::Ident, text: self.src[start..self.i].to_string(), span });
+                let text = self.src[start..self.i].to_string();
+                span.len = text.chars().count() as u32;
+                out.push(Token { kind: Kind::Ident, text, span });
                 continue;
             }
 

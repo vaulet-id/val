@@ -16,6 +16,9 @@ export const HOSTS = [core, vaulet]
 export type Diagnostic = {
   line: number
   column: number
+  /// How far the squiggle runs, in characters. The editor used to draw eight
+  /// of them and underline whatever was there.
+  length: number
   severity: 'error' | 'warning'
   message: string
 }

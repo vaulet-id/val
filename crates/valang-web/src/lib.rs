@@ -83,6 +83,10 @@ pub extern "C" fn val_analyse(ptr: *const u8, len: usize) -> *mut u8 {
             "diagnostics": diagnostics.iter().map(|d| json!({
                 "line": d.span.line,
                 "column": d.span.col,
+                // How far the underline runs. The editor used a fixed eight
+                // characters, which is a squiggle under whatever happened to
+                // be there rather than under what the message is about.
+                "length": d.span.len,
                 "severity": match d.severity { valang::Severity::Error => "error", _ => "warning" },
                 "message": d.message,
             })).collect::<Vec<_>>(),
