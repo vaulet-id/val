@@ -32,13 +32,26 @@ pub struct Eval<'a> {
     pub context: Context,
     scope: Vec<BTreeMap<String, Value>>,
     pub effects: Vec<EffectRequest>,
+    /// The state an `update` block reads.
+    ///
+    /// `update` is a patch, not a sequence of assignments: every line reads the
+    /// state the action started with. Without this, `a: state.b` followed by
+    /// `b: state.a` left both fields holding the same value — the second line
+    /// read what the first had just written, and a swap silently became a copy.
+    patch_base: Option<BTreeMap<String, Value>>,
 }
 
 type R<T> = Result<T, Trap>;
 
 impl<'a> Eval<'a> {
     pub fn new(program: &'a Program, context: Context) -> Self {
-        Eval { program, context, scope: vec![BTreeMap::new()], effects: Vec::new() }
+        Eval { program, context, scope: vec![BTreeMap::new()], effects: Vec::new(), patch_base: None }
+    }
+
+    /// What the patches in an `update` block read. Set before the block and
+    /// cleared after it, so that nothing else is affected by it.
+    pub fn patch_base(&mut self, state: Option<BTreeMap<String, Value>>) {
+        self.patch_base = state;
     }
 
     pub fn bind(&mut self, name: &str, v: Value) {
@@ -151,7 +164,8 @@ impl<'a> Eval<'a> {
             }
 
             Stmt::Patch { path, value, .. } => {
-                let v = self.expr(value, state)?;
+                let base = self.patch_base.clone();
+                let v = self.expr(value, base.as_ref().unwrap_or(state))?;
                 patch(state, path, v);
                 Ok(())
             }

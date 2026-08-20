@@ -319,6 +319,16 @@ Each line is `path: value`; anything unnamed is unchanged. Paths may nest but
 may not contain a list index — build a new list in `compute` and name it here in
 one line. The result is bound as `next` for `execute` to read.
 
+Every line reads the state the action started with, because the block is one
+patch rather than a sequence of assignments. A swap is what tells the two apart:
+
+```val
+update {
+  a: state.b
+  b: state.a
+}
+```
+
 ### `execute` is one batch
 
 The host takes every effect or none, and your state commits only if it took

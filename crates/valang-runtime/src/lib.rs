@@ -279,6 +279,10 @@ pub fn run_action(
         if block.phase == Phase::Execute {
             ev.bind("next", Value::Map(next.clone()));
         }
+        // Every line of an `update` reads the state the action started this
+        // phase with, because the block is one patch. Read as a sequence, a
+        // swap becomes a copy.
+        ev.patch_base(if block.phase == Phase::Update { Some(next.clone()) } else { None });
         for s in &block.stmts {
             if let Err(trap) = ev.stmt(s, block.phase, &mut next) {
                 record.outcome = match trap {

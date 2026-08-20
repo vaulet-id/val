@@ -108,6 +108,9 @@ Each line names a field and the value it takes; anything unnamed is unchanged.
 Paths may nest but may not contain a list index — build the new list in
 `compute` and name it here in one line.
 
+Every line reads the state the action started with. `a: state.b` beside
+`b: state.a` swaps them; read as assignments it would copy one over the other.
+
 ## `execute`
 
 The only place an effect appears, and it does not perform one:
