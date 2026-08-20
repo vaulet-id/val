@@ -40,6 +40,8 @@ fn konst_value(k: &Konst) -> Value {
         Konst::Str(s) => Value::Str(s.clone()),
         Konst::Bool(b) => Value::Bool(*b),
         Konst::Enum(e, m) => Value::Enum(e.clone(), m.clone()),
+        Konst::EmptyList => Value::List(Vec::new()),
+        Konst::EmptyRecord => Value::Map(Default::default()),
     }
 }
 
@@ -121,6 +123,49 @@ pub fn run_with_fuel(module: &Module, name: &str, args: &[Value], fuel: Option<u
         };
         Ok(a.field(&name).cloned().unwrap_or(Value::Null))
     });
+
+    binop!("push", |a: Value, b: Value| match a {
+        Value::List(mut items) => {
+            items.push(b);
+            Ok(Value::List(items))
+        }
+        other => Ok(other),
+    });
+
+    let exists = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32| -> i32 {
+        let vals = caller.data().clone();
+        let there = !matches!(vals.borrow().get(a), Value::Null);
+        let h = vals.borrow_mut().put(Value::Bool(there));
+        h
+    });
+    linker.define("val", "exists", exists).map_err(|e| e.to_string())?;
+
+    // Three arguments, which nothing else here takes: a record, a name and a
+    // value. Written out rather than through `binop!`, which is for two.
+    let set = Func::wrap(
+        &mut store,
+        move |caller: Caller<'_, Shared>, a: i32, b: i32, c: i32| -> i32 {
+            let vals = caller.data().clone();
+            let (record, name, value) = {
+                let v = vals.borrow();
+                (v.get(a), v.get(b), v.get(c))
+            };
+            let name = match name {
+                Value::Str(s) => s,
+                _ => String::new(),
+            };
+            let out = match record {
+                Value::Map(mut m) => {
+                    m.insert(name, value);
+                    Value::Map(m)
+                }
+                other => other,
+            };
+            let h = vals.borrow_mut().put(out);
+            h
+        },
+    );
+    linker.define("val", "set", set).map_err(|e| e.to_string())?;
 
     let not = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32| -> i32 {
         let vals = caller.data().clone();

@@ -178,8 +178,8 @@ state {
   n: int default 0
 }
 
-function fallback(a: int): int {
-  return a ?: 0
+function total(xs: List<int>): int {
+  return xs.fold(0) { sum, x -> sum + x }
 }
 "#;
     let (program, _) = valang::analyse(src);
@@ -187,5 +187,81 @@ function fallback(a: int): int {
     let Err(said) = out else {
         panic!("a function this back end cannot emit compiled anyway");
     };
-    assert!(said.iter().any(|m| m.contains("`?:`")), "{said:?}");
+    assert!(said.iter().any(|m| m.contains("a function written in place")), "{said:?}");
+}
+
+/// What was added to the language after this back end was written, and what it
+/// now emits: `exists`, `?:`, a list written out, a record built or derived.
+/// Each compared against the evaluator, which knows nothing about Wasm.
+#[test]
+fn the_shapes_added_since_agree_on_both_back_ends() {
+    let src = r#"
+app "x"
+version 1
+
+type Row {
+  a: int
+}
+
+function present(n: int): bool {
+  return n exists
+}
+
+function orElse(n: int): int {
+  return n ?: 7
+}
+
+function listed(n: int): List<int> {
+  return [n, n + 1]
+}
+
+function built(n: int): Row {
+  return { a: n }
+}
+
+function derived(n: int): Row {
+  return { ...built(n), a: n + 1 }
+}
+
+function nested(n: int): int {
+  return n ?: (n ?: 3)
+}
+"#;
+    for name in ["present", "orElse", "listed", "built", "derived", "nested"] {
+        for n in [0i64, 1, 42] {
+            both_agree(src, name, &[Value::Int(n)]);
+        }
+    }
+}
+
+/// A variable, written again, and a record taken apart. Both back ends have to
+/// agree about what a name holds after a branch has written it.
+#[test]
+fn a_variable_and_a_destructuring_agree_on_both_back_ends() {
+    let src = r#"
+app "x"
+version 1
+
+function label(points: int): int {
+  let out = 1
+  if (points >= 100) {
+    out = 2
+  }
+  if (points >= 1000) {
+    out = 3
+  }
+  return out
+}
+
+function fromRecord(n: int): int {
+  const { a, b } = { a: n, b: n + 1 }
+  return a + b
+}
+"#;
+    for n in [0i64, 50, 100, 5_000] {
+        both_agree(src, "label", &[Value::Int(n)]);
+    }
+    for n in [0i64, 7] {
+        both_agree(src, "fromRecord", &[Value::Int(n)]);
+    }
 }

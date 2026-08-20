@@ -23,6 +23,10 @@ pub enum Konst {
     Bool(bool),
     /// `Tier.gold`
     Enum(String, String),
+    /// `[]` and `{}`. A collection is built from an empty one and added to,
+    /// because the host owns values and a module has no allocator.
+    EmptyList,
+    EmptyRecord,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +58,11 @@ pub const IMPORTS: &[(&str, u32)] = &[
     ("neg", 1),
     ("truthy", 1), // (handle) -> i32, the only place a value becomes control flow
     ("field", 2),  // (handle, name-konst) -> handle
+    ("exists", 1), // (handle) -> handle, a bool: whether it is there at all
+    // Lists and records are built by the host, because the host owns values.
+    // An empty one comes from `konst`; these add to it.
+    ("push", 2),   // (list, item) -> list
+    ("set", 3),    // (record, name-konst, value) -> record
 ];
 
 fn import_index(name: &str) -> u32 {
@@ -68,6 +77,10 @@ struct Ctx<'a> {
     fn_index: BTreeMap<String, u32>,
     /// What this back end met and does not emit.
     unsupported: Vec<String>,
+    /// The next scratch slot, for the expressions that need somewhere to put a
+    /// value they read once and use twice.
+    next_scratch: u32,
+    scratch_used: u32,
 }
 
 impl Ctx<'_> {
@@ -83,6 +96,16 @@ impl Ctx<'_> {
         let i = self.konst(k);
         f.instruction(&Instruction::I32Const(i as i32));
         f.instruction(&Instruction::Call(import_index("konst")));
+    }
+
+    /// A slot nothing else is using. Nested expressions each get their own:
+    /// sharing one would make `a ?: (b ?: c)` read the inner value into the
+    /// outer one's slot.
+    fn scratch(&mut self) -> u32 {
+        let slot = self.next_scratch;
+        self.next_scratch += 1;
+        self.scratch_used = self.scratch_used.max(self.next_scratch);
+        slot
     }
 
     fn call_op(&mut self, op: &str, f: &mut Function) {
@@ -107,6 +130,8 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
         locals: BTreeMap::new(),
         fn_index: BTreeMap::new(),
         unsupported: Vec::new(),
+        next_scratch: 0,
+        scratch_used: 0,
     };
 
     let import_count = IMPORTS.len() as u32;
@@ -120,6 +145,15 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
     types.ty().function([ValType::I32, ValType::I32], [ValType::I32]);
     // Type 2..: one per VAL function arity.
     let mut arity_type: BTreeMap<usize, u32> = BTreeMap::from([(1, 0), (2, 1)]);
+    // An import of an arity nothing else uses still needs a type.
+    for (_, arity) in IMPORTS {
+        let n = *arity as usize;
+        if !arity_type.contains_key(&n) {
+            let id = types.len();
+            types.ty().function(vec![ValType::I32; n], [ValType::I32]);
+            arity_type.insert(n, id);
+        }
+    }
     for f in &program.functions {
         let n = f.params.len();
         if !arity_type.contains_key(&n) {
@@ -131,7 +165,8 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
 
     let mut imports = ImportSection::new();
     for (name, arity) in IMPORTS {
-        imports.import("val", name, wasm_encoder::EntityType::Function(if *arity == 1 { 0 } else { 1 }));
+        let ty = arity_type[&(*arity as usize)];
+        imports.import("val", name, wasm_encoder::EntityType::Function(ty));
     }
 
     let mut funcs = FunctionSection::new();
@@ -148,10 +183,16 @@ pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
         for (j, p) in f.params.iter().enumerate() {
             ctx.locals.insert(p.name.clone(), j as u32);
         }
-        // `const` bindings become extra locals, allocated as they are met.
+        // `const` bindings become extra locals, allocated as they are met, and
+        // the expressions that read a value once and use it twice take a slot
+        // each after them.
         let extra = count_lets(&f.body);
-        let mut body = Function::new(if extra > 0 { vec![(extra, ValType::I32)] } else { vec![] });
+        let scratch = count_scratch(&f.body);
+        let total = extra + scratch;
+        let mut body = Function::new(if total > 0 { vec![(total, ValType::I32)] } else { vec![] });
         let mut next_local = f.params.len() as u32;
+        ctx.next_scratch = next_local + extra;
+        ctx.scratch_used = ctx.next_scratch;
         // A function whose branches all return still needs a value on the stack
         // for the paths Wasm can see but the language cannot reach.
         if !emit_body(&mut ctx, &f.body, &mut body, &mut next_local) {
@@ -205,6 +246,8 @@ fn encode_konsts(ks: &[Konst]) -> Vec<u8> {
             Konst::Str(s) => Value::Str(s.clone()),
             Konst::Bool(b) => Value::Bool(*b),
             Konst::Enum(e, m) => Value::Enum(e.clone(), m.clone()),
+            Konst::EmptyList => Value::List(Vec::new()),
+            Konst::EmptyRecord => Value::Map(Default::default()),
         })
         .collect();
     DeterministicCbor.encode(&Value::List(items))
@@ -224,6 +267,8 @@ pub fn konsts_of(bytes: &[u8]) -> Option<Vec<Konst>> {
             Value::Str(s) => Some(Konst::Str(s)),
             Value::Bool(b) => Some(Konst::Bool(b)),
             Value::Enum(e, m) => Some(Konst::Enum(e, m)),
+            Value::List(items) if items.is_empty() => Some(Konst::EmptyList),
+            Value::Map(m) if m.is_empty() => Some(Konst::EmptyRecord),
             _ => None,
         })
         .collect()
@@ -263,11 +308,51 @@ fn leb(bytes: &[u8], mut i: usize) -> Option<(usize, usize)> {
 }
 
 fn count_lets(body: &[Stmt]) -> u32 {
-    body.iter().filter(|s| matches!(s, Stmt::Let { .. })).count() as u32
+    let mut n = 0;
+    for s in body {
+        s.walk(&mut |x| {
+            n += match x {
+                Stmt::Let { .. } => 1,
+                // One for the record itself, and one per name taken out of it.
+                Stmt::Destructure { names, .. } => 1 + names.len() as u32,
+                _ => 0,
+            };
+        });
+    }
+    n
 }
 
 /// True when this body ends by returning on every path, so the caller knows
 /// whether it still has to leave a value on the stack.
+/// How many slots the expressions in this body want. One per `?:`, because
+/// each reads its left side once and uses it twice, and a nested one may not
+/// share the slot of the one it sits in.
+fn count_scratch(body: &[Stmt]) -> u32 {
+    let mut n = 0;
+    for s in body {
+        s.walk(&mut |x| {
+            let mut count = |e: &Expr| {
+                e.walk(&mut |inner| {
+                    if matches!(inner, Expr::Elvis { .. }) {
+                        n += 1;
+                    }
+                })
+            };
+            match x {
+                Stmt::Let { value, .. }
+                | Stmt::Assign { value, .. }
+                | Stmt::Destructure { value, .. }
+                | Stmt::Return { value, .. }
+                | Stmt::Expr { value, .. }
+                | Stmt::Patch { value, .. } => count(value),
+                Stmt::If { cond, .. } => count(cond),
+                _ => {}
+            }
+        });
+    }
+    n
+}
+
 fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u32) -> bool {
     for s in body {
         match s {
@@ -277,6 +362,39 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
                 *next_local += 1;
                 ctx.locals.insert(name.clone(), slot);
                 f.instruction(&Instruction::LocalSet(slot));
+            }
+
+            // `x = …` writes the slot the name already has. A name that has
+            // none is a name the checks refused, so there is nothing to do
+            // about it here.
+            Stmt::Assign { name, value, .. } => {
+                emit(ctx, value, f);
+                match ctx.locals.get(name).copied() {
+                    Some(slot) => {
+                        f.instruction(&Instruction::LocalSet(slot));
+                    }
+                    None => {
+                        f.instruction(&Instruction::Drop);
+                    }
+                }
+            }
+
+            // The record is read once into a slot, then each name is a field
+            // read out of it — which is what the statement means.
+            Stmt::Destructure { names, value, .. } => {
+                let holder = *next_local;
+                *next_local += 1;
+                emit(ctx, value, f);
+                f.instruction(&Instruction::LocalSet(holder));
+                for name in names {
+                    f.instruction(&Instruction::LocalGet(holder));
+                    ctx.push_konst(Konst::Str(name.clone()), f);
+                    ctx.call_op("field", f);
+                    let slot = *next_local;
+                    *next_local += 1;
+                    ctx.locals.insert(name.clone(), slot);
+                    f.instruction(&Instruction::LocalSet(slot));
+                }
             }
             Stmt::Return { value, .. } => {
                 emit(ctx, value, f);
@@ -355,6 +473,50 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
                 _ => "or",
             };
             ctx.call_op(name, f);
+        }
+
+        Expr::Exists { subject, .. } => {
+            emit(ctx, subject, f);
+            ctx.call_op("exists", f);
+        }
+
+        // `a ?: b` is `a` unless it is nothing, and `a` is read once. Written
+        // as a ternary over `exists` it would be read twice, and a path here
+        // can reach into a credential — a second read of one is a second thing
+        // the host is asked for.
+        Expr::Elvis { subject, other, .. } => {
+            let slot = ctx.scratch();
+            emit(ctx, subject, f);
+            f.instruction(&Instruction::LocalTee(slot));
+            ctx.call_op("exists", f);
+            ctx.call_op("truthy", f);
+            f.instruction(&Instruction::If(wasm_encoder::BlockType::Result(ValType::I32)));
+            f.instruction(&Instruction::LocalGet(slot));
+            f.instruction(&Instruction::Else);
+            emit(ctx, other, f);
+            f.instruction(&Instruction::End);
+        }
+
+        // Built from an empty one. The host owns values, and a module with an
+        // allocator of its own would be a second place a value can be wrong.
+        Expr::List { items, .. } => {
+            ctx.push_konst(Konst::EmptyList, f);
+            for item in items {
+                emit(ctx, item, f);
+                ctx.call_op("push", f);
+            }
+        }
+
+        Expr::Record { spread, fields, .. } => {
+            match spread {
+                Some(base) => emit(ctx, base, f),
+                None => ctx.push_konst(Konst::EmptyRecord, f),
+            }
+            for (name, value) in fields {
+                ctx.push_konst(Konst::Str(name.clone()), f);
+                emit(ctx, value, f);
+                ctx.call_op("set", f);
+            }
         }
 
         Expr::Ternary { cond, then, other, .. } => {
