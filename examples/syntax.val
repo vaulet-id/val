@@ -21,13 +21,26 @@ type Profile {
 }
 
 // A pure function. `switch` is an expression, so this is one line of reasoning
-// rather than a variable assigned three times.
+// rather than a name written three times.
 function tier(points: int): string {
   return switch (points) {
     >= 1000 => "gold"
     >= 100 => "silver"
     default => "bronze"
   }
+}
+
+// The same thing with a variable, for comparison. Both compile; the one above
+// can be read from anywhere in the block and this one has to be read downwards.
+function tierStepByStep(points: int): string {
+  let out = "bronze"
+  if (points >= 100) {
+    out = "silver"
+  }
+  if (points >= 1000) {
+    out = "gold"
+  }
+  return out
 }
 
 function double(x: int): int {

@@ -33,7 +33,11 @@ state { field: type default … }
 trust Name(subject: Type) [refines Other] { anchor: "…" require { … } }
 function name(a: int, b: int): int { … }
 action Name { … }
-screen Name { … }
+component Name(a: string, b: int default 0) { … }
+export component Name(…) { … }   // what leaves the package
+import "other.package/1" { Name }
+@main                            // the screen an application opens on
+screen Name(param: string) { … }
 ```
 
 ## Expressions
@@ -116,6 +120,16 @@ button(text: "key", emphasis: primary, onTap: Action)
 
 Props are semantic. Asking for a component the catalogue does not have is not
 drawn approximately — it is reported.
+
+Two of the things written in a tree are the language's own, and a host never
+sees either: the branch is chosen and the loop is unrolled before anything is
+drawn.
+
+```val
+if (cond) { … } else { … }
+for (row in rows) { … }
+for (i in 1...10) { … }
+```
 
 ## Screen data
 

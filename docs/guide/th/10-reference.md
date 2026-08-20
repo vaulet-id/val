@@ -33,7 +33,11 @@ state { field: type default … }
 trust Name(subject: Type) [refines Other] { anchor: "…" require { … } }
 function name(a: int, b: int): int { … }
 action Name { … }
-screen Name { … }
+component Name(a: string, b: int default 0) { … }
+export component Name(…) { … }   // สิ่งที่ออกจาก package
+import "other.package/1" { Name }
+@main                            // หน้าจอที่แอปเปิดขึ้นมา
+screen Name(param: string) { … }
 ```
 
 ## นิพจน์
@@ -115,6 +119,15 @@ button(text: "key", emphasis: primary, onTap: Action)
 
 prop เป็นเชิงความหมาย การขอ component ที่ไม่มีในแคตตาล็อกจะไม่ได้ของที่วาดใกล้เคียง
 — แต่จะถูกรายงานออกมา
+
+สองอย่างที่เขียนในต้นไม้เป็นของภาษาเอง และ host ไม่เคยเห็นทั้งคู่: กิ่งถูกเลือก
+และลูปถูกคลี่ออก ก่อนที่จะวาดอะไร
+
+```val
+if (cond) { … } else { … }
+for (row in rows) { … }
+for (i in 1...10) { … }
+```
 
 ## ข้อมูลของหน้าจอ
 
