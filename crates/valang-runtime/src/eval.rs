@@ -27,6 +27,25 @@ pub enum Trap {
     Unsupported(String),
 }
 
+impl std::fmt::Display for Trap {
+    /// As a sentence. A trap crosses into whatever is running the program — a
+    /// host, a second back end, a test — and `Overflow("multiplication")` is a
+    /// shape rather than something to read.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Trap::Refused(key) => write!(f, "the application declined: {key}"),
+            Trap::Overflow(what) => write!(
+                f,
+                "integer overflow in {what} traps: a wrong number the record would then faithfully prove is worse than a failure"
+            ),
+            Trap::DivideByZero => write!(f, "division by zero traps, as overflow does"),
+            Trap::Defect(why) => write!(f, "defect: {why}"),
+            Trap::Failed(why) => write!(f, "failed: {why}"),
+            Trap::Unsupported(why) => write!(f, "{why}"),
+        }
+    }
+}
+
 pub struct Eval<'a> {
     pub program: &'a Program,
     pub context: Context,
@@ -645,7 +664,12 @@ fn reaches_through_an_optional(e: &Expr) -> bool {
 /// promise the language does not bend.
 const RANGE_LIMIT: i64 = 10_000;
 
-fn binary(op: &str, a: Value, b: Value) -> R<Value> {
+/// What an operator means.
+///
+/// **One answer.** A second back end that implemented its own would be a second
+/// answer to what `+` does on the edge that matters — and the edge that matters
+/// is the one where a wrong number gets faithfully proved.
+pub fn binary(op: &str, a: Value, b: Value) -> R<Value> {
     use Value::*;
     Ok(match (op, &a, &b) {
         // Trapping, not wrapping: a wrong number the record would then

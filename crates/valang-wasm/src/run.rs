@@ -103,19 +103,29 @@ pub fn run_with_fuel(module: &Module, name: &str, args: &[Value], fuel: Option<u
     });
     linker.define("val", "konst", konst_fn).map_err(|e| e.to_string())?;
 
-    binop!("add", |a: Value, b: Value| int2(a, b, |x, y| x.checked_add(y).ok_or_else(|| "integer overflow in addition traps: a wrong number the record would then faithfully prove is worse than a failure".to_string())));
-    binop!("sub", |a: Value, b: Value| int2(a, b, |x, y| x.checked_sub(y).ok_or_else(|| "integer overflow in subtraction traps".to_string())));
-    binop!("mul", |a: Value, b: Value| int2(a, b, |x, y| x.checked_mul(y).ok_or_else(|| "integer overflow in multiplication traps".to_string())));
-    binop!("div", |a: Value, b: Value| int2(a, b, |x, y| if y == 0 { Err("division by zero traps, as overflow does".to_string()) } else { Ok(x / y) }));
-    binop!("rem", |a: Value, b: Value| int2(a, b, |x, y| if y == 0 { Err("division by zero traps, as overflow does".to_string()) } else { Ok(x % y) }));
-    binop!("lt", |a: Value, b: Value| cmp(a, b, |o| o == std::cmp::Ordering::Less));
-    binop!("le", |a: Value, b: Value| cmp(a, b, |o| o != std::cmp::Ordering::Greater));
-    binop!("gt", |a: Value, b: Value| cmp(a, b, |o| o == std::cmp::Ordering::Greater));
-    binop!("ge", |a: Value, b: Value| cmp(a, b, |o| o != std::cmp::Ordering::Less));
-    binop!("eq", |a: Value, b: Value| Ok(Value::Bool(a == b)));
-    binop!("ne", |a: Value, b: Value| Ok(Value::Bool(a != b)));
-    binop!("and", |a: Value, b: Value| Ok(Value::Bool(a.truthy() && b.truthy())));
-    binop!("or", |a: Value, b: Value| Ok(Value::Bool(a.truthy() || b.truthy())));
+    // Every one of these is `valang_runtime::eval::binary`, which is what the
+    // other back end runs. Written out here once, they were a second answer to
+    // what `+` does when it overflows — and the parity test compares results,
+    // so two answers that agree on the values in a test agree on nothing else.
+    macro_rules! shared {
+        ($name:literal, $op:literal) => {
+            binop!($name, |a: Value, b: Value| valang_runtime::eval::binary($op, a, b)
+                .map_err(|t| t.to_string()));
+        };
+    }
+    shared!("add", "+");
+    shared!("sub", "-");
+    shared!("mul", "*");
+    shared!("div", "/");
+    shared!("rem", "%");
+    shared!("lt", "<");
+    shared!("le", "<=");
+    shared!("gt", ">");
+    shared!("ge", ">=");
+    shared!("eq", "==");
+    shared!("ne", "!=");
+    shared!("and", "&&");
+    shared!("or", "||");
     binop!("field", |a: Value, b: Value| {
         let name = match b {
             Value::Str(s) => s,
@@ -213,16 +223,4 @@ pub fn run_with_fuel(module: &Module, name: &str, args: &[Value], fuel: Option<u
     Ok(result)
 }
 
-fn int2(a: Value, b: Value, f: impl Fn(i64, i64) -> Result<i64, String>) -> Result<Value, String> {
-    match (a, b) {
-        (Value::Int(x), Value::Int(y)) => f(x, y).map(Value::Int),
-        _ => Ok(Value::Null),
-    }
-}
 
-fn cmp(a: Value, b: Value, f: impl Fn(std::cmp::Ordering) -> bool) -> Result<Value, String> {
-    match (a, b) {
-        (Value::Int(x), Value::Int(y)) => Ok(Value::Bool(f(x.cmp(&y)))),
-        _ => Ok(Value::Bool(false)),
-    }
-}
