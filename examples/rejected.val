@@ -343,3 +343,17 @@ screen ActingScreen {
 //        name from and no previous version to ask, so a name here resolves to
 //        nothing quietly — a field starting as null on a phone rather than as
 //        the number it says.
+
+// 23. A number in a base this language does not have.
+action Hex {
+  compute {
+    // error: numbers are decimal. `0xff` was two tokens — the number `0` and a
+    //        name nothing read — so a base that does not exist came out as
+    //        zero and said nothing.
+    const mask = 0xff
+  }
+
+  update {
+    presses: 0
+  }
+}

@@ -1,0 +1,6 @@
+error: `0xff` is not a number this language has. Numbers are decimal: no hex, no binary, no exponent
+ --> 8:18
+  |
+8 |   n: int default 0xff
+  |                  ^^^^
+

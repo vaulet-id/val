@@ -1,0 +1,16 @@
+app "ui.number-that-is-not-decimal"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0xff
+}
+
+@main
+screen Home {
+  column {
+    section("x")
+  }
+}

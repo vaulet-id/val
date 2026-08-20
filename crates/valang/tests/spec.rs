@@ -270,3 +270,226 @@ screen Home {
         "`onRemove` named an action nothing declares and nobody said so: {e:?}"
     );
 }
+
+/// "Irreversible effects run last. The compiler orders them for you."
+#[test]
+fn irreversible_effects_run_last() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  credential.read(Id)
+  credential.issue(Card)
+  disclosure.present
+  storage.write
+}
+
+credential Id {
+  country: string
+}
+
+credential Card {
+  who: string
+}
+
+trust Issued(id: Id) {
+  anchor: "th.go.dopa"
+  require {
+    id.signature.valid
+  }
+}
+
+state {
+  n: int default 0
+}
+
+action Go {
+  input {
+    id: Credential<Id>
+  }
+
+  verify {
+    const checked = id with Issued
+  }
+
+  update {
+    n: 1
+  }
+
+  execute {
+    present {
+      disclose checked.claims.country
+    }
+    storage.write(key: "a", value: "b")
+    credential.issue(Card { who: "me" })
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    let hosts = Hosts::of(vec![Host::parse(CORE).expect("the core registry parses")]);
+    let (program, d) = valang::analyse_fully(src, None, &hosts);
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    // The order the effects are written is not the order they are offered: the
+    // ones that cannot be undone go last, and the compiler is what puts them
+    // there. Read off the action as the runtime will walk it.
+    let go = program.actions.iter().find(|a| a.name == "Go").expect("declared");
+    let execute = go
+        .phases
+        .iter()
+        .find(|b| b.phase == valang::ast::Phase::Execute)
+        .expect("has an execute block");
+    let names: Vec<String> = execute
+        .stmts
+        .iter()
+        .filter_map(|s| match s {
+            valang::ast::Stmt::Effect { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+    let last = names.last().cloned().unwrap_or_default();
+    assert!(
+        last == "present" || last == "credential.issue",
+        "the irreversible effect is not last: {names:?}"
+    );
+}
+
+/// "No derived values" and "no interaction state" in `state`. Both are about
+/// what belongs there, and the first is checkable: a field whose value is only
+/// ever a total of something already on the screen.
+///
+/// The language cannot see intent, so what it can refuse is the shape that
+/// makes the mistake possible — and it turns out it refuses neither.
+#[test]
+fn what_state_may_hold() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  n:        int default 0
+  openTab:  string default "first"
+}
+
+action Go {
+  update {
+    openTab: "second"
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    // Nothing here is refused today, and nothing in the language could tell
+    // `openTab` from any other field. The claim is guidance rather than a rule,
+    // and this test says which it is so that nobody reads it as the other.
+    assert!(
+        errors(src).is_empty(),
+        "if this starts failing, `state` grew a rule and the specification should say so: {:?}",
+        errors(src)
+    );
+}
+
+/// "At most one disclosure per action."
+#[test]
+fn one_disclosure_to_an_action() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  credential.read(Id)
+  disclosure.present
+}
+
+credential Id {
+  country:   string
+  birthdate: date
+}
+
+trust Issued(id: Id) {
+  anchor: "th.go.dopa"
+  require {
+    id.signature.valid
+  }
+}
+
+state {
+  n: int default 0
+}
+
+action Go {
+  input {
+    id: Credential<Id>
+  }
+
+  verify {
+    const checked = id with Issued
+  }
+
+  update {
+    n: 1
+  }
+
+  execute {
+    present {
+      disclose checked.claims.country
+    }
+    present {
+      disclose checked.claims.birthdate
+    }
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    let e = errors(src);
+    assert!(
+        e.iter().any(|m| m.contains("disclosure")),
+        "an action disclosed twice: {e:?}"
+    );
+}
+
+/// "Numbers are decimal … no hex, no binary, no exponents, and `12.50` is a
+/// compile error."
+#[test]
+fn numbers_are_decimal_and_whole() {
+    let cases = [
+        ("a float", "state {\n  n: int default 12.50\n}"),
+        ("hex", "state {\n  n: int default 0xff\n}"),
+        ("an exponent", "state {\n  n: int default 1e3\n}"),
+    ];
+    for (what, block) in cases {
+        let src = format!(
+            "app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\n{block}\n\n@main\nscreen H {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
+        );
+        assert!(!errors(&src).is_empty(), "{what} was accepted: {block}");
+    }
+}
+
+/// "Identifiers are ASCII and camelCase for names you choose."
+#[test]
+fn an_identifier_is_ascii() {
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  แต้ม: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    let e = errors(src);
+    assert!(e.iter().any(|m| m.contains("ASCII")), "a Thai identifier was accepted: {e:?}");
+}

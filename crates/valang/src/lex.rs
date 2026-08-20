@@ -290,6 +290,29 @@ impl<'a> Lexer<'a> {
                 if text.starts_with('_') || text.ends_with('_') {
                     self.diagnostics.push(Diagnostic::error(span, "`_` separates digits; it does not start or end a number"));
                 }
+                // `0xff` was two tokens: the number `0`, and a name nothing
+                // read. A base this language does not have came out as zero and
+                // said nothing, and so did `1e3` and `10px`.
+                if self
+                    .bytes
+                    .get(self.i)
+                    .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+                {
+                    let mut end = self.i;
+                    while end < self.bytes.len()
+                        && (self.bytes[end].is_ascii_alphanumeric() || self.bytes[end] == b'_')
+                    {
+                        end += 1;
+                    }
+                    let whole = &self.src[start..end];
+                    // Under the whole of it, not under the digit the lexer
+                    // managed to read.
+                    let at = Span { len: whole.chars().count() as u32, ..span };
+                    self.diagnostics.push(Diagnostic::error(
+                        at,
+                        format!("`{whole}` is not a number this language has. Numbers are decimal: no hex, no binary, no exponent"),
+                    ));
+                }
                 out.push(Token { kind: Kind::Num, text, span });
                 continue;
             }
