@@ -56,10 +56,19 @@ program equals the original's, so a node the printer dropped shows up as a line
 that went missing; and the errors are the same errors, so a formatter cannot
 quietly repair a mistake somebody wanted to see.
 
-**It does not carry comments.** The lexer drops them and the AST does not hold
-them, so `--format` refuses a file that has any rather than deleting them.
-Attaching comments to the nodes they belong to is the work that turns this into
-a formatter somebody can run on their own code, and it has not been done.
+It keeps two things a formatter is judged on. **Declarations stay in the order
+they were written** — reordering a file is rewriting it, and a comment above one
+declaration would end up above another. **Comments and blank lines stay where
+they were**, and a blank line is kept as an answer to "was the line above this
+one empty" rather than as a distance: the printer changes how many lines a thing
+takes, so a distance measured in the source is a different distance in the
+output, and printing twice gave two texts until that changed.
+
+Where it makes a choice, it makes one: fields and patches line up in columns, a
+`switch` goes down the page with its arrows aligned, a node with one thing to
+say says it on one line, and parentheses appear only where the parser would read
+the line differently without them — from the parser's own table, because two
+copies of it is how a printer and a parser come to disagree.
 
 ## What a diagnostic looks like
 

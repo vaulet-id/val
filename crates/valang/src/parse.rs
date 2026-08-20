@@ -4,7 +4,7 @@
 //! as a large, boring set of block parsers over a small operator table.
 
 use crate::ast::*;
-use crate::diag::Diagnostic;
+use crate::diag::{Diagnostic, Span};
 
 /// The language's own words. A dot is always field access and a keyword is
 /// never a name, so that reading a declaration never depends on knowing what
@@ -45,9 +45,11 @@ pub struct Parser {
 }
 
 pub fn parse(src: &str) -> (Program, Vec<Diagnostic>) {
-    let (toks, lex_diags) = Lexer::new(src).run();
+    let (toks, lex_diags, comments, blanks) = Lexer::new(src).run();
     let mut p = Parser { toks, i: 0, diagnostics: lex_diags };
-    let program = p.program();
+    let mut program = p.program();
+    program.comments = comments;
+    program.blank_lines = blanks;
     (program, p.diagnostics)
 }
 
@@ -193,6 +195,7 @@ impl Parser {
                             }
                         }
                         p.app = Some(name);
+                        p.app_span = at;
                     } else {
                         let bad = self.bump();
                         self.diagnostics.push(Diagnostic::error(
@@ -202,6 +205,7 @@ impl Parser {
                     }
                 }
                 "version" => {
+                    p.version_span = self.peek().span;
                     self.bump();
                     p.version = Some(self.bump().text);
                 }
@@ -216,6 +220,7 @@ impl Parser {
                     // the files were read.
                     if p.capabilities.is_empty() {
                         p.capabilities = more;
+                        p.capabilities_span = at;
                     } else {
                         self.diagnostics.push(Diagnostic::error(
                             at,
@@ -231,6 +236,7 @@ impl Parser {
                     p.types.push(t);
                 }
                 "state" => {
+                    p.state_span = self.peek().span;
                     self.bump();
                     p.state = self.fields();
                 }
@@ -455,6 +461,7 @@ impl Parser {
         };
 
         let mut anchor = None;
+        let mut anchor_span = Span::default();
         let mut requires = Vec::new();
         self.expect("{");
         loop {
@@ -463,6 +470,7 @@ impl Parser {
                 break;
             }
             if self.at("anchor") {
+                anchor_span = self.peek().span;
                 self.bump();
                 if self.eat(":") {
                     self.skip_newlines();
@@ -505,7 +513,7 @@ impl Parser {
             }
             self.bump();
         }
-        TrustDecl { name, subject, subject_type, refines, anchor, requires, span }
+        TrustDecl { name, subject, subject_type, refines, anchor, anchor_span, requires, span }
     }
 
     fn function_decl(&mut self) -> FunctionDecl {
@@ -1084,6 +1092,7 @@ impl Parser {
                 self.eat("of");
                 let ty = self.ident();
                 let mut policy = None;
+                let mut order = None;
                 let mut limit = None;
                 loop {
                     // `verified with`, `order by` and `limit` are usually
@@ -1104,9 +1113,11 @@ impl Parser {
                     } else if self.at("order") {
                         self.bump();
                         self.eat("by");
-                        self.bump();
+                        let claim = self.ident();
+                        let descending = self.at("desc");
                         self.eat("desc");
                         self.eat("asc");
+                        order = Some((claim, descending));
                     } else if self.at("limit") {
                         self.bump();
                         limit = self.bump().text.replace('_', "").parse().ok();
@@ -1114,7 +1125,7 @@ impl Parser {
                         break;
                     }
                 }
-                DataSource::Credentials { ty, policy, limit }
+                DataSource::Credentials { ty, policy, order, limit }
             } else if self.at("query") {
                 self.bump();
                 let audience = self.dotted();
@@ -1325,21 +1336,30 @@ impl Parser {
     }
 
     fn binding_power(op: &str) -> Option<u8> {
-        Some(match op {
-            "||" => 1,
-            "&&" => 2,
-            // `0...10`. Below the comparisons so that `0...n` reads as the
-            // range of `n`, and above them nothing — a range of a comparison is
-            // not a thing anybody means.
-            "..." => 3,
-            "==" | "!=" => 4,
-            "<" | "<=" | ">" | ">=" => 5,
-            "+" | "-" => 6,
-            "*" | "/" | "%" => 7,
-            _ => return None,
-        })
+        binding_power_of(op)
     }
+}
 
+/// How tightly an operator binds. Public because the printer parenthesises by
+/// it: two copies of this table is how a printer and a parser come to disagree
+/// about what a line means.
+pub fn binding_power_of(op: &str) -> Option<u8> {
+    Some(match op {
+        "||" => 1,
+        "&&" => 2,
+        // `0...10`. Below the comparisons so that `0...n` reads as the range of
+        // `n`, and above them nothing — a range of a comparison is not a thing
+        // anybody means.
+        "..." => 3,
+        "==" | "!=" => 4,
+        "<" | "<=" | ">" | ">=" => 5,
+        "+" | "-" => 6,
+        "*" | "/" | "%" => 7,
+        _ => return None,
+    })
+}
+
+impl Parser {
     fn expr(&mut self, min_bp: u8) -> Expr {
         self.skip_newlines();
         let mut lhs = self.unary();
@@ -1566,7 +1586,7 @@ impl Parser {
                     return Expr::Float { text: t.text, span: t.span };
                 }
                 let value = t.text.replace('_', "").parse().unwrap_or(0);
-                Expr::Num { value, span: t.span }
+                Expr::Num { value, text: t.text, span: t.span }
             }
             Kind::Str => {
                 self.bump();
@@ -1770,7 +1790,7 @@ fn slot_name(inner: &str, taken: &[Arg]) -> String {
 
 /// One expression, parsed on its own. The inside of a `${…}`.
 fn parse_expr(src: &str, span: crate::diag::Span) -> (Expr, Vec<Diagnostic>) {
-    let (toks, mut d) = Lexer::new(src).run();
+    let (toks, mut d, _, _) = Lexer::new(src).run();
     let mut p = Parser { toks, i: 0, diagnostics: Vec::new() };
     let e = p.expr(0);
     // Positions inside a template are the template's own: it is lexed as one

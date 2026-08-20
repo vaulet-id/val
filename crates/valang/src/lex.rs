@@ -41,6 +41,22 @@ pub struct Lexer<'a> {
     col: u32,
     depth: i32,
     pub diagnostics: Vec<Diagnostic>,
+    pub comments: Vec<Comment>,
+    pub blank_lines: std::collections::BTreeSet<u32>,
+}
+
+/// A `//` line, kept where it was.
+///
+/// Not a token: nothing in the grammar mentions one, and a parser that had to
+/// step over them everywhere would have a second thing to forget. The printer
+/// puts them back by position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Comment {
+    pub span: Span,
+    /// The text as written, `//` included and trailing spaces removed.
+    pub text: String,
+    /// Whether code came before it on the same line.
+    pub trailing: bool,
 }
 
 const PUNCT: &[&str] = &[
@@ -57,7 +73,7 @@ fn at_esc(span: Span) -> Span {
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Self {
-        Lexer { src, bytes: src.as_bytes(), i: 0, line: 1, col: 1, depth: 0, diagnostics: Vec::new() }
+        Lexer { src, bytes: src.as_bytes(), i: 0, line: 1, col: 1, depth: 0, diagnostics: Vec::new(), comments: Vec::new(), blank_lines: Default::default() }
     }
 
     fn span(&self, len: u32) -> Span {
@@ -85,7 +101,19 @@ impl<'a> Lexer<'a> {
         self.i += n;
     }
 
-    pub fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>) {
+    pub fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>, std::collections::BTreeSet<u32>) {
+        // Which lines held nothing but space, read once from the text: the
+        // printer keeps a blank line as an answer to "was the line above empty"
+        // rather than as a distance, and this is where that answer comes from.
+        for (n, line) in self.src.lines().enumerate() {
+            if line.trim().is_empty() {
+                self.blank_lines.insert(n as u32 + 1);
+            }
+        }
+        // `comments` is filled as it goes and handed back through the field,
+        // because a comment is not a token: nothing in the grammar mentions
+        // one, and a parser that had to step over them everywhere would be a
+        // parser with a second thing to forget.
         let mut out: Vec<Token> = Vec::new();
 
         while self.i < self.bytes.len() {
@@ -107,9 +135,22 @@ impl<'a> Lexer<'a> {
                 continue;
             }
             if c == b'/' && self.bytes.get(self.i + 1) == Some(&b'/') {
+                // Kept rather than skipped. A comment is the reasoning that was
+                // expensive to recover, and a formatter that dropped it would
+                // be deleting the most valuable thing in the file.
+                let span = self.span(1);
+                let start = self.i;
                 while self.i < self.bytes.len() && self.bytes[self.i] != b'\n' {
                     self.bump(1);
                 }
+                let text = self.src[start..self.i].trim_end().to_string();
+                // Whether anything but whitespace came before it on this line:
+                // a comment after code stays after that code, and one on its
+                // own line stays on its own line.
+                let trailing = out
+                    .last()
+                    .is_some_and(|t| t.kind != Kind::Newline && t.span.line == span.line);
+                self.comments.push(Comment { span, text, trailing });
                 continue;
             }
 
@@ -295,7 +336,7 @@ impl<'a> Lexer<'a> {
         }
 
         out.push(Token { kind: Kind::Eof, text: String::new(), span: self.span(0) });
-        (out, self.diagnostics)
+        (out, self.diagnostics, self.comments, self.blank_lines)
     }
 }
 

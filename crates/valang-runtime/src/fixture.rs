@@ -73,8 +73,33 @@ impl Host for Fixture {
         self.rows(ty).into_iter().next()
     }
 
-    fn credentials_of(&self, ty: &str, _policy: Option<&str>, limit: Option<i64>) -> Vec<BTreeMap<String, Value>> {
+    fn credentials_of(
+        &self,
+        ty: &str,
+        _policy: Option<&str>,
+        order: Option<(&str, bool)>,
+        limit: Option<i64>,
+    ) -> Vec<BTreeMap<String, Value>> {
         let mut rows = self.rows(ty);
+        // Sorted before it is cut, or `order by … limit 5` would be five of
+        // whatever came first and then sorted — which is a different five.
+        if let Some((claim, descending)) = order {
+            rows.sort_by(|a, b| {
+                let (x, y) = (a.get(claim), b.get(claim));
+                let ordering = match (x, y) {
+                    (Some(Value::Int(x)), Some(Value::Int(y))) => x.cmp(y),
+                    (Some(Value::Str(x)), Some(Value::Str(y))) => x.cmp(y),
+                    (Some(_), None) => std::cmp::Ordering::Greater,
+                    (None, Some(_)) => std::cmp::Ordering::Less,
+                    _ => std::cmp::Ordering::Equal,
+                };
+                if descending {
+                    ordering.reverse()
+                } else {
+                    ordering
+                }
+            });
+        }
         if let Some(n) = limit {
             rows.truncate(n.max(0) as usize);
         }

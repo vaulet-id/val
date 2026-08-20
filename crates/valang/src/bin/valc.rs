@@ -100,18 +100,6 @@ fn main() -> ExitCode {
                 failed = true;
                 continue;
             }
-            // The lexer drops comments and the AST does not carry them, so
-            // printing a file that has any would delete them. A formatter that
-            // destroys what it was pointed at is worse than no formatter:
-            // until the printer can carry a comment, it refuses the file.
-            if src.lines().any(|l| l.trim_start().starts_with("//")) {
-                eprintln!(
-                    "{path}: has comments, and the printer cannot carry them yet — left alone"
-                );
-                failed = true;
-                continue;
-            }
-
             let out = valang::print::print(&program);
             if out != src {
                 if let Err(e) = std::fs::write(path, &out) {

@@ -68,3 +68,87 @@ fn a_list_draws_a_row_for_each_item() {
     }
     assert!(lists > 0, "the catalogue draws no list, so this test proves nothing");
 }
+
+/// `order by purchased_at desc` was parsed and thrown away, so a screen asking
+/// for its receipts newest first got whatever order the wallet answered in.
+#[test]
+fn a_screen_gets_its_rows_in_the_order_it_asked_for() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  credential.read(PurchaseReceipt)
+}
+
+credential PurchaseReceipt {
+  merchant:     string
+  amount:       int
+  purchased_at: datetime
+}
+
+trust AnyReceipt(r: PurchaseReceipt) {
+  anchor: "th.co.codefin.merchants"
+  require {
+    r.signature.valid
+  }
+}
+
+state {
+  n: int default 0
+}
+
+@main
+screen Home {
+  data {
+    newest: credentials of PurchaseReceipt verified with AnyReceipt
+      order by amount desc
+      limit 2
+  }
+
+  column {
+    list(newest) { r ->
+      text(r.claims.amount)
+    }
+  }
+}
+"#;
+    let (program, d) = valang::analyse_fully(src, None, &hosts());
+    assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
+
+    let host = Fixture::parse(WALLET).expect("the wallet parses");
+    let state = valang_runtime::initial_state(&program, &BTreeMap::new());
+    let screen = render(&program, "Home", &state, &host).expect("Home resolves");
+
+    let mut amounts = Vec::new();
+    fn walk(c: &valang_runtime::render::Component, out: &mut Vec<i64>) {
+        for v in c.args.values() {
+            if let valang_runtime::value::Value::Int(i) = v {
+                out.push(*i);
+            }
+        }
+        for k in &c.children {
+            walk(k, out);
+        }
+    }
+    for n in &screen.tree {
+        walk(n, &mut amounts);
+    }
+
+    assert_eq!(amounts.len(), 2, "the limit was not applied: {amounts:?}");
+    assert!(amounts[0] >= amounts[1], "the rows came back in another order: {amounts:?}");
+
+    // And they are the two largest, which is what sorting before cutting means.
+    use valang_runtime::host::Host as _;
+    let all: Vec<i64> = host
+        .credentials_of("PurchaseReceipt", None, None, None)
+        .into_iter()
+        .filter_map(|r| match r.get("amount") {
+            Some(valang_runtime::value::Value::Int(i)) => Some(*i),
+            _ => None,
+        })
+        .collect();
+    let mut largest = all.clone();
+    largest.sort_unstable_by(|a, b| b.cmp(a));
+    assert_eq!(amounts, largest[..2], "the limit cut before the sort: {all:?}");
+}

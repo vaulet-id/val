@@ -319,7 +319,7 @@ fn a_screen_is_resolved_by_the_host_before_it_is_drawn() {
         fn device_key(&self) -> Vec<u8> {
             Vec::new()
         }
-        fn credentials_of(&self, ty: &str, policy: Option<&str>, limit: Option<i64>) -> Vec<BTreeMap<String, Value>> {
+        fn credentials_of(&self, ty: &str, policy: Option<&str>, _order: Option<(&str, bool)>, limit: Option<i64>) -> Vec<BTreeMap<String, Value>> {
             assert_eq!(ty, "PurchaseReceipt");
             assert_eq!(policy, Some("ReceiptFromMerchant"), "the policy the screen named travels with the request");
             assert_eq!(limit, Some(50), "and so does the bound that makes it finite");
@@ -476,7 +476,7 @@ fn the_fixture_is_the_same_wallet_the_tests_were_writing_by_hand() {
     // says nothing, which is how the freshness rule in every trust policy would
     // have quietly stopped working.
     let host = fixture();
-    let receipts = host.credentials_of("PurchaseReceipt", Some("ReceiptFromMerchant"), Some(2));
+    let receipts = host.credentials_of("PurchaseReceipt", Some("ReceiptFromMerchant"), None, Some(2));
     assert_eq!(receipts.len(), 2, "the declaration's limit bounds what the host hands back");
     assert!(matches!(receipts[0]["purchased_at"], Value::Int(_)));
 

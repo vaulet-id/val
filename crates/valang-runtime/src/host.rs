@@ -75,7 +75,18 @@ pub trait Host {
     /// named. A screen declares its data and the host resolves it *before*
     /// drawing — which is why there is no half-drawn screen and no prompt
     /// arriving mid-scroll.
-    fn credentials_of(&self, _ty: &str, _policy: Option<&str>, _limit: Option<i64>) -> Vec<BTreeMap<String, Value>> {
+    ///
+    /// `order` is the claim to sort on and whether it descends, as the screen
+    /// wrote it. The host does the sorting because the host holds the rows —
+    /// and until this was passed, a screen asking for its receipts newest first
+    /// got whatever order the wallet happened to answer in.
+    fn credentials_of(
+        &self,
+        _ty: &str,
+        _policy: Option<&str>,
+        _order: Option<(&str, bool)>,
+        _limit: Option<i64>,
+    ) -> Vec<BTreeMap<String, Value>> {
         Vec::new()
     }
 

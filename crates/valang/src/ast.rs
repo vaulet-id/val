@@ -36,6 +36,22 @@ pub struct Program {
     /// `media.video`. Filled in by the pass that reads the host's registry, and
     /// read by the one that asks whether a declared capability goes unused.
     pub uses: Vec<String>,
+    /// Every `//` line in the file, where it was. Held on the program rather
+    /// than on the nodes: a comment belongs to a position, and which node it is
+    /// about is a guess the printer makes rather than a fact the parser has.
+    pub comments: Vec<crate::lex::Comment>,
+    /// The lines that held nothing but space. A blank line is the author's
+    /// grouping, and it is kept as "the line above was empty" rather than as a
+    /// distance: the printer changes how many lines a thing takes.
+    pub blank_lines: std::collections::BTreeSet<u32>,
+    /// Where `app`, `version` and `state` were written. The other declarations
+    /// carry their own; these three are held on the program, and a printer that
+    /// did not know where they were could not put a file back in the order
+    /// somebody wrote it.
+    pub app_span: Span,
+    pub version_span: Span,
+    pub state_span: Span,
+    pub capabilities_span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +146,8 @@ pub struct TrustDecl {
     pub subject_type: String,
     pub refines: Option<String>,
     pub anchor: Option<String>,
+    /// Where `anchor:` was written, so a comment above it stays above it.
+    pub anchor_span: Span,
     pub requires: Vec<Expr>,
     pub span: Span,
 }
@@ -233,7 +251,17 @@ pub struct DataDecl {
 
 #[derive(Debug, Clone)]
 pub enum DataSource {
-    Credentials { ty: String, policy: Option<String>, limit: Option<i64> },
+    /// `credentials of PurchaseReceipt verified with P order by purchased_at desc limit 50`
+    ///
+    /// `order` is the claim to sort on and whether it descends. It was parsed
+    /// and thrown away, so a screen that asked for its receipts newest first
+    /// got whatever order the host happened to answer in.
+    Credentials {
+        ty: String,
+        policy: Option<String>,
+        order: Option<(String, bool)>,
+        limit: Option<i64>,
+    },
     Query { audience: String },
     Unknown,
 }
@@ -353,7 +381,10 @@ impl Stmt {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Num { value: i64, span: Span },
+    /// `100_000`. `text` is what was written, because the separators are the
+    /// author's and a formatter that dropped them would be reformatting the
+    /// number rather than the file.
+    Num { value: i64, text: String, span: Span },
     /// Kept so the checker can say "use satang" rather than the parser guessing.
     Float { text: String, span: Span },
     Str { value: String, span: Span },

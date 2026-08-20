@@ -88,8 +88,13 @@ pub fn render_with(
 
     for d in &screen.data {
         let (value, line) = match &d.source {
-            DataSource::Credentials { ty, policy, limit } => {
-                let rows = host.credentials_of(ty, policy.as_deref(), *limit);
+            DataSource::Credentials { ty, policy, order, limit } => {
+                let rows = host.credentials_of(
+                    ty,
+                    policy.as_deref(),
+                    order.as_ref().map(|(c, d)| (c.as_str(), *d)),
+                    *limit,
+                );
                 let items: Vec<Value> = rows
                     .into_iter()
                     .map(|claims| Value::Credential {
