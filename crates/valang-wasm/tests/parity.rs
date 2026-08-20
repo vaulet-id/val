@@ -42,7 +42,7 @@ fn walked(src: &str, name: &str, args: &[Value]) -> Result<Value, String> {
 
 fn emitted(src: &str, name: &str, args: &[Value]) -> Result<Value, String> {
     let (program, _) = valang::analyse(src);
-    let module = compile_function(&program);
+    let module = compile_function(&program).expect("every function in this example is one both back ends have");
     run_function(&module, name, args)
 }
 
@@ -87,7 +87,7 @@ fn a_gift_with_no_cost_basis_is_answered_not_trapped() {
 #[test]
 fn fuel_is_the_second_belt() {
     let (program, _) = valang::analyse(LOYALTY);
-    let module = compile_function(&program);
+    let module = compile_function(&program).expect("every function in this example is one both back ends have");
 
     let ok = run_with_fuel(&module, "tierFor", &[Value::Int(5_000)], Some(10_000));
     assert_eq!(ok.unwrap(), Value::Enum("Tier".into(), "silver".into()));
@@ -119,7 +119,7 @@ fn the_constants_travel_inside_the_module() {
     use valang_wasm::konsts_of;
 
     let (program, _) = valang::analyse(LOYALTY);
-    let module = compile_function(&program);
+    let module = compile_function(&program).expect("every function in this example is one both back ends have");
     let recovered = konsts_of(&module.bytes).expect("the pool is in the module");
     assert_eq!(recovered, module.konsts);
 
@@ -157,4 +157,35 @@ function sign(n: int): int {
     assert_eq!(emitted(src, "sign", &[Value::Int(-5)]).unwrap(), Value::Int(-1));
     assert_eq!(emitted(src, "sign", &[Value::Int(0)]).unwrap(), Value::Int(0));
     assert_eq!(emitted(src, "sign", &[Value::Int(9)]).unwrap(), Value::Int(1));
+}
+
+/// A shape this back end does not emit is said so, rather than pushed as
+/// `false`.
+///
+/// It used to compile to a module that computed a wrong answer and reported
+/// nothing — which is worse than a missing back end, because the parity test
+/// only compares what both of them have.
+#[test]
+fn what_this_back_end_cannot_emit_it_refuses() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+function fallback(a: int): int {
+  return a ?: 0
+}
+"#;
+    let (program, _) = valang::analyse(src);
+    let out = compile_function(&program);
+    let Err(said) = out else {
+        panic!("a function this back end cannot emit compiled anyway");
+    };
+    assert!(said.iter().any(|m| m.contains("`?:`")), "{said:?}");
 }

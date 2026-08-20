@@ -66,6 +66,8 @@ struct Ctx<'a> {
     locals: BTreeMap<String, u32>,
     /// Function index in the module: imports first, then VAL functions.
     fn_index: BTreeMap<String, u32>,
+    /// What this back end met and does not emit.
+    unsupported: Vec<String>,
 }
 
 impl Ctx<'_> {
@@ -91,12 +93,20 @@ impl Ctx<'_> {
 /// Compile every `function` in the program. Actions are not compiled: their
 /// phases are the host's business, and `execute` describes effects rather than
 /// performing them, so there is nothing there for a module to do.
-pub fn compile_function(program: &Program) -> Module {
+/// The typed AST, as a module — or the shapes this back end does not emit.
+///
+/// It used to push `false` for anything it did not recognise, so a function
+/// using something added to the language since compiled to a module that
+/// computed a wrong answer and said nothing. A back end that silently disagrees
+/// with the other one is worse than a back end that is missing: the parity test
+/// is what says the two agree, and it can only run on what both of them have.
+pub fn compile_function(program: &Program) -> Result<Module, Vec<String>> {
     let mut ctx = Ctx {
         program,
         konsts: Vec::new(),
         locals: BTreeMap::new(),
         fn_index: BTreeMap::new(),
+        unsupported: Vec::new(),
     };
 
     let import_count = IMPORTS.len() as u32;
@@ -166,7 +176,17 @@ pub fn compile_function(program: &Program) -> Module {
     let pool = encode_konsts(&ctx.konsts);
     module.section(&CustomSection { name: KONST_SECTION.into(), data: pool.into() });
 
-    Module { bytes: module.finish(), konsts: ctx.konsts, functions: names }
+    if !ctx.unsupported.is_empty() {
+        let mut said: Vec<String> = ctx.unsupported.clone();
+        said.sort();
+        said.dedup();
+        return Err(said
+            .into_iter()
+            .map(|what| format!("this back end does not emit {what}"))
+            .collect());
+    }
+
+    Ok(Module { bytes: module.finish(), konsts: ctx.konsts, functions: names })
 }
 
 /// The custom section the constants live in. A custom section is ignored by any
@@ -372,7 +392,28 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
             }
         }
 
-        _ => ctx.push_konst(Konst::Bool(false), f),
+        // Not emitted. Pushing a value in its place is how a module comes to
+        // compute something the evaluator does not.
+        other => {
+            ctx.unsupported.push(describe(other));
+            ctx.push_konst(Konst::Bool(false), f);
+        }
+    }
+}
+
+/// What an expression is, for a message about not emitting it.
+fn describe(e: &Expr) -> String {
+    match e {
+        Expr::Exists { .. } => "`exists`".into(),
+        Expr::Elvis { .. } => "`?:`".into(),
+        Expr::List { .. } => "a list written out".into(),
+        Expr::Lambda { .. } => "a function written in place".into(),
+        Expr::With { .. } => "`with`".into(),
+        Expr::From { .. } => "`from`".into(),
+        Expr::Record { .. } => "a record".into(),
+        Expr::Float { .. } => "a float".into(),
+        Expr::Error { .. } => "something that did not parse".into(),
+        _ => "this expression".into(),
     }
 }
 
