@@ -169,7 +169,10 @@ fn source(s: &DataSource) -> String {
             }
             out
         }
+        DataSource::Query { audience } if audience.is_empty() => "query".to_string(),
         DataSource::Query { audience } => format!("query {audience}"),
+        // Only reachable in a program that did not parse, and one of those is
+        // never printed: the formatter refuses a file whose shape nobody knows.
         DataSource::Unknown => "query".to_string(),
     }
 }

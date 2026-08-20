@@ -1119,7 +1119,15 @@ impl Parser {
                 }
                 DataSource::Query { audience }
             } else {
+                // Anything else is discarded, so it cannot be checked, printed
+                // or reported. A screen declares where its data comes from and
+                // there are two answers; a third was read and thrown away.
+                let at = self.peek().span;
                 self.expr(0);
+                self.diagnostics.push(Diagnostic::error(
+                    at,
+                    "a screen's data comes from `credentials of …` or from `query …`. The host resolves it before anything is drawn, which is why it is declared rather than fetched",
+                ));
                 DataSource::Unknown
             }
     }
