@@ -63,7 +63,18 @@ pub const IMPORTS: &[(&str, u32)] = &[
     // An empty one comes from `konst`; these add to it.
     ("push", 2),   // (list, item) -> list
     ("set", 3),    // (record, name-konst, value) -> record
+    // Walking a list. `len` and `at` take and give a raw index rather than a
+    // handle, because a loop counter is the one number the module itself
+    // holds: everything else is the host's.
+    ("len", 1),    // (list) -> i32
+    ("at", 2),     // (list, i32) -> handle
+    ("count", 1),  // (list) -> handle, the length as a value
+    ("first", 1),  // (list) -> handle, or nothing
 ];
+
+/// The list operations, and how many values each hands the function it is given.
+const COMBINATORS: &[(&str, usize)] =
+    &[("map", 1), ("filter", 1), ("any", 1), ("all", 1), ("fold", 2), ("count", 0), ("first", 0)];
 
 fn import_index(name: &str) -> u32 {
     IMPORTS.iter().position(|(n, _)| *n == name).expect("unknown import") as u32
@@ -333,9 +344,22 @@ fn count_scratch(body: &[Stmt]) -> u32 {
         s.walk(&mut |x| {
             let mut count = |e: &Expr| {
                 e.walk(&mut |inner| {
-                    if matches!(inner, Expr::Elvis { .. }) {
-                        n += 1;
-                    }
+                    n += match inner {
+                        Expr::Elvis { .. } => 1,
+                        // A list operation holds the list, the index, the
+                        // length, the row and what it is building.
+                        Expr::Call { callee, .. } => match callee.as_ref() {
+                            Expr::Member { name, .. }
+                                if COMBINATORS
+                                    .iter()
+                                    .any(|(c, arity)| c == name && *arity > 0) =>
+                            {
+                                5
+                            }
+                            _ => 0,
+                        },
+                        _ => 0,
+                    };
                 })
             };
             match x {
@@ -535,7 +559,17 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
             emit_switch(ctx, subject, arms, 0, f);
         }
 
-        Expr::Call { callee, args, .. } => {
+        // `receipts.map { r -> … }` — a loop in the module, with the row in a
+        // local and the body emitted where it was written. No closure and no
+        // function value: a function here is written at the call site or named,
+        // and both are known while this is being compiled.
+        Expr::Call { callee, args, span } => {
+            if let Expr::Member { obj, name, .. } = callee.as_ref() {
+                if let Some((_, arity)) = COMBINATORS.iter().find(|(n, _)| n == name) {
+                    emit_combinator(ctx, obj, name, *arity, args, *span, f);
+                    return;
+                }
+            }
             let Some(name) = callee.path() else {
                 ctx.push_konst(Konst::Bool(false), f);
                 return;
@@ -577,6 +611,190 @@ fn describe(e: &Expr) -> String {
         Expr::Error { .. } => "something that did not parse".into(),
         _ => "this expression".into(),
     }
+}
+
+/// A list operation, as a loop.
+///
+/// Fuel is what makes this worth having: the language is total, so the loop
+/// ends — but ending *eventually* and ending *in time* are different promises,
+/// and a loop the module runs is a loop the fuel meter can see.
+fn emit_combinator(
+    ctx: &mut Ctx,
+    subject: &Expr,
+    name: &str,
+    arity: usize,
+    args: &[Arg],
+    span: valang::diag::Span,
+    f: &mut Function,
+) {
+    use wasm_encoder::BlockType;
+
+    // `count` and `first` are the host's, whole.
+    if arity == 0 {
+        emit(ctx, subject, f);
+        ctx.call_op(name, f);
+        return;
+    }
+
+    // The function it was given: written here, or the name of one this package
+    // declares. Neither is a value — both are known now.
+    let given = args.iter().find_map(|a| match &a.value {
+        Expr::Lambda { params, body, .. } => Some(Given::Written(params.clone(), (**body).clone())),
+        Expr::Ident { name, .. } if ctx.program.functions.iter().any(|f| f.name == *name) => {
+            Some(Given::Named(name.clone()))
+        }
+        _ => None,
+    });
+    let Some(given) = given else {
+        ctx.unsupported.push(format!("`{name}` without a function to give it"));
+        ctx.push_konst(Konst::Bool(false), f);
+        let _ = span;
+        return;
+    };
+
+    let list = ctx.scratch();
+    let index = ctx.scratch();
+    let length = ctx.scratch();
+    let row = ctx.scratch();
+    let acc = ctx.scratch();
+
+    emit(ctx, subject, f);
+    f.instruction(&Instruction::LocalTee(list));
+    ctx.call_op("len", f);
+    f.instruction(&Instruction::LocalSet(length));
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::LocalSet(index));
+
+    // What the loop is building, before it starts.
+    match name {
+        "fold" => {
+            match args.first() {
+                Some(seed) if !matches!(seed.value, Expr::Lambda { .. }) => {
+                    emit(ctx, &seed.value, f)
+                }
+                _ => ctx.push_konst(Konst::Bool(false), f),
+            }
+            f.instruction(&Instruction::LocalSet(acc));
+        }
+        "map" | "filter" => {
+            ctx.push_konst(Konst::EmptyList, f);
+            f.instruction(&Instruction::LocalSet(acc));
+        }
+        // `any` starts false and `all` starts true, which is also what each
+        // means over no rows at all.
+        "any" => {
+            ctx.push_konst(Konst::Bool(false), f);
+            f.instruction(&Instruction::LocalSet(acc));
+        }
+        _ => {
+            ctx.push_konst(Konst::Bool(true), f);
+            f.instruction(&Instruction::LocalSet(acc));
+        }
+    }
+
+    f.instruction(&Instruction::Block(BlockType::Empty));
+    f.instruction(&Instruction::Loop(BlockType::Empty));
+    f.instruction(&Instruction::LocalGet(index));
+    f.instruction(&Instruction::LocalGet(length));
+    f.instruction(&Instruction::I32GeS);
+    f.instruction(&Instruction::BrIf(1));
+
+    f.instruction(&Instruction::LocalGet(list));
+    f.instruction(&Instruction::LocalGet(index));
+    ctx.call_op("at", f);
+    f.instruction(&Instruction::LocalSet(row));
+
+    // The body, with what it was handed in scope. Bindings are restored after,
+    // so a name the loop introduced does not outlive it.
+    let saved = ctx.locals.clone();
+    let value_of = |ctx: &mut Ctx, f: &mut Function| match &given {
+        Given::Written(params, body) => {
+            if name == "fold" {
+                if let Some(p) = params.first() {
+                    ctx.locals.insert(p.clone(), acc);
+                }
+                if let Some(p) = params.get(1) {
+                    ctx.locals.insert(p.clone(), row);
+                }
+            } else if let Some(p) = params.first() {
+                ctx.locals.insert(p.clone(), row);
+            }
+            emit(ctx, body, f);
+        }
+        Given::Named(fname) => {
+            if name == "fold" {
+                f.instruction(&Instruction::LocalGet(acc));
+            }
+            f.instruction(&Instruction::LocalGet(row));
+            match ctx.fn_index.get(fname).copied() {
+                Some(i) => {
+                    f.instruction(&Instruction::Call(i));
+                }
+                None => ctx.push_konst(Konst::Bool(false), f),
+            }
+        }
+    };
+
+    match name {
+        "fold" => {
+            value_of(ctx, f);
+            f.instruction(&Instruction::LocalSet(acc));
+        }
+        "map" => {
+            f.instruction(&Instruction::LocalGet(acc));
+            value_of(ctx, f);
+            ctx.call_op("push", f);
+            f.instruction(&Instruction::LocalSet(acc));
+        }
+        "filter" => {
+            value_of(ctx, f);
+            ctx.call_op("truthy", f);
+            f.instruction(&Instruction::If(BlockType::Empty));
+            f.instruction(&Instruction::LocalGet(acc));
+            f.instruction(&Instruction::LocalGet(row));
+            ctx.call_op("push", f);
+            f.instruction(&Instruction::LocalSet(acc));
+            f.instruction(&Instruction::End);
+        }
+        // Short-circuit: the row that decides ends the loop, so `any` over a
+        // long list is not a long loop.
+        "any" => {
+            value_of(ctx, f);
+            ctx.call_op("truthy", f);
+            f.instruction(&Instruction::If(BlockType::Empty));
+            ctx.push_konst(Konst::Bool(true), f);
+            f.instruction(&Instruction::LocalSet(acc));
+            f.instruction(&Instruction::Br(2));
+            f.instruction(&Instruction::End);
+        }
+        _ => {
+            value_of(ctx, f);
+            ctx.call_op("truthy", f);
+            f.instruction(&Instruction::I32Eqz);
+            f.instruction(&Instruction::If(BlockType::Empty));
+            ctx.push_konst(Konst::Bool(false), f);
+            f.instruction(&Instruction::LocalSet(acc));
+            f.instruction(&Instruction::Br(2));
+            f.instruction(&Instruction::End);
+        }
+    }
+    ctx.locals = saved;
+
+    f.instruction(&Instruction::LocalGet(index));
+    f.instruction(&Instruction::I32Const(1));
+    f.instruction(&Instruction::I32Add);
+    f.instruction(&Instruction::LocalSet(index));
+    f.instruction(&Instruction::Br(0));
+    f.instruction(&Instruction::End);
+    f.instruction(&Instruction::End);
+
+    f.instruction(&Instruction::LocalGet(acc));
+}
+
+/// The function a list operation was given.
+enum Given {
+    Written(Vec<String>, Expr),
+    Named(String),
 }
 
 fn emit_switch(ctx: &mut Ctx, subject: &Expr, arms: &[SwitchArm], i: usize, f: &mut Function) {

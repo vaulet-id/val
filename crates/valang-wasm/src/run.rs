@@ -142,6 +142,49 @@ pub fn run_with_fuel(module: &Module, name: &str, args: &[Value], fuel: Option<u
         other => Ok(other),
     });
 
+    // Walking a list. `len` and `at` speak in raw indices rather than handles,
+    // because the loop counter is the one number the module itself holds.
+    let len = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32| -> i32 {
+        match caller.data().borrow().get(a) {
+            Value::List(items) => items.len() as i32,
+            _ => 0,
+        }
+    });
+    linker.define("val", "len", len).map_err(|e| e.to_string())?;
+
+    let at = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32, i: i32| -> i32 {
+        let vals = caller.data().clone();
+        let item = match vals.borrow().get(a) {
+            Value::List(items) => items.get(i.max(0) as usize).cloned().unwrap_or(Value::Null),
+            _ => Value::Null,
+        };
+        let h = vals.borrow_mut().put(item);
+        h
+    });
+    linker.define("val", "at", at).map_err(|e| e.to_string())?;
+
+    let count = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32| -> i32 {
+        let vals = caller.data().clone();
+        let n = match vals.borrow().get(a) {
+            Value::List(items) => items.len() as i64,
+            _ => 0,
+        };
+        let h = vals.borrow_mut().put(Value::Int(n));
+        h
+    });
+    linker.define("val", "count", count).map_err(|e| e.to_string())?;
+
+    let first = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32| -> i32 {
+        let vals = caller.data().clone();
+        let item = match vals.borrow().get(a) {
+            Value::List(items) => items.first().cloned().unwrap_or(Value::Null),
+            _ => Value::Null,
+        };
+        let h = vals.borrow_mut().put(item);
+        h
+    });
+    linker.define("val", "first", first).map_err(|e| e.to_string())?;
+
     let exists = Func::wrap(&mut store, move |caller: Caller<'_, Shared>, a: i32| -> i32 {
         let vals = caller.data().clone();
         let there = !matches!(vals.borrow().get(a), Value::Null);

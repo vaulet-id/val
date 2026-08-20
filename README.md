@@ -151,7 +151,7 @@ Against the pipeline in [§7](docs/spec.md), today:
 | determinism, totality | **done** — no floats, no clock of its own, acyclic call graph |
 | policy validation | **done** — one disclosure per action, patch paths, state changed only by `update`, and no effect reading another's result |
 | capability report | **done** — derived from the code |
-| IR | not started, and the case for one is written down: both back ends read the typed AST, and what they must agree about — what an operator means — they now share rather than each implementing. The Wasm one covers what a pure function is written out of — arithmetic, comparison, `if`, `switch`, ternary, `exists`, `?:`, lists, records, `let` and assignment, destructuring, calls and field access — and refuses the rest, which is a function written in place and the combinators that take one |
+| IR | not started, and the case for one is written down: both back ends read the typed AST, and what they must agree about — what an operator means — they now share rather than each implementing. The Wasm one covers what a pure function is written out of, the list combinators included — each a loop in the module, which is what makes a fuel budget mean something. What it refuses is a function held in a binding rather than written where it is used |
 | evaluator | **done** — phases, effects as requests, traps, and screens resolved through host capabilities before anything is drawn |
 | canonical encoding | **done** — deterministic CBOR, checked against RFC 8949 |
 | state Merkle root | **done** — `(path, value)` leaves, one per list element, with inclusion proofs |

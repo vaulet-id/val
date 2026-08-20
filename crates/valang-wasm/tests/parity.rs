@@ -178,8 +178,9 @@ state {
   n: int default 0
 }
 
-function total(xs: List<int>): int {
-  return xs.fold(0) { sum, x -> sum + x }
+function held(n: int): int {
+  const f = { x -> x * 2 }
+  return n
 }
 "#;
     let (program, _) = valang::analyse(src);
@@ -264,4 +265,109 @@ function fromRecord(n: int): int {
     for n in [0i64, 7] {
         both_agree(src, "fromRecord", &[Value::Int(n)]);
     }
+}
+
+/// The list operations, as a loop in the module. Every one compared against the
+/// tree-walking evaluator, over an empty list as well as a full one — `any` and
+/// `all` over nothing are the answers people get wrong.
+#[test]
+fn the_list_operations_agree_on_both_back_ends() {
+    let src = r#"
+app "x"
+version 1
+
+function double(x: int): int {
+  return x * 2
+}
+
+function add(a: int, b: int): int {
+  return a + b
+}
+
+function rows(n: int): List<int> {
+  return n <= 0 ? [] : [1, 2, 3]
+}
+
+function mapped(n: int): List<int> {
+  return rows(n).map { r -> r * 10 }
+}
+
+function mappedByName(n: int): List<int> {
+  return rows(n).map(double)
+}
+
+function kept(n: int): List<int> {
+  return rows(n).filter { r -> r > 1 }
+}
+
+function summed(n: int): int {
+  return rows(n).fold(0) { sum, r -> sum + r }
+}
+
+function summedByName(n: int): int {
+  return rows(n).fold(0, add)
+}
+
+function anyBig(n: int): bool {
+  return rows(n).any { r -> r > 2 }
+}
+
+function allBig(n: int): bool {
+  return rows(n).all { r -> r > 2 }
+}
+
+function howMany(n: int): int {
+  return rows(n).count
+}
+
+function theFirst(n: int): int {
+  return rows(n).first ?: 0
+}
+
+function nested(n: int): int {
+  return rows(n).map { r -> r * 2 }.fold(0) { sum, r -> sum + r }
+}
+"#;
+    for name in [
+        "mapped",
+        "mappedByName",
+        "kept",
+        "summed",
+        "summedByName",
+        "anyBig",
+        "allBig",
+        "howMany",
+        "theFirst",
+        "nested",
+    ] {
+        for n in [0i64, 1] {
+            both_agree(src, name, &[Value::Int(n)]);
+        }
+    }
+}
+
+/// The reason a loop in the module is worth having: totality says the program
+/// halts, fuel says when. A list operation over a long list is a long loop, and
+/// a long loop on a small budget stops rather than keeping somebody waiting.
+#[test]
+fn a_list_operation_is_a_loop_the_fuel_meter_can_see() {
+    let src = r#"
+app "x"
+version 1
+
+function summed(n: int): int {
+  return [1, 2, 3, 4, 5, 6, 7, 8].fold(0) { sum, r -> sum + r }
+}
+"#;
+    let (program, _) = valang::analyse(src);
+    let module = compile_function(&program).expect("every shape here is one both back ends have");
+
+    assert_eq!(
+        run_with_fuel(&module, "summed", &[Value::Int(0)], Some(100_000)).unwrap(),
+        Value::Int(36)
+    );
+    assert!(
+        run_with_fuel(&module, "summed", &[Value::Int(0)], Some(20)).is_err(),
+        "a budget of twenty instructions finished a loop over eight rows"
+    );
 }
