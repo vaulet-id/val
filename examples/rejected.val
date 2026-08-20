@@ -357,3 +357,22 @@ action Hex {
     presses: 0
   }
 }
+
+// 24. A list computed over with no bound.
+action Unbounded {
+  verify {
+    // error: `receipts` is computed over and says no `limit`. A bound is what
+    //        makes the work knowable before it runs — and what makes a proof
+    //        over it cost the bound rather than the data, which is also why it
+    //        does not leak how much the person holds.
+    const receipts = credentials of PurchaseReceipt verified with ReceiptFromMerchant
+  }
+
+  compute {
+    const total = receipts.fold(0) { sum, r -> sum + r.claims.amount }
+  }
+
+  update {
+    presses: total
+  }
+}

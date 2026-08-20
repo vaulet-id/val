@@ -24,6 +24,7 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     nothing_is_declared_twice(p, &mut d);
     effects_do_not_read_each_other(p, &mut d);
     defaults_are_written_out(p, &mut d);
+    lists_walked_have_a_bound(p, &mut d);
     refusals_come_before_effects(p, &mut d);
     policies_name_an_anchor(p, &mut d);
     navigation_goes_somewhere(p, &mut d);
@@ -568,6 +569,98 @@ fn walk_stmts(stmts: &[Stmt], f: &mut impl FnMut(&Stmt)) {
 }
 
 // -------------------------------------------------------------------- effects
+
+/// A list somebody computes over says how long it may be.
+///
+/// `limit` bounds the work, which is what lets a total over a list compile to a
+/// circuit — and what makes the cost of a proof the bound rather than the data,
+/// so that it does not leak how much the person holds. Without one, a `fold`
+/// over what the wallet answered with is work nobody wrote a number for.
+fn lists_walked_have_a_bound(p: &Program, d: &mut Vec<Diagnostic>) {
+    // Every name bound to credentials, and whether it said how many.
+    let mut unbounded: HashMap<String, crate::diag::Span> = HashMap::new();
+    let mut note = |name: &str, source: &DataSource, span: crate::diag::Span| {
+        if let DataSource::Credentials { limit: None, .. } = source {
+            unbounded.insert(name.to_string(), span);
+        }
+    };
+    for s in &p.screens {
+        for decl in &s.data {
+            note(&decl.name, &decl.source, decl.span);
+        }
+    }
+    for a in &p.actions {
+        for block in &a.phases {
+            walk_stmts(&block.stmts, &mut |st| {
+                if let Stmt::Data { name, source, span } = st {
+                    note(name, source, *span);
+                }
+            });
+        }
+    }
+    if unbounded.is_empty() {
+        return;
+    }
+
+    let mut said: HashSet<String> = HashSet::new();
+    let mut walked = |e: &Expr, d: &mut Vec<Diagnostic>| {
+        e.walk(&mut |inner| {
+            let Expr::Call { callee, .. } = inner else { return };
+            let Expr::Member { obj, name: method, .. } = callee.as_ref() else { return };
+            // `count` and `first` read the list without walking it.
+            if !matches!(method.as_str(), "map" | "filter" | "fold" | "any" | "all") {
+                return;
+            }
+            let Some(over) = obj.path() else { return };
+            let Some(at) = unbounded.get(&over) else { return };
+            if !said.insert(over.clone()) {
+                return;
+            }
+            d.push(Diagnostic::error(
+                *at,
+                format!("`{over}` is computed over and says no `limit`. A bound is what makes the work knowable before it runs — and what makes a proof over it cost the bound rather than the data"),
+            ));
+        });
+    };
+
+    for s in &p.screens {
+        for st in &s.compute {
+            if let Stmt::Let { value, .. } = st {
+                walked(value, d);
+            }
+        }
+        for n in &s.tree {
+            n.walk(&mut |node| {
+                for a in &node.args {
+                    walked(&a.value, d);
+                }
+            });
+        }
+    }
+    for a in &p.actions {
+        for block in &a.phases {
+            let mut flat: Vec<&Stmt> = Vec::new();
+            flatten(&block.stmts, &mut flat);
+            for st in flat {
+                match st {
+                    Stmt::Let { value, .. }
+                    | Stmt::Expr { value, .. }
+                    | Stmt::Patch { value, .. }
+                    | Stmt::Return { value, .. }
+                    | Stmt::Assign { value, .. }
+                    | Stmt::Destructure { value, .. } => walked(value, d),
+                    Stmt::If { cond, .. } => walked(cond, d),
+                    Stmt::Effect { args, .. } => {
+                        for a in args {
+                            walked(&a.value, d);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
 
 /// A state field starts where its `default` says, and nowhere else.
 ///

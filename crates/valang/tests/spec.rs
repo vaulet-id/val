@@ -493,3 +493,150 @@ fn an_identifier_is_ascii() {
     let e = errors(src);
     assert!(e.iter().any(|m| m.contains("ASCII")), "a Thai identifier was accepted: {e:?}");
 }
+
+/// "Arguments are named once there are two. One argument may be positional."
+#[test]
+fn two_arguments_are_named() {
+    let one = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction f(a: int): int {\n  return a\n}\n\nfunction g(): int {\n  return f(1)\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    assert!(errors(one).is_empty(), "one positional argument was refused: {:?}", errors(one));
+
+    let two = one
+        .replace("function f(a: int): int {\n  return a\n}", "function f(a: int, b: int): int {\n  return a + b\n}")
+        .replace("return f(1)", "return f(1, 2)");
+    let e = errors(&two);
+    assert!(
+        e.iter().any(|m| m.contains("so they are named")),
+        "two positional arguments were accepted: {e:?}"
+    );
+}
+
+/// "The type names the policy. `Verified<SignatureOnly>` and
+/// `Verified<ReceiptFromMerchant>` are different types, and a function that
+/// wants the second will not take the first."
+#[test]
+fn a_policy_is_part_of_the_type() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  credential.read(Receipt)
+}
+
+credential Receipt {
+  amount: int
+}
+
+trust Loose(r: Receipt) {
+  anchor: "shop.example"
+  require {
+    r.signature.valid
+  }
+}
+
+trust Strict(r: Receipt) {
+  anchor: "shop.example"
+  require {
+    r.signature.valid
+    r.status.active
+  }
+}
+
+function wants(r: Verified<Strict>): int {
+  return r.claims.amount
+}
+
+state {
+  n: int default 0
+}
+
+action Go {
+  input {
+    r: Credential<Receipt>
+  }
+
+  verify {
+    const loose = r with Loose
+  }
+
+  compute {
+    const out = wants(loose)
+  }
+
+  update {
+    n: out
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Go }
+  }
+}
+"#;
+    let e = errors(src);
+    assert!(
+        e.iter().any(|m| m.contains("Strict") && m.contains("Loose")),
+        "a credential verified against one policy was taken where another was asked for: {e:?}"
+    );
+}
+
+/// "It pays for the bound, not the data." The compiler cannot cost a circuit,
+/// but it can refuse the case that has no bound to pay for: a list consumed in
+/// a proof whose length nothing wrote down.
+#[test]
+fn a_list_a_proof_walks_has_a_bound() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  credential.read(Holding)
+  disclosure.present
+}
+
+credential Holding {
+  value: int
+}
+
+trust FromBroker(h: Holding) {
+  anchor: "broker.example"
+  require {
+    h.signature.valid
+  }
+}
+
+state {
+  n: int default 0
+}
+
+action Prove {
+  verify {
+    const holdings = credentials of Holding verified with FromBroker
+  }
+
+  update {
+    n: 1
+  }
+
+  execute {
+    present {
+      prove holdings.fold(0) { sum, h -> sum + h.claims.value } >= 100
+    }
+  }
+}
+
+@main
+screen Home {
+  column {
+    button("go") { onTap: Prove }
+  }
+}
+"#;
+    let e = errors(src);
+    assert!(
+        e.iter().any(|m| m.contains("limit")),
+        "a proof walked a list of unwritten length: {e:?}"
+    );
+}

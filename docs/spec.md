@@ -417,8 +417,10 @@ its own.
 anything is drawn. `verified with` means a credential that fails the policy
 cannot appear — not "is filtered out".
 
-`limit` is required on a list you compute over. It bounds the work, which is
-what lets a total over the list compile to a circuit.
+`limit` is required on a list you compute over — `map`, `filter`, `fold`, `any`
+or `all`; `count` and `first` read it without walking it. It bounds the work,
+which is what lets a total over the list compile to a circuit, and what makes a
+proof cost the bound rather than the data.
 
 **A press names an action.** Every handler does — `onTap`, and `onRemove` on a
 list — so everything a screen can start goes through the six phases with the
