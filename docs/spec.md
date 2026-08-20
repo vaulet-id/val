@@ -795,7 +795,9 @@ keeps it and refuses a changed surface at an unchanged version.
 
 1. Every source hashes to what integrity says.
 2. The signature is over these bytes, by the key your manifest names.
-3. It compiles — checked there, not taken from your build.
+3. It compiles **against that host's own registry** — checked there, not taken
+   from your build, and against the catalogue that will draw it rather than
+   against one somebody else published.
 4. The report it ships is the report its code produces.
 5. Every locale your manifest promises has every key.
 

@@ -42,13 +42,26 @@ pub trait HostPolicy {
     fn expects_sources(&self, kind: &str) -> bool {
         kind == "val"
     }
+
+    /// What this host draws with. A package is compiled against it before the
+    /// host admits it — there is no other copy, and a package checked against
+    /// somebody else's catalogue has been checked against nothing.
+    fn registries(&self) -> valang::capability::Hosts;
 }
 
-/// Admits everything. The default so that `verify` alone answers the questions
-/// that are the language's, and a host that has no policy yet is not silently
-/// given one.
+/// Admits everything, and publishes nothing. The default so that `verify` alone
+/// answers the questions that are the language's, and a host that has no policy
+/// yet is not silently given one.
+///
+/// Its registry is empty, which means a screen is checked against no catalogue.
+/// That is a real answer rather than an oversight: a host with nothing to draw
+/// with admits nothing worth drawing.
 pub struct Permissive;
-impl HostPolicy for Permissive {}
+impl HostPolicy for Permissive {
+    fn registries(&self) -> valang::capability::Hosts {
+        Default::default()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
@@ -175,10 +188,16 @@ pub fn build(
     manifest: Manifest,
     sources: BTreeMap<String, String>,
     text_bundle: BTreeMap<String, BTreeMap<String, String>>,
+    hosts: &valang::capability::Hosts,
     key: Option<&SigningKey>,
 ) -> Result<Package, Refusal> {
     let joined = sources.values().cloned().collect::<Vec<_>>().join("\n");
-    let (program, diagnostics) = valang::analyse_with(&joined, Some((&text_bundle, &manifest.locales)));
+    // Against the registries this package names, because a screen is checked
+    // against what a host publishes and against nothing else. Compiled without
+    // them, a package drawing something no wallet ships was admitted and failed
+    // on somebody's phone.
+    let (program, diagnostics) =
+        valang::analyse_fully(&joined, Some((&text_bundle, &manifest.locales)), hosts);
     let errors: Vec<String> = diagnostics
         .iter()
         .filter(|d| d.severity == valang::Severity::Error)
@@ -292,7 +311,10 @@ pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> 
     // 3. It compiles — checked here, not taken on trust from a build we did not
     //    run.
     let joined = p.sources.values().cloned().collect::<Vec<_>>().join("\n");
-    let (program, diagnostics) = valang::analyse_with(&joined, Some((&p.text_bundle, &p.manifest.locales)));
+    // The host's own registries, which is the only copy that matters: what this
+    // wallet ships is what this package has to have been written against.
+    let (program, diagnostics) =
+        valang::analyse_fully(&joined, Some((&p.text_bundle, &p.manifest.locales)), &policy.registries());
     let errors: Vec<String> = diagnostics
         .iter()
         .filter(|d| d.severity == valang::Severity::Error)

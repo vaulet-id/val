@@ -94,7 +94,18 @@ fn main() -> ExitCode {
     };
 
     let key = keygen();
-    let built = build(manifest, sources, BTreeMap::new(), Some(&key));
+    // The registries a package is compiled against. A command line has
+    // whatever is on disk beside the language; a wallet has its own.
+    let hosts = {
+        const CORE: &str = include_str!("../../../../hosts/core.json");
+        const VAULET: &str = include_str!("../../../../hosts/vaulet.json");
+        let loaded = [CORE, VAULET]
+            .into_iter()
+            .filter_map(|s| valang::capability::Host::parse(s).ok())
+            .collect();
+        valang::capability::Hosts::of(loaded)
+    };
+    let built = build(manifest, sources, BTreeMap::new(), &hosts, Some(&key));
 
     let pkg: Package = match built {
         Ok(p) => p,

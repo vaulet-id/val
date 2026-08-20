@@ -7,6 +7,14 @@ use valang_package::*;
 
 const LOYALTY: &str = include_str!("../../../examples/loyalty.val");
 
+/// What this host draws with, which is what a package is compiled against.
+fn registries() -> valang::capability::Hosts {
+    valang::capability::Hosts::of(vec![valang::capability::Host::parse(include_str!(
+        "../../../hosts/core.json"
+    ))
+    .expect("the core registry parses")])
+}
+
 fn manifest() -> Manifest {
     Manifest {
         app: "th.co.codefin.loyalty".into(),
@@ -41,20 +49,20 @@ fn text() -> BTreeMap<String, BTreeMap<String, String>> {
 #[test]
 fn a_signed_package_is_admitted() {
     let key = keygen();
-    let pkg = build(manifest(), sources(), text(), Some(&key)).expect("builds");
+    let pkg = build(manifest(), sources(), text(), &registries(), Some(&key)).expect("builds");
     verify(&pkg).expect("admitted");
 }
 
 #[test]
 fn an_unsigned_package_is_not() {
-    let pkg = build(manifest(), sources(), text(), None).expect("builds");
+    let pkg = build(manifest(), sources(), text(), &registries(), None).expect("builds");
     assert!(matches!(verify(&pkg), Err(Refusal::Unsigned(_))));
 }
 
 #[test]
 fn a_source_changed_after_signing_is_caught() {
     let key = keygen();
-    let mut pkg = build(manifest(), sources(), text(), Some(&key)).expect("builds");
+    let mut pkg = build(manifest(), sources(), text(), &registries(), Some(&key)).expect("builds");
     // The one attack the integrity table exists for: the reviewed program is
     // not the program that runs.
     pkg.sources.insert("loyalty.val".into(), LOYALTY.replace("/ satangPerBaht", "* satangPerBaht"));
@@ -64,7 +72,7 @@ fn a_source_changed_after_signing_is_caught() {
 #[test]
 fn a_report_that_understates_the_app_is_caught() {
     let key = keygen();
-    let mut pkg = build(manifest(), sources(), text(), Some(&key)).expect("builds");
+    let mut pkg = build(manifest(), sources(), text(), &registries(), Some(&key)).expect("builds");
     // A publisher shipping "issues: nothing" for an app that issues a
     // credential is the one lie a package could otherwise tell — and they sign
     // it themselves, so the signature is no help. Only recomputing is.
@@ -84,7 +92,7 @@ fn a_missing_translation_is_a_failed_build() {
     let key = keygen();
     let mut text = text();
     text.get_mut("balance").unwrap().remove("th");
-    let pkg = build(manifest(), sources(), text, Some(&key)).expect("builds");
+    let pkg = build(manifest(), sources(), text, &registries(), Some(&key)).expect("builds");
     match verify(&pkg) {
         Err(Refusal::Malformed(m)) => assert!(m.contains("no th"), "{m}"),
         other => panic!("a market's language missing should fail, got {other:?}"),
@@ -95,7 +103,7 @@ fn a_missing_translation_is_a_failed_build() {
 fn a_program_that_does_not_compile_is_never_packaged() {
     let key = keygen();
     let broken = BTreeMap::from([("bad.val".to_string(), "app \"x\"\nversion 1\ncapabilities { payment.request }\n".to_string())]);
-    match build(manifest(), broken, text(), Some(&key)) {
+    match build(manifest(), broken, text(), &registries(), Some(&key)) {
         Err(Refusal::WouldNotBuild(errors)) => {
             assert!(errors.iter().any(|e| e.contains("never used")), "{errors:?}");
         }
@@ -106,7 +114,7 @@ fn a_program_that_does_not_compile_is_never_packaged() {
 #[test]
 fn a_package_written_out_is_the_package_read_back() {
     let key = keygen();
-    let built = build(manifest(), sources(), text(), Some(&key)).unwrap();
+    let built = build(manifest(), sources(), text(), &registries(), Some(&key)).unwrap();
     let bytes = encode(&built);
     let back = read(&bytes).expect("reads");
     assert_eq!(back, built, "what was written is what comes back");
@@ -116,15 +124,15 @@ fn a_package_written_out_is_the_package_read_back() {
 #[test]
 fn a_truncated_package_is_refused_rather_than_guessed_at() {
     let key = keygen();
-    let bytes = encode(&build(manifest(), sources(), text(), Some(&key)).unwrap());
+    let bytes = encode(&build(manifest(), sources(), text(), &registries(), Some(&key)).unwrap());
     assert!(read(&bytes[..bytes.len() / 2]).is_err());
 }
 
 #[test]
 fn the_same_package_is_the_same_bytes() {
     let key = keygen();
-    let a = build(manifest(), sources(), text(), Some(&key)).unwrap();
-    let b = build(manifest(), sources(), text(), Some(&key)).unwrap();
+    let a = build(manifest(), sources(), text(), &registries(), Some(&key)).unwrap();
+    let b = build(manifest(), sources(), text(), &registries(), Some(&key)).unwrap();
     // Reproducible, which is what lets two people check they are holding the
     // same application without asking each other.
     assert_eq!(encode(&a), encode(&b));
@@ -137,6 +145,10 @@ fn the_same_package_is_the_same_bytes() {
 struct Vaulet;
 
 impl HostPolicy for Vaulet {
+    fn registries(&self) -> valang::capability::Hosts {
+        registries()
+    }
+
     fn allows(&self, kind: &str, capability: &str) -> bool {
         if kind != "webview" {
             return true;
@@ -162,7 +174,7 @@ fn a_webview_may_not_issue_a_credential() {
     let mut m = manifest();
     m.kind = "webview".into();
 
-    let mut pkg = build(m, BTreeMap::new(), text(), Some(&key)).unwrap();
+    let mut pkg = build(m, BTreeMap::new(), text(), &registries(), Some(&key)).unwrap();
     pkg.report.insert("issues".into(), vec!["Card".into()]);
     sign(&mut pkg, &key);
 
@@ -176,7 +188,7 @@ fn a_webview_may_not_issue_a_credential() {
 
     // The same claim from a `val` package is admitted, because there it was
     // derived from code this host compiled itself.
-    let ok = build(manifest(), sources(), text(), Some(&key)).unwrap();
+    let ok = build(manifest(), sources(), text(), &registries(), Some(&key)).unwrap();
     verify_with(&ok, &Vaulet).expect("a val app that issues is admitted");
 }
 
@@ -185,7 +197,7 @@ fn a_webview_carrying_val_sources_is_refused() {
     let key = keygen();
     let mut m = manifest();
     m.kind = "webview".into();
-    let pkg = build(m, sources(), text(), Some(&key)).unwrap();
+    let pkg = build(m, sources(), text(), &registries(), Some(&key)).unwrap();
     match verify_with(&pkg, &Vaulet) {
         Err(Refusal::Refused { by }) => assert!(by.contains("carries no VAL sources"), "{by}"),
         other => panic!("got {other:?}"),
@@ -197,7 +209,7 @@ fn a_catalogue_this_host_cannot_render_is_refused() {
     let key = keygen();
     let mut m = manifest();
     m.catalogue = "3".into();
-    let pkg = build(m, sources(), text(), Some(&key)).unwrap();
+    let pkg = build(m, sources(), text(), &registries(), Some(&key)).unwrap();
     match verify_with(&pkg, &Vaulet) {
         Err(Refusal::Refused { by }) => assert!(by.contains("does not render catalogue 3"), "{by}"),
         other => panic!("a host should refuse a catalogue it cannot render, got {other:?}"),
@@ -215,7 +227,7 @@ fn a_manifest_that_names_another_application_is_refused() {
     let mut m = manifest();
     m.app = "th.co.somebody.else".into();
 
-    let built = build(m, sources(), text(), None);
+    let built = build(m, sources(), text(), &registries(), None);
     match built {
         Err(_) => {}
         Ok(p) => panic!(
@@ -232,7 +244,45 @@ fn a_manifest_that_names_another_version_is_refused() {
     let mut m = manifest();
     m.version = "9".into();
     assert!(
-        build(m, sources(), text(), None).is_err(),
+        build(m, sources(), text(), &registries(), None).is_err(),
         "a package was built whose manifest and code disagree about its version"
     );
+}
+
+/// A host admits a package by compiling it — against its own registry, which is
+/// the only copy that matters. Compiled against none, a package drawing
+/// something this wallet does not ship is admitted and fails on the phone.
+#[test]
+fn a_package_is_compiled_against_the_registry_that_will_run_it() {
+    let src = r#"
+app "th.co.codefin.loyalty"
+version 1
+
+capabilities {
+}
+
+state {
+  n: int default 0
+}
+
+@main
+screen Home {
+  column {
+    tabs {
+      section("x")
+    }
+  }
+}
+"#;
+    let sources = BTreeMap::from([("only.val".to_string(), src.to_string())]);
+    let mut m = manifest();
+    m.locales = vec!["en".into()];
+
+    let built = build(m, sources, BTreeMap::new(), &registries(), None);
+    match built {
+        Err(_) => {}
+        Ok(_) => panic!(
+            "a package drawing `tabs`, which no host ships, was built — so nothing checked it against a catalogue"
+        ),
+    }
 }
