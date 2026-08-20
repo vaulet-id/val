@@ -14,3 +14,8 @@ sha2 = "0.10"
 # write one here.
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
+
+[dev-dependencies]
+# The runtime, so one test can take a package from bytes all the way to a
+# signed record — which is the only place the steps are proved to compose.
+valang-runtime = { path = "../valang-runtime" }

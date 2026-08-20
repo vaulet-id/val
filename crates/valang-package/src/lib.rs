@@ -264,11 +264,48 @@ pub fn build(
 
 /// What a host does before it admits an application. Every step is one the
 /// publisher could otherwise have been trusted about.
+/// A package this host has admitted, and the program it admitted.
+///
+/// **The compile that was checked is the compile that runs.** Verifying and
+/// then running meant compiling twice, and two compiles of the same text are
+/// the same program only for as long as that is true — a host that checked one
+/// and ran the other would have checked nothing. So the check hands its
+/// program over rather than dropping it.
+pub struct Installed {
+    pub manifest: Manifest,
+    /// `None` for a `webview` package, which carries no code — that is the
+    /// whole difference between the tiers, and the reason such a package's
+    /// report is a declaration rather than something derived.
+    pub code: Option<Code>,
+    pub text_bundle: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+/// A program and the text it was compiled from, which cannot be separated: the
+/// runtime hashes exactly this text into every execution record, so a verifier
+/// can say which code ran.
+pub struct Code {
+    pub program: valang::ast::Program,
+    pub source: String,
+}
+
 pub fn verify(p: &Package) -> Result<(), Refusal> {
     verify_with(p, &Permissive)
 }
 
+/// Everything `install_with` does, for a caller that wants the answer and not
+/// the program — a store listing packages, or a publisher's build.
 pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> {
+    install_with(p, policy).map(|_| ())
+}
+
+/// Admit a package, or refuse it, and hand back what to run.
+///
+/// This is what a host does when somebody installs an application: check that
+/// nothing was modified after it was signed, that the publisher is who it says,
+/// that it compiles **against this host's catalogue**, that the manifest and
+/// the code name the same application, that the report it ships is the report
+/// its code produces, and that this host admits what it asks for.
+pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, Refusal> {
     // 1. Nothing was modified after it was signed.
     for (path, text) in &p.sources {
         let want = p.integrity.get(path).ok_or_else(|| Refusal::Malformed(format!("{path} has no integrity entry")))?;
@@ -300,7 +337,9 @@ pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> 
                 by: format!("a `{}` package carries no VAL sources", p.manifest.kind),
             });
         }
-        return ceiling(p, policy).and_then(|()| locales(p));
+        ceiling(p, policy)?;
+        locales(p)?;
+        return Ok(Installed { manifest: p.manifest.clone(), code: None, text_bundle: p.text_bundle.clone() });
     }
     if p.sources.is_empty() {
         return Err(Refusal::Refused {
@@ -373,7 +412,13 @@ pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> 
     ceiling(p, policy)?;
 
     // 6. Every locale the manifest promises has every key.
-    locales(p)
+    locales(p)?;
+
+    Ok(Installed {
+        manifest: p.manifest.clone(),
+        code: Some(Code { program, source: joined }),
+        text_bundle: p.text_bundle.clone(),
+    })
 }
 
 fn ceiling(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> {
