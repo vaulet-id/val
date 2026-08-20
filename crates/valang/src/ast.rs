@@ -65,6 +65,34 @@ pub struct Program {
     pub capabilities_span: Span,
 }
 
+impl Program {
+    /// Who answers a query, as opposed to what was asked of them.
+    ///
+    /// `broker.quotes(…)` is an operation on `broker.co.th`, and the audience is
+    /// the one fixed in the manifest — reporting the head of the call as a
+    /// party would be a lie about how many people see this. Held here because
+    /// three passes ask it and three answers is how they come to disagree.
+    pub fn audience_for(&self, head: &str) -> String {
+        let declared: Vec<&str> = self
+            .capabilities
+            .iter()
+            .filter(|c| c.name == "api.query")
+            .filter_map(|c| {
+                c.args.iter().find(|a| a.name.as_deref() == Some("audience")).and_then(|a| {
+                    match &a.value {
+                        Expr::Str { value, .. } => Some(value.as_str()),
+                        _ => None,
+                    }
+                })
+            })
+            .collect();
+        match declared.as_slice() {
+            [only] => (*only).to_string(),
+            _ => head.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ComponentDecl {
     pub name: String,

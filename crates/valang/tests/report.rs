@@ -5,7 +5,15 @@
 //! prevent, so the places a use can hide are worth naming.
 
 use valang::capability::{Host, Hosts};
-use valang::report::report;
+
+/// The report as a wallet derives it: from the compiled module, whose import
+/// section is the whole of what it can reach. These tests are about a use
+/// hiding somewhere, and a branch nothing walked into is exactly where one
+/// would — so they are worth as much against the module as they were against
+/// the walk that used to answer this.
+fn report(p: &valang::ast::Program) -> valang::report::Report {
+    valang_wasm::report_of(p).expect("the back end emits this")
+}
 
 const CORE: &str = include_str!("../../../hosts/core.json");
 

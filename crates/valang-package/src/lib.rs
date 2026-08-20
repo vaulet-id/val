@@ -248,7 +248,7 @@ pub fn build(
         manifest,
         sources,
         text_bundle,
-        report: report_rows(&valang::report::report(&program)),
+        report: report_rows(&valang_wasm::report_of(&program).map_err(Refusal::WouldNotBuild)?),
         integrity,
         signature: None,
         public_key: None,
@@ -396,7 +396,10 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
     }
 
     // 4. The report it ships is the report its code produces.
-    let derived = report_rows(&valang::report::report(&program));
+    // From the module: what an application does to the person is the import
+    // section of the thing that runs, and a package whose code will not compile
+    // to one cannot be admitted at all.
+    let derived = report_rows(&valang_wasm::report_of(&program).map_err(Refusal::WouldNotBuild)?);
     for (line, values) in &derived {
         let shipped = p.report.get(line).cloned().unwrap_or_default();
         if shipped != *values {

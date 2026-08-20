@@ -173,7 +173,18 @@ fn main() -> ExitCode {
             println!("  {errors} error(s) — would not build");
             return if failed { ExitCode::from(1) } else { ExitCode::SUCCESS };
         }
-        let report = valang::report::report(&program);
+        // From the module, because that is where what an application does to
+        // the person comes from — and because printing anything else here
+        // would be printing a second answer.
+        let report = match valang_wasm::report_of(&program) {
+            Ok(r) => r,
+            Err(missing) => {
+                for what in missing {
+                    eprintln!("error: {what}");
+                }
+                return ExitCode::FAILURE;
+            }
+        };
         print!("{report}");
 
         if let Some(path) = &surface_path {
@@ -294,8 +305,8 @@ fn packages(dirs: &[String]) -> valang::expand::Packages {
 /// whatever is on disk beside the language. The core one is built in because a
 /// package naming nothing else is checked against it.
 fn hosts() -> valang::capability::Hosts {
-    const CORE: &str = include_str!("../../../../hosts/core.json");
-    const VAULET: &str = include_str!("../../../../hosts/vaulet.json");
+    const CORE: &str = include_str!("../../../hosts/core.json");
+    const VAULET: &str = include_str!("../../../hosts/vaulet.json");
 
     let mut loaded = Vec::new();
     for source in [CORE, VAULET] {

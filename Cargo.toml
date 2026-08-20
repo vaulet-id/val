@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 exclude = ["fuzz"]
-members = ["crates/valang", "crates/valang-runtime", "crates/valang-package", "crates/valang-wasm", "crates/valang-web", "crates/valang-verify", "crates/valang-runner"]
+members = ["crates/valang", "crates/valang-runtime", "crates/valang-package", "crates/valang-wasm", "crates/valang-cli", "crates/valang-web", "crates/valang-verify", "crates/valang-runner"]
 
 [workspace.package]
 version = "0.1.0"

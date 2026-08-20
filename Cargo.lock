@@ -937,6 +937,16 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "unicode-width",
+ "valang-wasm",
+]
+
+[[package]]
+name = "valang-cli"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "valang",
+ "valang-wasm",
 ]
 
 [[package]]
@@ -948,6 +958,7 @@ dependencies = [
  "sha2",
  "valang",
  "valang-runtime",
+ "valang-wasm",
 ]
 
 [[package]]
@@ -1002,6 +1013,7 @@ dependencies = [
  "valang",
  "valang-runtime",
  "valang-verify",
+ "valang-wasm",
 ]
 
 [[package]]

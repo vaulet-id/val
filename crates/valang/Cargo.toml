@@ -22,10 +22,9 @@ unicode-width = "0.2"
 
 [dev-dependencies]
 unicode-width = "0.2"
+# The back end, for the tests that read a capability report. What an application
+# does to the person comes from the compiled module, so a test that asserts it
+# has to compile one. A dev-dependency, so nothing that ships carries it — and
+# the cycle it makes is one Cargo allows for exactly this.
+valang-wasm = { path = "../valang-wasm" }
 
-[features]
-cli = []
-
-[[bin]]
-name = "valc"
-required-features = ["cli"]

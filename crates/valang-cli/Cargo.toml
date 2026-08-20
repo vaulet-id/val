@@ -1,0 +1,22 @@
+[package]
+# `valc` — the compiler, on a command line.
+#
+# Its own crate rather than a binary inside the front end, because it prints
+# the capability report and the report comes from the compiled module: the
+# front end cannot depend on the back end, and the thing that prints both has
+# to depend on both.
+name = "valang-cli"
+description = "valc — compile, check, format and report on a VAL package"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+valang.workspace = true
+valang-wasm = { path = "../valang-wasm" }
+serde_json = "1"
+
+[[bin]]
+name = "valc"
+path = "src/main.rs"

@@ -4,7 +4,14 @@
 //! numbered program carries the error it is owed, in a comment, and this test
 //! asserts the compiler says something with the same shape.
 
-use valang::{analyse, report::report, Severity};
+use valang::{analyse, Severity};
+
+/// The report as a wallet derives it: from the module, whose import section is
+/// the whole of what it can reach. There is no second route — the walk over the
+/// source is gone, and this is what replaced it.
+fn report(p: &valang::ast::Program) -> valang::report::Report {
+    valang_wasm::report_of(p).expect("the back end emits this example")
+}
 
 fn errors(src: &str) -> Vec<String> {
     analyse(src)
@@ -75,13 +82,19 @@ fn the_report_is_derived_not_declared() {
 /// A disclosure is reported in the person's terms, not the author's: they are
 /// being asked about their national ID, not about a local binding called
 /// `checked`.
+///
+/// And the birthdate it proves an age from is **not** reported as read. It used
+/// to be, because the claim is written in the predicate and a walk over the
+/// source saw it there — so the sheet said "reads your birthdate" about an
+/// application that cannot. `prove` is a host call that takes nothing, so the
+/// module has no import for it and no way to reach it.
 #[test]
 fn a_disclosure_names_the_credential_and_not_the_variable() {
     const DOOR: &str = include_str!("../../../examples/door.val");
     let (p, _) = analyse(DOOR);
     let r = report(&p);
     assert!(r.discloses.contains("NationalId.country"), "{r}");
-    assert!(r.reads.iter().any(|s| s.contains("NationalId.birthdate")), "{r}");
+    assert!(!r.reads.iter().any(|s| s.contains("birthdate")), "proving is not reading:\n{r}");
 }
 
 #[test]

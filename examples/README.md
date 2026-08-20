@@ -30,7 +30,7 @@ to disagree on purpose.
 ## Running one
 
 ```
-cargo run -p valang --features cli --bin valc -- examples/loyalty.val examples/wallet.val
+cargo run --bin valc -- examples/loyalty.val examples/wallet.val
 ```
 
 A package is several files sharing one scope, so they are given together. The
@@ -41,7 +41,7 @@ the playground gives each package its own.
 `storefront.val` imports `kit.val`, so it needs the package it imports:
 
 ```
-cargo run -p valang --features cli --bin valc -- --packages <dir> examples/storefront.val
+cargo run --bin valc -- --packages <dir> examples/storefront.val
 ```
 
 where `<dir>` holds one subdirectory per package.

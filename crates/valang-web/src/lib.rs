@@ -560,7 +560,15 @@ fn diff(before: &BTreeMap<String, Value>, after: &BTreeMap<String, Value>) -> Js
 }
 
 fn report_json(p: &Program) -> Json {
-    let r = valang::report::report(p);
+    // The report a wallet would derive, from the module a publisher would ship.
+    // A playground showing a different one would be teaching a different
+    // language — and it is where the two routes were first compared.
+    let r = match valang_wasm::report_of(p) {
+        Ok(r) => r,
+        // A program the back end cannot emit yet has no report to show. Saying
+        // so beats showing one derived some other way.
+        Err(missing) => return json!({ "unemittable": missing }),
+    };
     let list = |s: &std::collections::BTreeSet<String>| Json::Array(s.iter().map(|x| json!(x)).collect());
     json!({
         "app": r.app,

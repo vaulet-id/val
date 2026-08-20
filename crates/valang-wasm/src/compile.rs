@@ -231,6 +231,9 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
         for a in &program.actions {
             action_body(&mut ctx, a);
         }
+        for s in &program.screens {
+            screen_data(&mut ctx, s);
+        }
     }
 
     let fixed = IMPORTS.len() as u32;
@@ -314,6 +317,15 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
             exports.export(&format!("action:{}", a.name), wasm_encoder::ExportKind::Func, index);
             names.push(format!("action:{}", a.name));
             let body = action_body(&mut ctx, a);
+            code.function(&body);
+        }
+        for (i, s) in program.screens.iter().enumerate() {
+            funcs.function(arity_type[&0]);
+            let index =
+                import_count + (program.functions.len() + program.actions.len() + i) as u32;
+            exports.export(&format!("data:{}", s.name), wasm_encoder::ExportKind::Func, index);
+            names.push(format!("data:{}", s.name));
+            let body = screen_data(&mut ctx, s);
             code.function(&body);
         }
     }
@@ -571,7 +583,8 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
                         ctx.call_cap(&crate::abi::Cap::Read(read_line(ty, policy.as_deref())), f);
                     }
                     DataSource::Query { audience } => {
-                        ctx.call_cap(&crate::abi::Cap::Query(audience.clone()), f);
+                        let who = ctx.program.audience_for(audience);
+                        ctx.call_cap(&crate::abi::Cap::Query(who), f);
                     }
                     DataSource::Unknown => {
                         ctx.unsupported.push("a data source the front end could not read".into());
@@ -671,6 +684,42 @@ fn action_body(ctx: &mut Ctx, a: &ActionDecl) -> Function {
         }
     }
     ctx.phase = None;
+    ctx.push_konst(Konst::Bool(false), &mut out);
+    out.instruction(&Instruction::End);
+    out
+}
+
+/// What a screen reads, as a function that reads it.
+///
+/// **Not a screen resolver.** Drawing is not emitted yet; this exists because a
+/// screen's `data` lines are capabilities — `credentials of Receipt verified
+/// with Policy` is a read, and a query is an audience — and a report that
+/// missed them would understate what the person is agreeing to. It is exported
+/// under `data:` rather than `screen:` so that nothing mistakes it for the
+/// other thing later.
+///
+/// The tree adds nothing of its own: a screen has no `verify`, so every value
+/// in it came from a `data` line or from state, and both are already named.
+fn screen_data(ctx: &mut Ctx, s: &ScreenDecl) -> Function {
+    ctx.locals.clear();
+    ctx.verified.clear();
+    let mut out = Function::new(vec![]);
+    for d in &s.data {
+        match &d.source {
+            DataSource::Credentials { ty, policy, .. } => {
+                ctx.call_cap(&crate::abi::Cap::Read(read_line(ty, policy.as_deref())), &mut out);
+            }
+            DataSource::Query { audience } => {
+                let who = ctx.program.audience_for(audience);
+                ctx.call_cap(&crate::abi::Cap::Query(who), &mut out);
+            }
+            DataSource::Unknown => {
+                ctx.unsupported.push("a data source the front end could not read".into());
+                ctx.push_konst(Konst::Bool(false), &mut out);
+            }
+        }
+        out.instruction(&Instruction::Drop);
+    }
     ctx.push_konst(Konst::Bool(false), &mut out);
     out.instruction(&Instruction::End);
     out

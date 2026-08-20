@@ -15,6 +15,10 @@ sha2 = "0.10"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 
+# The report comes from the compiled module, so building a package and
+# admitting one both need the back end.
+valang-wasm = { path = "../valang-wasm" }
+
 [dev-dependencies]
 # The runtime, so one test can take a package from bytes all the way to a
 # signed record — which is the only place the steps are proved to compose.

@@ -161,7 +161,7 @@ Against the pipeline in [§7](docs/spec.md), today:
 | Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel, and the module carries its own constants; actions stay with the host, since `execute` describes effects rather than performing them |
 
 ```
-cargo run --features cli --bin valc -- examples/loyalty.val
+cargo run --bin valc -- examples/loyalty.val
 cargo run --bin valrun -- examples/loyalty.val ScanToEarn
 ```
 

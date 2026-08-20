@@ -16,6 +16,6 @@ pub mod abi;
 pub mod compile;
 pub mod run;
 
-pub use abi::{wants_of, Cap, Wants};
+pub use abi::{report_of, wants_of, Cap, Wants};
 pub use compile::{compile_function, konsts_of, Module};
 pub use run::{run_function, run_with_fuel, Wasm};

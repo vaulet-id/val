@@ -285,3 +285,31 @@ pub fn wants_with(bytes: &[u8], is_fixed: impl Fn(&str) -> bool) -> Result<Wants
     }
     Ok(Wants::of(caps))
 }
+
+/// The capability report of a program, derived the way a wallet derives it.
+///
+/// **One route.** What an application does to the person comes from the module
+/// and from nowhere else — a second walk, over the source, is a second answer,
+/// and the two disagreed the first time they were compared: the walk said a
+/// program that proves an age reads the birthdate, about a module with no way
+/// to reach it.
+///
+/// The rest of the report is not about effects and does not come from here:
+/// which application this is, which hosts it needs, what it exports. Those are
+/// facts about the package, and the front end already knows them.
+pub fn report_of(program: &valang::ast::Program) -> Result<valang::report::Report, Vec<String>> {
+    let module = crate::compile::compile_program(program)?;
+    let wants = wants_of(&module.bytes).map_err(|e| vec![e])?;
+    let mut r = valang::report::report(program);
+    r.reads = wants.reads_as_lines();
+    r.discloses = wants.discloses;
+    r.proves = wants.proves;
+    r.issues = wants.issues;
+    r.audiences = wants.audiences;
+    r.payments = wants.payments;
+    r.writes = wants.writes;
+    // Nothing a person can take back: what was disclosed was seen, what was
+    // proved was proved, and money that moved moved.
+    r.irreversible = !r.discloses.is_empty() || !r.proves.is_empty() || !r.payments.is_empty();
+    Ok(r)
+}

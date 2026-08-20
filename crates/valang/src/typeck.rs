@@ -212,29 +212,6 @@ struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
-    /// The origin a query answers from is the audience fixed in the manifest,
-    /// not the head of the call — `broker.quotes(…)` is an operation on
-    /// `broker.co.th`, and reporting the operation as the party would name the
-    /// wrong thing in the one place a person is being told who saw their data.
-    fn audience_for(&self, head: &str) -> String {
-        let declared: Vec<String> = self
-            .p
-            .capabilities
-            .iter()
-            .filter(|c| c.name == "api.query")
-            .filter_map(|c| {
-                c.args.iter().find(|a| a.name.as_deref() == Some("audience")).and_then(|a| match &a.value {
-                    Expr::Str { value, .. } => Some(value.clone()),
-                    _ => None,
-                })
-            })
-            .collect();
-        match declared.as_slice() {
-            [only] => only.clone(),
-            _ => head.to_string(),
-        }
-    }
-
     fn new(p: &'a Program) -> Self {
         Cx {
             p,
@@ -350,7 +327,7 @@ impl<'a> Cx<'a> {
                 // verifier is told whose word this is rather than being left to
                 // assume it is nobody's.
                 DataSource::Query { audience } => {
-                    Typed::from_origin(Ty::List(Box::new(Ty::Unknown)), &self.audience_for(audience))
+                    Typed::from_origin(Ty::List(Box::new(Ty::Unknown)), &self.p.audience_for(audience))
                 }
                 DataSource::Unknown => Typed::unknown(),
             };
@@ -674,7 +651,7 @@ impl<'a> Cx<'a> {
                         Typed::plain(Ty::List(Box::new(Ty::Credential(ty.clone()))))
                     }
                     DataSource::Query { audience } => {
-                        Typed::from_origin(Ty::List(Box::new(Ty::Unknown)), &self.audience_for(audience))
+                        Typed::from_origin(Ty::List(Box::new(Ty::Unknown)), &self.p.audience_for(audience))
                     }
                     DataSource::Unknown => Typed::unknown(),
                 };

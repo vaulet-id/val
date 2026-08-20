@@ -13,4 +13,6 @@ crate-type = ["cdylib", "rlib"]
 valang.workspace = true
 valang-runtime = { path = "../valang-runtime" }
 valang-verify = { path = "../valang-verify" }
+# The report the playground shows is the one a wallet derives: from the module.
+valang-wasm = { path = "../valang-wasm" }
 serde_json = "1"
