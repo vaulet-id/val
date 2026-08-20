@@ -9,7 +9,11 @@
  * the first font that has the glyph, so this is reached only by Thai. */
 @font-face {
   font-family: "Anuphan";
-  src: url("/fonts/Anuphan.ttf") format("truetype");
+  /* Beside this file rather than in `public/`, so the bundler rewrites the
+   * URL. The playground is served under a path — `vaulet.io/playground` — and
+   * an absolute `/fonts/…` would ask the site for a file the site does not
+   * have. */
+  src: url("./fonts/Anuphan.ttf") format("truetype");
   font-weight: 100 700;
   font-display: swap;
   unicode-range: U+0E01-0E5B, U+200B, U+25CC;

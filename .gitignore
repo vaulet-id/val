@@ -1,9 +1,13 @@
 /target
 
-# Flutter build intermediates. `preview/build/web` is copied into
-# web/public/preview by preview/build.sh, and that copy is checked in — the
-# playground is a static site, and asking every reader to install Flutter would
-# make the preview the one part nobody sees.
+# The Flutter preview, and the intermediates behind it. `preview/build.sh`
+# copies its output into web/public/preview, and none of it is checked in: it is
+# forty megabytes of CanvasKit, and a repository carries its history forever.
+# The deployment builds it — see web/vercel-build.sh — and the playground says
+# so in the preview panel when it has not been built locally.
 preview/build
 preview/.dart_tool
 web/public/preview
+
+# Vercel keeps its build cache here — two toolchains, hundreds of megabytes.
+web/.vercel

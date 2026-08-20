@@ -58,3 +58,28 @@ longer exists.
 ./preview/build.sh      # the renderer, once
 npm install && npm run dev
 ```
+
+Then `http://localhost:5273/playground/`. It is mounted under a path locally
+too, because that is where it is mounted when it is deployed, and a base that
+differs between the two is a class of bug that only appears in production.
+
+## How it is deployed
+
+Its own Vercel project, with **root directory `web`**, building out of the whole
+repository: `npm ci`, then `bash vercel-build.sh`, and `dist` is what is served.
+
+That script installs Rust and Flutter into `.vercel/cache` and builds all three
+artifacts, so what is served is built from the source in that commit —
+`web/public/valang.wasm` is checked in so a fresh clone can run `npm run dev`
+without Rust, and a checked-in build is a build that goes stale the first time
+somebody edits the compiler and forgets. A cold build downloads about a
+gigabyte; a warm one skips both downloads.
+
+It is a deployment of its own rather than part of the site because it cannot be
+built from the site's repository: it reads `docs/spec.md`, `docs/guide/`,
+`examples/` and `hosts/*.json` out of *this* one at build time rather than
+keeping copies, and it needs two toolchains the site has no use for.
+
+The site owns the URL. `vaulet-site` rewrites `/playground` and `/playground/*`
+here — with the path kept on the way through, so one URL works on both origins
+— and names this deployment in `PLAYGROUND_ORIGIN`.

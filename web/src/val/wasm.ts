@@ -170,7 +170,10 @@ let wasm: Exports | null = null
 
 export async function load(): Promise<void> {
   if (wasm) return
-  const { instance } = await WebAssembly.instantiateStreaming(fetch('/valang.wasm'), {})
+  // `BASE_URL` rather than `/`: this is served under a path on the site, and
+  // the same build has to work at both.
+  const url = `${import.meta.env.BASE_URL}valang.wasm`
+  const { instance } = await WebAssembly.instantiateStreaming(fetch(url), {})
   wasm = instance.exports as unknown as Exports
 }
 

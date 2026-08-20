@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "bash vercel-build.sh",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/playground", "destination": "/index.html" },
+    { "source": "/playground/:path*", "destination": "/:path*" }
+  ]
+}

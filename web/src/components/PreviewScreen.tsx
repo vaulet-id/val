@@ -69,7 +69,7 @@ export function PreviewScreen({
     <iframe
       ref={frame}
       title="preview"
-      src="/preview/index.html"
+      src={`${import.meta.env.BASE_URL}preview/index.html`}
       className="h-full w-full border-0"
     />
   )

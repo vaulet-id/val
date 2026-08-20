@@ -7,7 +7,7 @@
 # playground says so when it has not been run.
 set -euo pipefail
 cd "$(dirname "$0")"
-flutter build web --release --base-href /preview/
+flutter build web --release --base-href /playground/preview/
 rm -rf ../web/public/preview
 cp -R build/web ../web/public/preview
 echo "→ web/public/preview"
