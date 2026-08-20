@@ -39,3 +39,27 @@ fn a_patch_names_a_field_that_exists() {
     assert!(e.iter().any(|m| m.contains("nope")), "a patch named a field nothing declares: {e:?}");
 }
 
+
+/// A rule that reads a phase's statements has to read the ones inside a branch.
+/// Three of them stopped at the first `if`, so writing the mistake in a branch
+/// was how to get it past them.
+#[test]
+fn a_branch_is_not_a_place_to_hide_a_mistake() {
+    // A patch with a list index in it.
+    let indexed = errors(&program(
+        "action Go {\n  update {\n    if (state.n > 0) {\n      rows[3].used: true\n    }\n  }\n}",
+    ));
+    assert!(
+        indexed.iter().any(|m| m.contains("list index")),
+        "an indexed patch inside a branch: {indexed:?}"
+    );
+
+    // A record literal where a path belongs.
+    let record = errors(&program(
+        "action Go {\n  update {\n    if (state.n > 0) {\n      n: { a: 1 }\n    }\n  }\n}",
+    ));
+    assert!(
+        record.iter().any(|m| m.contains("takes paths, not record literals")),
+        "a record literal inside a branch: {record:?}"
+    );
+}

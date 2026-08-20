@@ -222,7 +222,12 @@ fn effects_do_not_read_each_other(p: &Program, d: &mut Vec<Diagnostic>) {
                 continue;
             }
             let mut bound: HashSet<String> = HashSet::new();
-            for s in &block.stmts {
+            // Branches included: an effect written inside an `if` is still an
+            // effect in this batch, and a line reading its result is still
+            // reading something that does not exist yet.
+            let mut stmts: Vec<&Stmt> = Vec::new();
+            flatten(&block.stmts, &mut stmts);
+            for s in stmts {
                 match s {
                     Stmt::Let { name, value, span, .. } => {
                         let mut reads_effect = None;
@@ -539,6 +544,22 @@ fn is_effect(name: &str) -> bool {
             !matches!(method, "map" | "filter" | "fold" | "any" | "all" | "count" | "first")
         }
         None => false,
+    }
+}
+
+/// The same walk, collecting rather than calling — for a rule that has to hold
+/// a diagnostic list while it reads, which a closure over both cannot.
+fn flatten<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
+    for s in stmts {
+        out.push(s);
+        match s {
+            Stmt::Effect { body, .. } => flatten(body, out),
+            Stmt::If { then, other, .. } => {
+                flatten(then, out);
+                flatten(other, out);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1030,7 +1051,9 @@ fn patches_have_no_index(p: &Program, d: &mut Vec<Diagnostic>) {
             if block.phase != Phase::Update {
                 continue;
             }
-            for s in &block.stmts {
+            let mut stmts: Vec<&Stmt> = Vec::new();
+            flatten(&block.stmts, &mut stmts);
+            for s in stmts {
                 if let Stmt::Patch { path, span, .. } = s {
                     if path.iter().any(|seg| seg.contains('[')) {
                         d.push(Diagnostic::error(
@@ -1050,7 +1073,9 @@ fn updates_take_paths(p: &Program, d: &mut Vec<Diagnostic>) {
             if block.phase != Phase::Update {
                 continue;
             }
-            for s in &block.stmts {
+            let mut stmts: Vec<&Stmt> = Vec::new();
+            flatten(&block.stmts, &mut stmts);
+            for s in stmts {
                 match s {
                     Stmt::Patch { value, span, .. } => {
                         if let Expr::Record { .. } = value {
