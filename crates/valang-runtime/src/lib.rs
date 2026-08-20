@@ -208,6 +208,10 @@ pub struct Run {
 /// Run one action. `source` is hashed as the code identity, because the artifact
 /// is the source (§1) and hashing anything else would be hashing a thing nobody
 /// read.
+///
+/// A package of several files has one answer to what those bytes are, and it is
+/// `valang_verify::code_hash_of` — the wallet, the publisher's server and the
+/// signing tool have to agree, and a join written twice is how they stop.
 pub fn run_action(
     program: &Program,
     source: &str,

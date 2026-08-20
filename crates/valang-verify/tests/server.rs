@@ -165,3 +165,38 @@ fn a_token_with_bits_left_over_is_not_the_same_token() {
         "one record verified under two token strings: the bits nobody reads were not checked"
     );
 }
+
+/// A package is several files, and three programs have to turn them into the
+/// same bytes: the wallet that runs it, the server that checks the record, and
+/// the tool that signed it. There has to be one answer, and it has to be one
+/// that a line moved between two files does not survive.
+#[test]
+fn a_packages_sources_hash_to_one_thing() {
+    use std::collections::BTreeMap;
+    use valang_verify::code_hash_of;
+
+    let two = |a: &str, b: &str| {
+        let mut m = BTreeMap::new();
+        m.insert("one.val".to_string(), a.to_string());
+        m.insert("two.val".to_string(), b.to_string());
+        code_hash_of(&m)
+    };
+
+    // The order the files were read is not part of the package.
+    let mut forwards = BTreeMap::new();
+    forwards.insert("one.val".to_string(), "a".to_string());
+    forwards.insert("two.val".to_string(), "b".to_string());
+    let mut backwards = BTreeMap::new();
+    backwards.insert("two.val".to_string(), "b".to_string());
+    backwards.insert("one.val".to_string(), "a".to_string());
+    assert_eq!(code_hash_of(&forwards), code_hash_of(&backwards));
+
+    // A line that moved from one file to the other is a different package.
+    assert_ne!(two("ab", ""), two("a", "b"), "a line moved between files and the hash did not");
+
+    // And so is a file under another name.
+    let mut renamed = BTreeMap::new();
+    renamed.insert("three.val".to_string(), "a".to_string());
+    renamed.insert("two.val".to_string(), "b".to_string());
+    assert_ne!(code_hash_of(&forwards), code_hash_of(&renamed));
+}

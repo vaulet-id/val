@@ -181,10 +181,33 @@ pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-/// The hash of a package's sources, for a server that holds the package rather
-/// than a hash somebody told it.
+/// The hash of one source, for a package that is one file.
 pub fn code_hash(source: &str) -> Vec<u8> {
     Sha256::digest(source.as_bytes()).to_vec()
+}
+
+/// The hash of a package's sources, for a server that holds the package rather
+/// than a hash somebody told it.
+///
+/// **There has to be one answer to this.** A package is several files, and the
+/// wallet that runs it, the publisher's server that checks the record, and the
+/// tool that signed the package each have to turn those files into the same
+/// bytes — or every record is refused as code nobody published, and the reason
+/// is a join somebody wrote twice.
+///
+/// Sorted by path, and each file contributes its path and its length as well as
+/// its text: joined with a newline alone, a line moved from one file to another
+/// would leave the hash unchanged, and the package that ran would not be the
+/// package that was read.
+pub fn code_hash_of(sources: &BTreeMap<String, String>) -> Vec<u8> {
+    let mut h = Sha256::new();
+    for (path, text) in sources {
+        h.update((path.len() as u64).to_le_bytes());
+        h.update(path.as_bytes());
+        h.update((text.len() as u64).to_le_bytes());
+        h.update(text.as_bytes());
+    }
+    h.finalize().to_vec()
 }
 
 /// A JSON reader for a payload whose shape is fixed and known.
