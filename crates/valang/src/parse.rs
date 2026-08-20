@@ -82,6 +82,15 @@ impl Parser {
         }
     }
     /// Newlines separate statements; everywhere else they are noise.
+    /// `skip_newlines`, remembering whether it skipped any — for a list whose
+    /// members may be separated by a line as well as by a comma.
+    fn skip_newlines_marking(&mut self, seen: &mut bool) {
+        while self.peek().kind == Kind::Newline {
+            *seen = true;
+            self.i += 1;
+        }
+    }
+
     fn skip_newlines(&mut self) {
         while self.peek().kind == Kind::Newline {
             self.bump();
@@ -306,19 +315,40 @@ impl Parser {
         s
     }
 
+    /// `enum Tier { bronze, silver, gold }`
+    ///
+    /// Separated, because two names side by side is a comma somebody forgot and
+    /// reading it as two members is the compiler deciding what they meant.
     fn enum_decl(&mut self) -> EnumDecl {
         let span = self.peek().span;
         self.bump();
         let name = self.ident();
-        let mut members = Vec::new();
+        let mut members: Vec<String> = Vec::new();
         self.expect("{");
+        // A comma or a line between members, and nothing else: two names side
+        // by side is a comma somebody forgot, and reading it as two members is
+        // the compiler deciding what they meant.
+        let mut separated = true;
         loop {
-            self.skip_newlines();
+            self.skip_newlines_marking(&mut separated);
             if self.eof() || self.eat("}") {
                 break;
             }
+            if self.eat(",") {
+                separated = true;
+                continue;
+            }
             if self.peek().kind == Kind::Ident {
-                members.push(self.bump().text);
+                let at = self.peek().span;
+                let word = self.bump().text;
+                if !separated {
+                    self.diagnostics.push(Diagnostic::error(
+                        at,
+                        format!("`{}` and `{word}` need a comma or a line between them", members.last().cloned().unwrap_or_default()),
+                    ));
+                }
+                members.push(word);
+                separated = false;
             } else {
                 self.bump();
             }
@@ -430,7 +460,23 @@ impl Parser {
                 self.bump();
                 if self.eat(":") {
                     self.skip_newlines();
-                    anchor = Some(self.bump().text);
+                    // Quoted, like every other external name in this language:
+                    // `app`, `host` and `import` all name something outside the
+                    // package with a string. Written bare it was read as one
+                    // token and `shop.example.com` became `shop` — and an
+                    // anchor is the root a policy trusts, which is the one
+                    // string here that may not be approximated.
+                    if self.peek().kind == Kind::Str {
+                        anchor = Some(self.bump().text);
+                    } else {
+                        let at = self.peek().span;
+                        let written = self.dotted();
+                        self.diagnostics.push(Diagnostic::error(
+                            at,
+                            format!("an anchor is quoted: `anchor: \"{written}\"`. It names something outside this package, as `app`, `host` and `import` do"),
+                        ));
+                        anchor = Some(written);
+                    }
                 } else if self.at("{") {
                     let bad = self.peek().span;
                     self.diagnostics.push(Diagnostic::error(bad, "`anchor:` is a field, not a block"));
@@ -580,7 +626,8 @@ impl Parser {
         self.skip_newlines();
         let span = self.peek().span;
 
-        if self.at("const") {
+        if self.at("const") || self.at("let") {
+            let mutable = self.at("let");
             self.bump();
 
             // `const { merchant, amount } = row` — the fields, by their own
@@ -614,7 +661,7 @@ impl Parser {
                         "this takes nothing out of the record. Name the fields you want",
                     ));
                 }
-                return Some(Stmt::Destructure { names, value, span });
+                return Some(Stmt::Destructure { names, value, mutable, span });
             }
 
             let name = self.ident();
@@ -626,16 +673,7 @@ impl Parser {
                 return Some(Stmt::Data { name, source, span });
             }
             let value = self.expr(0);
-            return Some(Stmt::Let { name, value, mutable: false, span });
-        }
-
-        // `let x = …` — a name that may be written again.
-        if self.at("let") {
-            self.bump();
-            let name = self.ident();
-            self.expect("=");
-            let value = self.expr(0);
-            return Some(Stmt::Let { name, value, mutable: true, span });
+            return Some(Stmt::Let { name, value, mutable, span });
         }
         if self.at("var") {
             self.bump();

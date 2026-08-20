@@ -517,11 +517,14 @@ impl<'a> Cx<'a> {
             // Every field takes the record's provenance, because that is where
             // it came from: pulling `amount` out of a verified receipt does not
             // make it a number somebody typed.
-            Stmt::Destructure { names, value, span } => {
+            Stmt::Destructure { names, value, mutable, span } => {
                 let t = self.expr(value);
                 for n in names {
                     let field = self.member(value, n, *span);
                     self.bind(n, Typed { ty: field.ty, from: t.from.clone(), origins: t.origins.clone() });
+                    if *mutable {
+                        self.mutable.last_mut().unwrap().insert(n.clone());
+                    }
                 }
             }
             Stmt::Data { name, source, .. } => {

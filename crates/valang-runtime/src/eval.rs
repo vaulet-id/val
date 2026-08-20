@@ -101,7 +101,7 @@ impl<'a> Eval<'a> {
             // Read once, then taken apart. Written as one binding per field it
             // would read the record once per field, and a record here can be a
             // credential the host had to be asked for.
-            Stmt::Destructure { names, value, span } => {
+            Stmt::Destructure { names, value, span, .. } => {
                 let v = self.expr(value, state)?;
                 for name in names {
                     let field = match &v {

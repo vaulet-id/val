@@ -1,0 +1,195 @@
+(* VAL, as the parser reads it.
+ *
+ * Written from `crates/valang/src/parse.rs` and `lex.rs` production by
+ * production, not from the prose — so that the two can be compared. Where they
+ * disagree, one of them is a bug, and `docs/grammar.md` lists the ones found so
+ * far.
+ *
+ * Notation: ISO 14977 EBNF. `x*` is zero or more, `x+` one or more, `[x]`
+ * optional, `|` alternatives, `(* *)` a comment. Terminals are quoted.
+ *
+ * Two rules are not expressible here and are stated instead:
+ *
+ *   1. NEWLINE is emitted by the lexer only at bracket depth zero, counting
+ *      `(` and `[` — a brace holds statements, so a newline inside one is a
+ *      separator. Every rule below that says NEWLINE means "a newline the
+ *      lexer chose to emit".
+ *
+ *   2. Whitespace other than newline, and `//` line comments, are skipped by
+ *      the lexer and never appear.
+ *)
+
+(* ------------------------------------------------------------------ lexical *)
+
+letter        = "A".."Z" | "a".."z" ;
+digit         = "0".."9" ;
+ident         = ( letter | "_" ) , { letter | digit | "_" } ;
+                (* ASCII only. A non-ASCII identifier is a diagnostic, not a
+                   token: Thai belongs in strings and in the text bundle. *)
+
+number        = digit , { digit | "_" } ;
+                (* No hex, no binary, no exponent. `_` may not lead or trail.
+                   A `.` followed by a digit is lexed into the number and the
+                   parser refuses it: there is no float, and saying so needs
+                   the text. *)
+
+string        = '"' , { character - '"' - NEWLINE | escape } , '"' ;
+escape        = "\\" , ( '"' | "\\" | "n" | "t" ) ;
+                (* A string is one line. Any other escape is a diagnostic. *)
+
+template      = "`" , { character - "`" | template escape | interpolation } , "`" ;
+template escape = "\\" , ( "`" | "$" | "\\" | "n" | "t" ) ;
+interpolation = "${" , expression , "}" ;
+                (* Braces inside a string within the interpolation do not close
+                   it. The expression is parsed by the same grammar. *)
+
+NEWLINE       = ? a line break at bracket depth zero ? ;
+
+(* ------------------------------------------------------------------ package *)
+
+package       = { NEWLINE | declaration } ;
+
+declaration   = app | version | capabilities | host | import
+              | enum | credential | type | state | trust
+              | function | action | component | screen ;
+
+app           = "app" , string ;
+version       = "version" , number ;
+host          = "host" , string ;                  (* "id.vaulet.wallet/1" *)
+import        = "import" , string , "{" , [ ident , { "," , ident } ] , "}" ;
+
+capabilities  = "capabilities" , "{" , { capability } , "}" ;
+capability    = dotted , [ arguments ] ;
+dotted        = ident , { "." , ident } ;
+
+enum          = "enum" , ident , "{" , [ ident , { separator , ident } ] , [ separator ] , "}" ;
+separator     = "," | NEWLINE ;
+credential    = "credential" , ident , fields ;
+type          = "type" , ident , fields ;
+state         = "state" , fields ;
+
+fields        = "{" , { field } , "}" ;
+field         = ident , ":" , type ref , [ "default" , expression ] ;
+
+type ref      = ident , [ "<" , type ref , { "," , type ref } , ">" ] , [ "?" ] ;
+
+trust         = "trust" , ident , [ "(" , ident , [ ":" , ident ] , ")" ] ,
+                [ "refines" , ident ] ,
+                "{" , { anchor | requires | NEWLINE } , "}" ;
+anchor        = "anchor" , ":" , string ;
+                (* Quoted, as `app`, `host` and `import` are: it names something
+                   outside this package. *)
+requires      = "require" , "{" , { expression | NEWLINE } , "}" ;
+
+function      = "function" , ident , parameters , [ ":" , type ref ] , statements ;
+parameters    = "(" , [ parameter , { "," , parameter } ] , ")" ;
+parameter     = ident , [ ":" , type ref ] , [ "default" , expression ] ;
+
+action        = "action" , ident , "{" , { phase | NEWLINE } , "}" ;
+phase         = ( "input" | "require" | "verify" | "compute" | "update" | "execute" ) ,
+                statements ;
+
+component     = [ "export" ] , "component" , ident , parameters , ui block ;
+
+directive     = "@" , ident , [ arguments ] ;
+                (* On its own line above a declaration. `@main` is the only one,
+                   and it takes no arguments. *)
+
+screen        = { directive } , "screen" , ident , parameters ,
+                { setting } , screen body ;
+setting       = ident , ":" , expression ;         (* not `title`, which is in the body *)
+
+screen body   = "{" , { title | data | compute | ui node | NEWLINE } , "}" ;
+title         = "title" , ":" , expression ;
+data          = "data" , "{" , { data decl | NEWLINE } , "}" ;
+compute       = "compute" , statements ;
+
+data decl     = ident , ":" , data source ;
+data source   = credentials source | query source | expression ;
+credentials source
+              = "credentials" , [ "of" ] , ident ,
+                { [ NEWLINE ] , ( verified | order | limit ) } ;
+verified      = "verified" , [ "with" ] , ident ;
+order         = "order" , [ "by" ] , ident , [ "desc" | "asc" ] ;
+limit         = "limit" , number ;
+query source  = "query" , dotted , [ arguments ] , [ "as" , type ref ] ;
+
+(* --------------------------------------------------------------- statements *)
+
+statements    = "{" , { statement | NEWLINE } , "}" ;
+
+statement     = binding | destructure | assignment | patch
+              | conditional | return | refuse | effect | expression ;
+
+binding       = ( "const" | "let" ) , ident , "=" , ( data source | expression ) ;
+destructure   = ( "const" | "let" ) , "{" , ident , { "," , ident } , "}" , "=" , expression ;
+assignment    = ident , "=" , expression ;         (* to a `let`, in `compute` or a function *)
+patch         = path , ":" , expression ;          (* in `update` *)
+path          = ident , { "." , ident } ;
+input binding = ident , ":" , type ref ;           (* in `input` *)
+
+conditional   = "if" , "(" , expression , ")" , statements ,
+                [ "else" , ( conditional | statements ) ] ;
+return        = "return" , expression ;
+refuse        = "refuse" , ( string | ident ) ;
+
+effect        = effect name , [ arguments ] , [ statements ]
+              | "navigate" , ( arguments | expression )
+              | ( "disclose" | "prove" ) , expression ;
+effect name   = "present"
+              | ( "credential" | "payment" | "storage" | "message" | "network" | "disclosure" ) ,
+                "." , ident ;
+
+(* ----------------------------------------------------------------- the tree *)
+
+ui block      = "{" , { ui node | NEWLINE } , "}" ;
+
+ui node       = branch | loop | call node ;
+
+branch        = "if" , "(" , expression , ")" , ui block , [ "else" , ui block ] ;
+loop          = "for" , "(" , ident , "in" , expression , ")" , ui block ;
+
+call node     = dotted , [ arguments ] , [ node body ] ;
+node body     = "{" , { property | lambda head | ui node | NEWLINE } , "}" ;
+property      = ident , ":" , expression , [ "," ] ;
+lambda head   = ident , "->" ;                     (* `list(xs) { row -> … }` *)
+
+(* -------------------------------------------------------------- expressions *)
+
+arguments     = "(" , [ argument , { "," , argument } ] , ")" ;
+argument      = [ "..." ] , [ ident , ":" ] , expression ;
+
+expression    = ternary ;
+ternary       = elvis , [ "?" , expression , ":" , expression ] ;
+elvis         = binary , [ "?:" , expression ] ;
+binary        = unary , { operator , unary | suffix } ;
+suffix        = "with" , ident
+              | "exists"
+              | "from" , "{" , { ident } , "}" ;
+
+operator      = "||" | "&&" | "..." | "==" | "!=" | "<" | "<=" | ">" | ">="
+              | "+" | "-" | "*" | "/" | "%" ;
+                (* Binding power, loosest first: || && ... ==/!= comparisons
+                   +/- */%. `...` is the range, and the same three characters
+                   spread an argument where one begins. *)
+
+unary         = [ "-" | "!" ] , postfix ;
+postfix       = primary , { field access | call | lambda call } ;
+field access  = [ "?" ] , "." , ident ;
+call          = arguments ;
+lambda call   = "{" , [ ident , { "," , ident } , "->" ] , expression , "}" ;
+
+primary       = number | string | template | "true" | "false"
+              | "(" , expression , ")"
+              | list | record | named record | switch | ident ;
+
+list          = "[" , [ expression , { "," , expression } ] , "]" ;
+record        = "{" , [ "..." , expression , "," ] , [ record field , { "," , record field } ] , "}" ;
+record field  = ident , ":" , expression ;
+named record  = ident , record ;                   (* the identifier is capitalised *)
+
+switch        = "switch" , "(" , expression , ")" , "{" , { arm } , "}" ;
+arm           = pattern , "=>" , expression , [ "," ] , [ NEWLINE ] ;
+pattern       = "default"
+              | ( ">=" | ">" | "<=" | "<" | "==" | "!=" ) , expression
+              | expression ;
