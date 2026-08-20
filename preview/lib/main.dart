@@ -653,6 +653,36 @@ class _Nav extends InheritedWidget {
 /// The host's, not the application's: a scroll position or a half-typed field in
 /// application state would be hashed, signed and replayed, and "provable" would
 /// mean less by one press each time.
+/// A form control and the words beside it.
+///
+/// Not a `ListTile`: those carry an `InkWell`, so the whole row lit up when it
+/// was touched — a ripple across a line whose only pressable thing is the
+/// control at the end of it. The label is still a tap target, because a person
+/// aiming at "Remind me" means the switch; it just does not announce itself as
+/// a surface.
+Widget _control(
+  BuildContext context, {
+  Widget? leading,
+  required Widget label,
+  Widget? control,
+  VoidCallback? onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          if (leading != null) ...[leading, const SizedBox(width: 4)],
+          Expanded(child: label),
+          if (control != null) control,
+        ],
+      ),
+    ),
+  );
+}
+
 class _Form extends InheritedWidget {
   const _Form({required this.values, required this.onChanged, required super.child});
 
@@ -1279,13 +1309,15 @@ class _NodeState extends State<_Node> {
 
       case 'checkbox': {
         final into = (args['into'] as String?)?.trim();
-        return CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: _text(),
-          value: into == null ? false : _Form.of(context)[into] == true,
-          onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+        final on = into == null ? false : _Form.of(context)[into] == true;
+        return _control(
+          context,
+          leading: Checkbox(
+            value: on,
+            onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+          ),
+          label: _text(),
+          onTap: into == null ? null : () => _Form.set(context, into, !on),
         );
       }
 
@@ -1370,13 +1402,15 @@ class _NodeState extends State<_Node> {
           children: [
             _text(style: const TextStyle(fontSize: 13)),
             for (final o in options)
-              RadioListTile<String>(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(o, style: const TextStyle(fontSize: 15)),
-                value: o,
-                groupValue: held,
-                onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+              _control(
+                context,
+                leading: Radio<String>(
+                  value: o,
+                  groupValue: held,
+                  onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+                ),
+                label: Text(o, style: const TextStyle(fontSize: 15)),
+                onTap: into == null ? null : () => _Form.set(context, into, o),
               ),
           ],
         );
@@ -1736,18 +1770,19 @@ class _NodeState extends State<_Node> {
           ],
         );
 
-      case 'toggle':
+      case 'toggle': {
         final into = (args['into'] as String?)?.trim();
-        return SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          title: _text(),
-          value: into == null ? false : _Form.of(context)[into] == true,
-          onChanged: into == null
-              ? null
-              : (v) => _Form.set(context, into, v),
+        final on = into == null ? false : _Form.of(context)[into] == true;
+        return _control(
+          context,
+          label: _text(),
+          control: Switch(
+            value: on,
+            onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+          ),
+          onTap: into == null ? null : () => _Form.set(context, into, !on),
         );
+      }
 
       case 'button':
         final emphasis = (args['emphasis'] as String?)?.trim();
