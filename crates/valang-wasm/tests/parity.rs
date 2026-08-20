@@ -371,3 +371,39 @@ function summed(n: int): int {
         "a budget of twenty instructions finished a loop over eight rows"
     );
 }
+
+/// 10. Slots, under pressure. Each list operation holds five, each `?:` holds
+/// one, and a function that has several of them in branches and inside each
+/// other is where the arithmetic goes wrong.
+#[test]
+fn many_operations_in_one_function_agree_on_both_back_ends() {
+    let src = r#"
+app "x"
+version 1
+
+function rows(n: int): List<int> {
+  return n <= 0 ? [] : [1, 2, 3]
+}
+
+function busy(n: int): int {
+  let out = 0
+  if (n > 0) {
+    out = rows(n).fold(0) { sum, r -> sum + r }
+  } else {
+    out = rows(n).map { r -> r * 2 }.fold(0) { sum, r -> sum + r }
+  }
+  const also = rows(n).filter { r -> r > 1 }.count
+  const maybe = rows(n).first ?: (rows(n).first ?: 9)
+  return out + also + maybe
+}
+
+function seeded(n: int): int {
+  return rows(n).fold(rows(n).count) { sum, r -> sum + r }
+}
+"#;
+    for name in ["busy", "seeded"] {
+        for n in [0i64, 1, 5] {
+            both_agree(src, name, &[Value::Int(n)]);
+        }
+    }
+}

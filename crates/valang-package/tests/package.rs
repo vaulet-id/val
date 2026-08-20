@@ -206,3 +206,33 @@ fn a_catalogue_this_host_cannot_render_is_refused() {
     // the crate holds none.
     verify(&pkg).expect("the package itself is well formed");
 }
+
+/// A manifest is what a host reads before it reads the code. If the two
+/// disagree about which application this is, the one a person sees named on the
+/// consent sheet is not the one that runs.
+#[test]
+fn a_manifest_that_names_another_application_is_refused() {
+    let mut m = manifest();
+    m.app = "th.co.somebody.else".into();
+
+    let built = build(m, sources(), text(), None);
+    match built {
+        Err(_) => {}
+        Ok(p) => panic!(
+            "a package was built whose manifest says `{}` and whose code says `th.co.codefin.loyalty`",
+            p.manifest.app
+        ),
+    }
+}
+
+/// And the same about the version: a manifest saying 2 over code saying 1 is a
+/// package whose records name a version nobody published.
+#[test]
+fn a_manifest_that_names_another_version_is_refused() {
+    let mut m = manifest();
+    m.version = "9".into();
+    assert!(
+        build(m, sources(), text(), None).is_err(),
+        "a package was built whose manifest and code disagree about its version"
+    );
+}

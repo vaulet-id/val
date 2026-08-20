@@ -188,6 +188,38 @@ pub fn build(
         return Err(Refusal::WouldNotBuild(errors));
     }
 
+    // The manifest is what a host reads before it reads the code, and a person
+    // reads the name off it. Two answers to which application this is means the
+    // one on the consent sheet is not the one that runs.
+    //
+    // Only where there is code to disagree with: a webview package carries none,
+    // and what it does is checked from its report instead.
+    let mut disagreements = Vec::new();
+    if !sources.is_empty() {
+        match &program.app {
+            Some(app) if *app != manifest.app => disagreements.push(format!(
+                "the manifest calls this `{}` and the code calls it `{app}`",
+                manifest.app
+            )),
+            None => disagreements
+                .push("the manifest names an application and the code names none".to_string()),
+            _ => {}
+        }
+        match &program.version {
+            Some(v) if *v != manifest.version => disagreements.push(format!(
+                "the manifest says version {} and the code says {v}",
+                manifest.version
+            )),
+            None => {
+                disagreements.push("the manifest has a version and the code has none".to_string())
+            }
+            _ => {}
+        }
+    }
+    if !disagreements.is_empty() {
+        return Err(Refusal::WouldNotBuild(disagreements));
+    }
+
     let integrity = sources
         .iter()
         .map(|(path, text)| (path.clone(), hex(&Sha256::digest(text.as_bytes()))))
@@ -268,6 +300,38 @@ pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> 
         .collect();
     if !errors.is_empty() {
         return Err(Refusal::WouldNotBuild(errors));
+    }
+
+    // The manifest is what a host reads before it reads the code, and a person
+    // reads the name off it. Two answers to which application this is means the
+    // one on the consent sheet is not the one that runs.
+    //
+    // Only where there is code to disagree with: a webview package carries none,
+    // and what it does is checked from its report instead.
+    let mut disagreements = Vec::new();
+    if !p.sources.is_empty() {
+        match &program.app {
+            Some(app) if *app != p.manifest.app => disagreements.push(format!(
+                "the manifest calls this `{}` and the code calls it `{app}`",
+                p.manifest.app
+            )),
+            None => disagreements
+                .push("the manifest names an application and the code names none".to_string()),
+            _ => {}
+        }
+        match &program.version {
+            Some(v) if *v != p.manifest.version => disagreements.push(format!(
+                "the manifest says version {} and the code says {v}",
+                p.manifest.version
+            )),
+            None => {
+                disagreements.push("the manifest has a version and the code has none".to_string())
+            }
+            _ => {}
+        }
+    }
+    if !disagreements.is_empty() {
+        return Err(Refusal::WouldNotBuild(disagreements));
     }
 
     // 4. The report it ships is the report its code produces.
