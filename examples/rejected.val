@@ -315,3 +315,10 @@ screen Typo {
     text(pointss)
   }
 }
+
+// 20. An effect in one branch of `execute`.
+//
+// Not a program that fails to compile — a program whose report has to name the
+// branch nobody took. The report is checked in `crates/valang/tests/report.rs`,
+// and it is here because the failure it prevents belongs on this list: a
+// capability that runs and does not appear on the consent sheet.

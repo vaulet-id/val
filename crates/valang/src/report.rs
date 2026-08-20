@@ -71,7 +71,9 @@ fn claim_paths(p: &Program) -> BTreeSet<String> {
 
     for a in &p.actions {
         for block in &a.phases {
-            for s in &block.stmts {
+            let mut flat: Vec<&Stmt> = Vec::new();
+            walk_stmts(&block.stmts, &mut flat);
+            for s in flat {
                 match s {
                     Stmt::Let { name, value, .. } => {
                         if let Expr::With { policy, .. } = value {
@@ -108,7 +110,9 @@ fn in_credential_terms(p: &Program, expr: &str) -> String {
     let Some((base, rest)) = expr.split_once(".claims.") else { return expr.to_string() };
     for a in &p.actions {
         for block in &a.phases {
-            for s in &block.stmts {
+            let mut flat: Vec<&Stmt> = Vec::new();
+            walk_stmts(&block.stmts, &mut flat);
+            for s in flat {
                 if let Stmt::Let { name, value: Expr::With { policy, .. }, .. } = s {
                     if name == base {
                         if let Some(t) = p.trusts.iter().find(|t| t.name == *policy) {
@@ -163,7 +167,9 @@ pub fn report(p: &Program) -> Report {
         for block in &a.phases {
             collect(&block.stmts, p, &mut r);
             if block.phase == Phase::Update {
-                for s in &block.stmts {
+                let mut flat: Vec<&Stmt> = Vec::new();
+                walk_stmts(&block.stmts, &mut flat);
+                for s in flat {
                     if let Stmt::Patch { path, .. } = s {
                         r.writes.insert(path.join("."));
                     }
@@ -233,8 +239,30 @@ pub fn report(p: &Program) -> Report {
     r
 }
 
-fn collect(stmts: &[Stmt], p: &Program, r: &mut Report) {
+/// Every statement, including the ones inside a branch.
+///
+/// A flat loop over a phase's statements is a report that stops at the first
+/// `if`: an effect written in one branch never appeared, so the consent sheet —
+/// which is a rendering of this report — did not mention something the
+/// application does.
+fn walk_stmts<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
     for s in stmts {
+        out.push(s);
+        match s {
+            Stmt::If { then, other, .. } => {
+                walk_stmts(then, out);
+                walk_stmts(other, out);
+            }
+            Stmt::Effect { body, .. } => walk_stmts(body, out),
+            _ => {}
+        }
+    }
+}
+
+fn collect(stmts: &[Stmt], p: &Program, r: &mut Report) {
+    let mut flat: Vec<&Stmt> = Vec::new();
+    walk_stmts(stmts, &mut flat);
+    for s in flat {
         match s {
             Stmt::Binding { ty, .. } if ty.name == "Credential" => {
                 if let Some(inner) = ty.args.first() {
