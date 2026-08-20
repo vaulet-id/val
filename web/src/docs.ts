@@ -53,6 +53,12 @@ export type Page = {
   headings: { id: string; text: string }[]
 }
 
+/// A lede is drawn as text rather than as markup, so the markup has to go: the
+/// specification's opening line points at the guide, and a reader saw the
+/// brackets and the file name instead of the sentence.
+const plain = (text?: string) =>
+  text?.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[`*]/g, '')
+
 /// A title, as an id.
 ///
 /// Letters and numbers in any script, not `a-z0-9`: every Thai title stripped
@@ -98,7 +104,7 @@ function pages(markdown: string, group: string, openingTitle: string): Page[] {
       group,
       title: title.replace(/^\d+\.\s*/, ''),
       section: group,
-      lede: lifted?.replace(/[`*]/g, ''),
+      lede: plain(lifted),
       markdown: lifted ? body.replace(lifted, '').trim() : body,
       headings,
     })
@@ -141,7 +147,7 @@ function page(markdown: string, group: string): Page {
     group,
     title,
     section: group,
-    lede: lifted?.replace(/[`*]/g, ''),
+    lede: plain(lifted),
     markdown: lifted ? body.replace(lifted, '').trim() : body,
     headings,
   }
