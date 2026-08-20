@@ -246,17 +246,7 @@ pub fn report(p: &Program) -> Report {
 /// which is a rendering of this report — did not mention something the
 /// application does.
 fn walk_stmts<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
-    for s in stmts {
-        out.push(s);
-        match s {
-            Stmt::If { then, other, .. } => {
-                walk_stmts(then, out);
-                walk_stmts(other, out);
-            }
-            Stmt::Effect { body, .. } => walk_stmts(body, out),
-            _ => {}
-        }
-    }
+    Stmt::flatten(stmts, out)
 }
 
 fn collect(stmts: &[Stmt], p: &Program, r: &mut Report) {

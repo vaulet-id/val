@@ -541,44 +541,24 @@ fn lower_first(s: &str) -> String {
 }
 
 fn walk_ui(nodes: &[crate::ast::UiNode], f: &mut impl FnMut(&crate::ast::UiNode)) {
-    for n in nodes {
-        f(n);
-        walk_ui(&n.children, f);
-        // Both halves of an `if`, always. The branch that is not taken today is
-        // taken on somebody's phone tomorrow, and a capability report that
-        // counted one branch would be a report of what this run happened to do.
-        walk_ui(&n.otherwise, f);
-    }
+    crate::ast::UiNode::walk_all(nodes, f);
 }
 
 fn walk_stmts(stmts: &[crate::ast::Stmt], f: &mut impl FnMut(&crate::ast::Stmt)) {
-    use crate::ast::Stmt;
     for s in stmts {
-        f(s);
-        match s {
-            Stmt::Effect { body, .. } => walk_stmts(body, f),
-            Stmt::If { then, other, .. } => {
-                walk_stmts(then, f);
-                walk_stmts(other, f);
-            }
-            _ => {}
-        }
+        s.walk(f);
     }
 }
 
 /// Give the positional first argument the name the registry says it has.
 fn name_primary(nodes: &mut [crate::ast::UiNode], hosts: &Hosts) {
-    for n in nodes {
-        if let Some((_, cap)) = hosts.find(&n.kind) {
-            if let Some(primary) = &cap.primary {
-                if let Some(first) = n.args.first_mut() {
-                    if first.name.is_none() {
-                        first.name = Some(primary.clone());
-                    }
-                }
+    crate::ast::UiNode::walk_all_mut(nodes, &mut |n| {
+        let Some((_, cap)) = hosts.find(&n.kind) else { return };
+        let Some(primary) = cap.primary.clone() else { return };
+        if let Some(first) = n.args.first_mut() {
+            if first.name.is_none() {
+                first.name = Some(primary);
             }
         }
-        name_primary(&mut n.children, hosts);
-        name_primary(&mut n.otherwise, hosts);
-    }
+    });
 }

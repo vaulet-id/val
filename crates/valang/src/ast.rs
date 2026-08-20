@@ -483,7 +483,110 @@ impl Expr {
             }
             Lambda { body, .. } => body.walk(f),
             From { value, .. } => value.walk(f),
-            _ => {}
+            // The leaves, written out. A catch-all here is how a variant added
+            // later comes to be skipped by every pass that walks expressions,
+            // and nothing says so.
+            Num { .. } | Float { .. } | Str { .. } | Bool { .. } | Ident { .. } | Error { .. } => {}
+        }
+    }
+}
+
+impl Stmt {
+    /// This statement and everything inside it.
+    ///
+    /// **The one answer to what a statement contains.** Four passes each had
+    /// their own, and three of them stopped at the first `if`: an effect written
+    /// in a branch never reached the capability report, so a person's consent
+    /// sheet did not mention something the application does.
+    pub fn walk(&self, f: &mut dyn FnMut(&Stmt)) {
+        f(self);
+        // Destructured rather than matched loosely, so that a statement which
+        // gains a body stops this compiling instead of being walked halfway.
+        match self {
+            Stmt::If { cond: _, then, other, span: _ } => {
+                for s in then.iter().chain(other) {
+                    s.walk(f);
+                }
+            }
+            Stmt::Effect { name: _, args: _, body, span: _ } => {
+                for s in body {
+                    s.walk(f);
+                }
+            }
+            Stmt::Let { .. }
+            | Stmt::Assign { .. }
+            | Stmt::Destructure { .. }
+            | Stmt::Expr { .. }
+            | Stmt::Patch { .. }
+            | Stmt::Binding { .. }
+            | Stmt::Return { .. }
+            | Stmt::Data { .. }
+            | Stmt::Refuse { .. } => {}
+        }
+    }
+
+    /// The same walk, collecting — for a pass that holds a diagnostic list
+    /// while it reads, which a closure over both cannot.
+    ///
+    /// Written out rather than layered over `walk`: borrowing through a `dyn
+    /// FnMut` loses the lifetime, and laundering it back is the kind of thing
+    /// that is correct until somebody moves a line.
+    pub fn flatten<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
+        for s in stmts {
+            out.push(s);
+            match s {
+                Stmt::If { cond: _, then, other, span: _ } => {
+                    Stmt::flatten(then, out);
+                    Stmt::flatten(other, out);
+                }
+                Stmt::Effect { name: _, args: _, body, span: _ } => Stmt::flatten(body, out),
+                Stmt::Let { .. }
+                | Stmt::Assign { .. }
+                | Stmt::Destructure { .. }
+                | Stmt::Expr { .. }
+                | Stmt::Patch { .. }
+                | Stmt::Binding { .. }
+                | Stmt::Return { .. }
+                | Stmt::Data { .. }
+                | Stmt::Refuse { .. } => {}
+            }
+        }
+    }
+}
+
+impl UiNode {
+    /// This node and everything under it, both halves of an `if` included.
+    ///
+    /// **The one answer to what a node contains.** There were twenty-three
+    /// places that reached for `children` directly, and adding a second list to
+    /// the type — the other branch of an `if` — broke six of them silently,
+    /// because a field nobody reads is not a compile error.
+    pub fn walk(&self, f: &mut dyn FnMut(&UiNode)) {
+        let UiNode { kind: _, args: _, lambda: _, children, otherwise, slots: _, span: _ } = self;
+        f(self);
+        for c in children.iter().chain(otherwise) {
+            c.walk(f);
+        }
+    }
+
+    pub fn walk_mut(&mut self, f: &mut dyn FnMut(&mut UiNode)) {
+        f(self);
+        let UiNode { kind: _, args: _, lambda: _, children, otherwise, slots: _, span: _ } = self;
+        for c in children.iter_mut().chain(otherwise) {
+            c.walk_mut(f);
+        }
+    }
+
+    /// Every node in a run of siblings.
+    pub fn walk_all(nodes: &[UiNode], f: &mut dyn FnMut(&UiNode)) {
+        for n in nodes {
+            n.walk(f);
+        }
+    }
+
+    pub fn walk_all_mut(nodes: &mut [UiNode], f: &mut dyn FnMut(&mut UiNode)) {
+        for n in nodes {
+            n.walk_mut(f);
         }
     }
 }

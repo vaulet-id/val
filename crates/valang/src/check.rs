@@ -205,10 +205,7 @@ fn navigation_goes_somewhere(p: &Program, d: &mut Vec<Diagnostic>) {
 }
 
 fn walk_ui(n: &UiNode, f: &mut impl FnMut(&UiNode)) {
-    f(n);
-    for c in n.children.iter().chain(n.otherwise.iter()) {
-        walk_ui(c, f);
-    }
+    n.walk(f);
 }
 
 /// The effects in `execute` are one batch, offered together. There is no moment
@@ -547,33 +544,16 @@ fn is_effect(name: &str) -> bool {
     }
 }
 
-/// The same walk, collecting rather than calling — for a rule that has to hold
-/// a diagnostic list while it reads, which a closure over both cannot.
+/// What a statement contains, and what a node contains, are questions with one
+/// answer each — `Stmt::walk` and `UiNode::walk`, beside the types. These are
+/// the shapes this file needs them in.
 fn flatten<'a>(stmts: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
-    for s in stmts {
-        out.push(s);
-        match s {
-            Stmt::Effect { body, .. } => flatten(body, out),
-            Stmt::If { then, other, .. } => {
-                flatten(then, out);
-                flatten(other, out);
-            }
-            _ => {}
-        }
-    }
+    Stmt::flatten(stmts, out)
 }
 
 fn walk_stmts(stmts: &[Stmt], f: &mut impl FnMut(&Stmt)) {
     for s in stmts {
-        f(s);
-        match s {
-            Stmt::Effect { body, .. } => walk_stmts(body, f),
-            Stmt::If { then, other, .. } => {
-                walk_stmts(then, f);
-                walk_stmts(other, f);
-            }
-            _ => {}
-        }
+        s.walk(f);
     }
 }
 

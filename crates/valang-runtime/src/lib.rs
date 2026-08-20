@@ -4,6 +4,8 @@
 //! performs an effect: it describes one and hands it to the host, which is the
 //! only reason an execution record can be trusted.
 
+#![forbid(unsafe_code)]
+
 pub mod attestation;
 pub mod canonical;
 pub mod decode;

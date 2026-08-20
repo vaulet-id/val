@@ -13,6 +13,8 @@
 //! whether that is grounds to issue something is the publisher's business, and
 //! theirs alone — it is their key.
 
+#![forbid(unsafe_code)]
+
 use std::collections::BTreeMap;
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};

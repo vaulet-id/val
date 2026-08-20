@@ -10,6 +10,8 @@
 //! and then owning its bugs forever. With handles the compiler emits calls and
 //! control flow and nothing else (§8).
 
+#![forbid(unsafe_code)]
+
 pub mod compile;
 pub mod run;
 

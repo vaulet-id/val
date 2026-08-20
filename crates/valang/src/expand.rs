@@ -431,12 +431,15 @@ fn open_phrases(node: UiNode, d: &mut Vec<Diagnostic>) -> UiNode {
         }
     }
 
+    let UiNode { kind, args: _, lambda, children, otherwise, slots: _, span } = node;
     UiNode {
+        kind,
         args,
+        lambda,
+        children: children.into_iter().map(|c| open_phrases(c, d)).collect(),
+        otherwise: otherwise.into_iter().map(|c| open_phrases(c, d)).collect(),
         slots,
-        children: node.children.into_iter().map(|c| open_phrases(c, d)).collect(),
-        otherwise: node.otherwise.into_iter().map(|c| open_phrases(c, d)).collect(),
-        ..node
+        span,
     }
 }
 
@@ -547,11 +550,15 @@ fn flatten(
             args.push(a);
         }
     }
+    let UiNode { kind, args: _, lambda, children, otherwise, slots, span } = node;
     UiNode {
+        kind,
         args,
-        children: node.children.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
-        otherwise: node.otherwise.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
-        ..node
+        lambda,
+        children: children.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
+        otherwise: otherwise.into_iter().map(|c| flatten(c, decl, types, d)).collect(),
+        slots,
+        span,
     }
 }
 
@@ -603,11 +610,18 @@ fn bind(call: &UiNode, decl: &ComponentDecl, d: &mut Vec<Diagnostic>) -> BTreeMa
 
 /// Replace a component's parameters with what the call site handed it.
 fn substitute(node: UiNode, bound: &BTreeMap<String, Expr>) -> UiNode {
+    // Destructured rather than `..node`: a spread carries a field nobody
+    // thought about, and the fields that matter here are the ones holding
+    // children. A third list added to the type stops this compiling.
+    let UiNode { kind, args, lambda, children, otherwise, slots, span } = node;
     UiNode {
-        args: node.args.into_iter().map(|a| Arg { value: replace(a.value, bound), ..a }).collect(),
-        children: node.children.into_iter().map(|c| substitute(c, bound)).collect(),
-        otherwise: node.otherwise.into_iter().map(|c| substitute(c, bound)).collect(),
-        ..node
+        kind,
+        args: args.into_iter().map(|a| Arg { value: replace(a.value, bound), ..a }).collect(),
+        lambda,
+        children: children.into_iter().map(|c| substitute(c, bound)).collect(),
+        otherwise: otherwise.into_iter().map(|c| substitute(c, bound)).collect(),
+        slots,
+        span,
     }
 }
 
@@ -727,17 +741,7 @@ fn cycle_from(start: &str, by_name: &BTreeMap<String, ComponentDecl>) -> Option<
 
 fn uses(tree: &[UiNode]) -> Vec<String> {
     let mut out = Vec::new();
-    fn walk(nodes: &[UiNode], out: &mut Vec<String>) {
-        for n in nodes {
-            out.push(n.kind.clone());
-            walk(&n.children, out);
-            // Both halves. A component used only in the branch that is not
-            // taken is still a component this one uses, and a cycle hidden
-            // there expands forever rather than being reported.
-            walk(&n.otherwise, out);
-        }
-    }
-    walk(tree, &mut out);
+    UiNode::walk_all(tree, &mut |n| out.push(n.kind.clone()));
     out
 }
 
