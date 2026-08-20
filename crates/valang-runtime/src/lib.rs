@@ -20,7 +20,7 @@ pub mod value;
 use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
-use valang::ast::{Phase, Program, Stmt};
+use valang::ast::{ActionDecl, Phase, Program, Stmt};
 
 use canonical::{Canonical, DeterministicCbor};
 use eval::{Eval, Trap};
@@ -214,6 +214,104 @@ pub struct Run {
 /// A package of several files has one answer to what those bytes are, and it is
 /// `valang_verify::code_hash_of` — the wallet, the publisher's server and the
 /// signing tool have to agree, and a join written twice is how they stop.
+/// What walks an action, once the host has been asked for what it declared.
+///
+/// **There are two, and everything around them is shared.** The tree-walking
+/// evaluator is one; a compiled Wasm module is the other, and a phone runs the
+/// second because it has no compiler. What must not be two is the rest of it —
+/// the roots, the record, the batch the host is offered, the moment state
+/// commits — so that lives here and an engine only evaluates.
+pub trait Engine {
+    /// The state the action produced, and what it asks the host to do.
+    ///
+    /// The state it is given is the state it starts from; returning it
+    /// unchanged is an action that wrote nothing, which is ordinary.
+    fn walk(
+        &mut self,
+        program: &Program,
+        action: &ActionDecl,
+        state: &State,
+        input: &State,
+        host: &dyn Host,
+        context: &Context,
+    ) -> Result<(State, Vec<EffectRequest>), Stopped>;
+}
+
+/// An action that stopped, and what it had already asked for. A record of a run
+/// that did not finish still says what had been requested by the time it did.
+pub struct Stopped {
+    pub trap: Trap,
+    pub effects: Vec<EffectRequest>,
+}
+
+/// The tree-walking one, which is what a build with a compiler in it uses.
+pub struct Walk;
+
+impl Engine for Walk {
+    fn walk(
+        &mut self,
+        program: &Program,
+        action: &ActionDecl,
+        state: &State,
+        input: &State,
+        host: &dyn Host,
+        context: &Context,
+    ) -> Result<(State, Vec<EffectRequest>), Stopped> {
+        let mut ev = Eval::new(program, context.clone());
+        for (k, v) in input {
+            ev.bind(k, v.clone());
+        }
+
+        // The host hands over the credentials the program's `input` names,
+        // already checked against the policy that will be named in `verify`.
+        for block in &action.phases {
+            if block.phase != Phase::Input {
+                continue;
+            }
+            for s in &block.stmts {
+                if let Stmt::Binding { name, ty, .. } = s {
+                    if ty.name == "Credential" {
+                        let cred_ty = ty.args.first().map(|a| a.name.clone()).unwrap_or_default();
+                        let policy = program
+                            .trusts
+                            .iter()
+                            .find(|t| t.subject_type == cred_ty)
+                            .map(|t| t.name.clone());
+                        if let Some(claims) = host.credential(&cred_ty, policy.as_deref()) {
+                            ev.bind(
+                                name,
+                                Value::Credential { ty: cred_ty.clone(), claims, verified: None },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut next = state.clone();
+        for block in &action.phases {
+            // `update` produced the next state and `execute` reads it as
+            // `next`. Without this binding every `next.…` in an issued claim is
+            // null, and the credential goes out empty — which a test that only
+            // checks which capability was requested will not notice.
+            if block.phase == Phase::Execute {
+                ev.bind("next", Value::Map(next.clone()));
+            }
+            // Every line of an `update` reads the state the action started this
+            // phase with, because the block is one patch. Read as a sequence, a
+            // swap becomes a copy.
+            ev.patch_base(if block.phase == Phase::Update { Some(next.clone()) } else { None });
+            for s in &block.stmts {
+                if let Err(trap) = ev.stmt(s, block.phase, &mut next) {
+                    return Err(Stopped { trap, effects: ev.effects.clone() });
+                }
+            }
+        }
+        Ok((next, ev.effects.clone()))
+    }
+}
+
+/// Walk an action with the tree-walking evaluator.
 pub fn run_action(
     program: &Program,
     source: &str,
@@ -221,6 +319,23 @@ pub fn run_action(
     state: &State,
     input: &State,
     host: &dyn Host,
+) -> Run {
+    run_action_with(program, source, action_name, state, input, host, &mut Walk)
+}
+
+/// The same, with whichever engine evaluates it. Everything a record rests on —
+/// the roots, the hashes, the batch the host is offered, the moment the state
+/// commits — happens here and only here, so two engines cannot come to disagree
+/// about anything except arithmetic, which is what the parity test compares.
+#[allow(clippy::too_many_arguments)]
+pub fn run_action_with(
+    program: &Program,
+    source: &str,
+    action_name: &str,
+    state: &State,
+    input: &State,
+    host: &dyn Host,
+    engine: &mut dyn Engine,
 ) -> Run {
     let enc = DeterministicCbor;
     let context = host.context();
@@ -252,62 +367,25 @@ pub fn run_action(
         return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: Vec::new(), record, leaves: previous };
     };
 
-    let mut ev = Eval::new(program, context);
-    for (k, v) in input {
-        ev.bind(k, v.clone());
-    }
-
-    // The host hands over the credentials the program's `input` names, already
-    // checked against the policy that will be named in `verify`.
-    for block in &action.phases {
-        if block.phase != Phase::Input {
-            continue;
+    let (next, requested) = match engine.walk(program, action, state, input, host, &context) {
+        Ok(both) => both,
+        Err(Stopped { trap, effects }) => {
+            record.outcome = match trap {
+                Trap::Refused(key) => Outcome::Declined(key),
+                Trap::Failed(m) => Outcome::Failed(m),
+                Trap::Defect(m) => Outcome::Defect(m),
+                Trap::DivideByZero => Outcome::Defect("division by zero traps, as overflow does".into()),
+                Trap::Overflow(what) => Outcome::Defect(format!("integer overflow in {what} traps: a wrong number the record would then faithfully prove is worse than a failure")),
+                Trap::Unsupported(m) => Outcome::Defect(m),
+            };
+            record.effects_requested = effects.clone();
+            sign_record(&mut record, host);
+            return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects, record, leaves: previous };
         }
-        for s in &block.stmts {
-            if let Stmt::Binding { name, ty, .. } = s {
-                if ty.name == "Credential" {
-                    let cred_ty = ty.args.first().map(|a| a.name.clone()).unwrap_or_default();
-                    let policy = program.trusts.iter().find(|t| t.subject_type == cred_ty).map(|t| t.name.clone());
-                    if let Some(claims) = host.credential(&cred_ty, policy.as_deref()) {
-                        ev.bind(name, Value::Credential { ty: cred_ty, claims, verified: None });
-                    }
-                }
-            }
-        }
-    }
-
-    let mut next = state.clone();
-    for block in &action.phases {
-        // `update` produced the next state and `execute` reads it as `next`.
-        // Without this binding every `next.…` in an issued claim is null, and
-        // the credential goes out empty — which a test that only checks which
-        // capability was requested will not notice.
-        if block.phase == Phase::Execute {
-            ev.bind("next", Value::Map(next.clone()));
-        }
-        // Every line of an `update` reads the state the action started this
-        // phase with, because the block is one patch. Read as a sequence, a
-        // swap becomes a copy.
-        ev.patch_base(if block.phase == Phase::Update { Some(next.clone()) } else { None });
-        for s in &block.stmts {
-            if let Err(trap) = ev.stmt(s, block.phase, &mut next) {
-                record.outcome = match trap {
-                    Trap::Refused(key) => Outcome::Declined(key),
-                    Trap::Failed(m) => Outcome::Failed(m),
-                    Trap::Defect(m) => Outcome::Defect(m),
-                    Trap::DivideByZero => Outcome::Defect("division by zero traps, as overflow does".into()),
-                    Trap::Overflow(what) => Outcome::Defect(format!("integer overflow in {what} traps: a wrong number the record would then faithfully prove is worse than a failure")),
-                    Trap::Unsupported(m) => Outcome::Defect(m),
-                };
-                record.effects_requested = ev.effects.clone();
-                sign_record(&mut record, host);
-                return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: ev.effects, record, leaves: previous };
-            }
-        }
-    }
+    };
 
     // Irreversible last, ordered here so the author does not have to know.
-    let mut effects = ev.effects.clone();
+    let mut effects = requested;
     effects.sort_by_key(|e| !e.reversible);
 
     record.policies = program.trusts.iter().map(|t| t.name.clone()).collect();

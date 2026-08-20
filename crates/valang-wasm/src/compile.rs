@@ -833,8 +833,12 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
             // case, because the general case is a field of a value the module
             // is already holding.
             if let Some(path) = e.path() {
-                if let Some(rest) = path.strip_prefix("state.").or_else(|| path.strip_prefix("next.")) {
+                if let Some(rest) = path.strip_prefix("state.") {
                     ctx.call_val(&crate::abi::Op::State(rest.to_string()), 0, f);
+                    return;
+                }
+                if let Some(rest) = path.strip_prefix("next.") {
+                    ctx.call_val(&crate::abi::Op::Next(rest.to_string()), 0, f);
                     return;
                 }
                 if let Some(rest) = path.strip_prefix("context.") {

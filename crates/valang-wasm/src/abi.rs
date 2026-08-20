@@ -131,8 +131,13 @@ impl Cap {
 pub enum Op {
     /// One of the fixed arithmetic and value operations.
     Fixed(String),
-    /// `state:member.points` — a field of state, read.
+    /// `state:member.points` — a field of the state the action started with.
     State(String),
+    /// `next:member.points` — the same field of the state `update` produced.
+    /// A different import from `state:` because it is a different value:
+    /// `execute` reads what `update` wrote, and reading the arithmetic again
+    /// instead would be the same sum written twice in two phases.
+    Next(String),
     /// `input:receipt` — something the host collected before the action ran.
     Input(String),
     /// `context:time.now`
@@ -152,6 +157,7 @@ impl Op {
         match self {
             Op::Fixed(x) => x.clone(),
             Op::State(x) => format!("state:{x}"),
+            Op::Next(x) => format!("next:{x}"),
             Op::Input(x) => format!("input:{x}"),
             Op::Context(x) => format!("context:{x}"),
             Op::Refuse(x) => format!("refuse:{x}"),
@@ -177,6 +183,7 @@ impl Op {
         let what = what.to_string();
         Some(match kind {
             "state" => Op::State(what),
+            "next" => Op::Next(what),
             "input" => Op::Input(what),
             "context" => Op::Context(what),
             "refuse" => Op::Refuse(what),
