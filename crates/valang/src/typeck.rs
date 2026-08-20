@@ -87,6 +87,103 @@ pub fn check_types_against(p: &Program, hosts: &crate::capability::Hosts) -> Vec
     cx.diagnostics
 }
 
+// ------------------------------------------------------------- completion
+
+/// One thing that may be written after a `.`.
+///
+/// **Answered by the typechecker, because it is a question about types.** An
+/// editor that worked it out for itself would be a second implementation of
+/// what a name means, disagreeing with this one wherever it had not been
+/// taught — and the first thing it would get wrong is that `.claims` is
+/// reachable on a `Verified<P>` and on nothing else.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Member {
+    pub name: String,
+    /// The type, as somebody would write it.
+    pub ty: String,
+    /// What kind of thing it is: `claim`, `field`, `member`, `face`.
+    pub what: &'static str,
+}
+
+/// What may be written at `line`:`col`, where the text just before it is a path
+/// and a dot.
+///
+/// Empty when the cursor is not after a dot, when the path names nothing, or
+/// when what it names has no members — an editor offering its whole vocabulary
+/// there is the case this exists to end.
+pub fn members_at(p: &Program, hosts: &crate::capability::Hosts, src: &str, line: u32, col: u32) -> Vec<Member> {
+    let Some(path) = path_before(src, line, col) else { return Vec::new() };
+    if path.is_empty() {
+        return Vec::new();
+    }
+
+    let mut cx = Cx::new(p);
+    cx.words = hosts.words();
+    cx.hosts = hosts.clone();
+    cx.at = Some((line, col));
+    // The declaration the cursor is in, from the parser's own record of what it
+    // opened. A binding from another action is not in scope here, and without
+    // this it would be: declarations are checked in the order this function
+    // walks them, not the order they were written.
+    cx.within = p
+        .scopes
+        .iter()
+        .filter(|s| {
+            matches!(s.kind, ScopeKind::Function | ScopeKind::Action | ScopeKind::Screen | ScopeKind::Component)
+                && (line, col) >= (s.from.line, s.from.col)
+                && (line, col) <= (s.to.line, s.to.col)
+        })
+        .next_back()
+        .map(|s| (s.from, s.to));
+
+    for f in &p.functions {
+        cx.function(f);
+    }
+    for a in &p.actions {
+        cx.action(a);
+    }
+    for s in &p.screens {
+        cx.screen(s);
+    }
+    for c in &p.components {
+        cx.component(c);
+    }
+
+    if let Some(members) = cx.root_members(&path) {
+        return members;
+    }
+    let scope = cx.seen.take().map(|(_, s)| s).unwrap_or_default();
+    let Some(ty) = cx.walk_path(&scope, &path) else { return Vec::new() };
+    cx.members_of(&ty)
+}
+
+/// The `a.b.c.` immediately before the cursor, without the part being typed.
+///
+/// Read off the line rather than from the token stream: the text at a cursor is
+/// mid-word by definition, and a lexer's answer for `state.` is a path followed
+/// by a dot that belongs to nothing.
+fn path_before(src: &str, line: u32, col: u32) -> Option<Vec<String>> {
+    let text: Vec<char> = src.lines().nth(line.checked_sub(1)? as usize)?.chars().collect();
+    let mut i = (col as usize).saturating_sub(1).min(text.len());
+    // The word being typed, which is a filter and not part of the path.
+    while i > 0 && (text[i - 1].is_alphanumeric() || text[i - 1] == '_') {
+        i -= 1;
+    }
+    if i == 0 || text[i - 1] != '.' {
+        return None;
+    }
+    i -= 1;
+    let end = i;
+    while i > 0 && (text[i - 1].is_alphanumeric() || text[i - 1] == '_' || text[i - 1] == '.') {
+        i -= 1;
+    }
+    let path: Vec<String> = text[i..end].iter().collect::<String>().split('.').map(str::to_string).collect();
+    if path.iter().any(String::is_empty) {
+        return None;
+    }
+    Some(path)
+}
+
 struct Cx<'a> {
     p: &'a Program,
     scope: Vec<HashMap<String, Typed>>,
@@ -101,6 +198,16 @@ struct Cx<'a> {
     /// rather than inside them: what a name means and whether it may be written
     /// again are different questions, and only one of them is a type.
     mutable: Vec<HashSet<String>>,
+    /// Where an editor's cursor is, when this run is answering that question
+    /// rather than checking a file, and the block it must be inside for a
+    /// binding to count.
+    at: Option<(u32, u32)>,
+    within: Option<(Span, Span)>,
+    /// The scope stack as it stood after the last statement before the cursor,
+    /// with that statement's position — kept rather than the first one found,
+    /// because declarations are not visited in the order they were written and
+    /// the nearest one is the one whose names are in scope.
+    seen: Option<((u32, u32), Vec<HashMap<String, Typed>>)>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -129,7 +236,17 @@ impl<'a> Cx<'a> {
     }
 
     fn new(p: &'a Program) -> Self {
-        Cx { p, words: Default::default(), hosts: Default::default(), scope: vec![HashMap::new()], mutable: vec![HashSet::new()], diagnostics: Vec::new() }
+        Cx {
+            p,
+            words: Default::default(),
+            hosts: Default::default(),
+            scope: vec![HashMap::new()],
+            mutable: vec![HashSet::new()],
+            at: None,
+            within: None,
+            seen: None,
+            diagnostics: Vec::new(),
+        }
     }
 
     fn err(&mut self, span: Span, msg: impl Into<String>) {
@@ -509,6 +626,26 @@ impl<'a> Cx<'a> {
     }
 
     fn stmt(&mut self, s: &Stmt, phase: Option<Phase>) {
+        self.typed_stmt(s, phase);
+        // After, not before: `const a = 1` is in scope on the line under it,
+        // which is where somebody asking what they may write is standing.
+        self.note(s.span());
+    }
+
+    /// The scope here, if this is the nearest statement before the cursor.
+    fn note(&mut self, sp: Span) {
+        let (Some(at), Some((from, to))) = (self.at, self.within) else { return };
+        let here = (sp.line, sp.col);
+        let inside = here >= (from.line, from.col) && here <= (to.line, to.col);
+        if !inside || here >= at {
+            return;
+        }
+        if self.seen.as_ref().is_none_or(|(best, _)| *best < here) {
+            self.seen = Some((here, self.scope.clone()));
+        }
+    }
+
+    fn typed_stmt(&mut self, s: &Stmt, phase: Option<Phase>) {
         match s {
             Stmt::Binding { name, ty, .. } => {
                 let t = self.resolve(ty);
@@ -1150,6 +1287,147 @@ impl<'a> Cx<'a> {
                 Typed::with(Ty::Unknown, from)
             }
         }
+    }
+
+    /// What a name means on a type, with nothing said about it being wrong.
+    ///
+    /// The half of `member` that is a lookup rather than a message, so the
+    /// checker and the editor answer from one table. They disagreed while there
+    /// were two: an editor's own idea of what a credential has is a second
+    /// implementation of the rule this language is built on.
+    fn member_ty(&self, base: &Ty, name: &str) -> Option<Ty> {
+        match base.inner() {
+            Ty::Verified(policy) => {
+                if name != "claims" {
+                    return None;
+                }
+                let subject = self.policy(policy).map(|t| t.subject_type.clone()).unwrap_or_default();
+                Some(Ty::Claims(subject))
+            }
+            Ty::Claims(record) | Ty::Record(record) => {
+                let f = self.credential(record)?.fields.iter().find(|f| f.name == name)?;
+                Some(self.resolve(&f.ty))
+            }
+            Ty::Enum(e) => {
+                let declared = self.p.enums.iter().find(|x| &x.name == e)?;
+                declared.members.iter().any(|m| m == name).then(|| Ty::Enum(e.clone()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Everything that may be written after a dot on this type.
+    fn members_of(&self, ty: &Ty) -> Vec<Member> {
+        let written = |t: &Ty| t.to_string();
+        match ty.inner() {
+            // The whole of the paradigm, as a list of one: an issuer's words
+            // are behind `claims` and there is no second way in.
+            Ty::Verified(policy) => {
+                let subject = self.policy(policy).map(|t| t.subject_type.clone()).unwrap_or_default();
+                vec![Member { name: "claims".into(), ty: format!("{subject}'s claims"), what: "face" }]
+            }
+            // A credential that has not been through `verify` has nothing
+            // readable, which is the point of it.
+            Ty::Credential(_) => Vec::new(),
+            Ty::Claims(record) | Ty::Record(record) => self
+                .credential(record)
+                .map(|d| {
+                    d.fields
+                        .iter()
+                        .map(|f| Member {
+                            name: f.name.clone(),
+                            ty: written(&self.resolve(&f.ty)),
+                            what: if matches!(ty.inner(), Ty::Claims(_)) { "claim" } else { "field" },
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            Ty::Enum(e) => self
+                .p
+                .enums
+                .iter()
+                .find(|x| &x.name == e)
+                .map(|d| {
+                    d.members
+                        .iter()
+                        .map(|m| Member { name: m.clone(), ty: e.clone(), what: "member" })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            // A list is consumed by the combinators and by nothing else, which
+            // is the same closed set the checker refuses anything outside of.
+            Ty::List(item) => ["map", "filter", "fold", "any", "all", "count", "first"]
+                .iter()
+                .map(|name| Member {
+                    name: (*name).to_string(),
+                    ty: match *name {
+                        "fold" | "count" => "int".to_string(),
+                        "map" | "filter" => format!("List<{item}>"),
+                        "first" => format!("{item}?"),
+                        _ => "bool".to_string(),
+                    },
+                    what: "combinator",
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The roots the host answers rather than the program: `state` and `next`
+    /// are the fields this program declares, and `context` is what every action
+    /// is handed. Neither is a value with a type, so neither can be reached
+    /// through `walk_path` — and both are the first thing anybody types.
+    fn root_members(&self, path: &[String]) -> Option<Vec<Member>> {
+        let head = path.first()?;
+        if (head == "state" || head == "next") && path.len() == 1 {
+            return Some(
+                self.p
+                    .state
+                    .iter()
+                    .map(|f| Member {
+                        name: f.name.clone(),
+                        ty: self.resolve(&f.ty).to_string(),
+                        what: "state",
+                    })
+                    .collect(),
+            );
+        }
+        if head == "context" {
+            // `time` is a namespace and `now` is what is under it, which is why
+            // `context.time.now` reads the way it does.
+            let members: &[(&str, &str)] = match path.len() {
+                1 => &[("time", "the clock the host answers"), ("uuid", "string")],
+                2 if path[1] == "time" => &[("now", "datetime")],
+                _ => return None,
+            };
+            return Some(
+                members
+                    .iter()
+                    .map(|(n, t)| Member { name: (*n).to_string(), ty: (*t).to_string(), what: "context" })
+                    .collect(),
+            );
+        }
+        None
+    }
+
+    /// A written path, from the names in scope at the cursor to what it is.
+    fn walk_path(&self, scope: &[HashMap<String, Typed>], path: &[String]) -> Option<Ty> {
+        let head = path.first()?;
+
+        if head == "state" || head == "next" {
+            return self.state_type(&path[1..]);
+        }
+
+        let mut ty = match scope.iter().rev().find_map(|s| s.get(head)) {
+            Some(t) => t.ty.clone(),
+            // Not a value but a type: `Tier.` offers the enum's members.
+            None if self.p.enums.iter().any(|e| &e.name == head) => Ty::Enum(head.clone()),
+            None => return None,
+        };
+        for seg in &path[1..] {
+            ty = self.member_ty(&ty, seg)?;
+        }
+        Some(ty)
     }
 
     fn member(&mut self, obj: &Expr, name: &str, span: Span) -> Typed {

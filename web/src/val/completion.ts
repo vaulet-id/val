@@ -9,7 +9,7 @@
 
 import type * as Monaco from 'monaco-editor'
 
-import { HOSTS, context, words, type Block, type Declared } from './wasm'
+import { HOSTS, context, members, words, type Block, type Declared } from './wasm'
 
 type Capability = {
   draws?: boolean
@@ -71,12 +71,27 @@ const innermost = (path: Block[]): Block | undefined => path[path.length - 1]
 const nodeAround = (path: Block[]): string | undefined =>
     [...path].reverse().find((b) => b.kind === 'node')?.name
 
+/// Which icon a member gets. Filled in where the provider is registered,
+/// because `monaco` is what defines the constants.
+let KIND_OF_MEMBER: Record<string, Monaco.languages.CompletionItemKind> = {}
+
 /// Where something drawn may be written: under a node, in a screen's body, in a
 /// component's, or in an `if`/`else` branch.
 const draws = (b: Block | undefined): boolean =>
     b !== undefined && (b.kind === 'node' || b.kind === 'screen' || b.kind === 'component' || b.kind === 'tree')
 
 export function registerCompletion(monaco: typeof Monaco, declared: () => Declared) {
+  const K = monaco.languages.CompletionItemKind
+  KIND_OF_MEMBER = {
+    claim: K.Field,
+    field: K.Field,
+    state: K.Variable,
+    member: K.EnumMember,
+    face: K.Interface,
+    combinator: K.Method,
+    context: K.Constant,
+  }
+
   monaco.languages.registerCompletionItemProvider('val', {
     triggerCharacters: [' ', ':', '.', '@'],
 
@@ -111,9 +126,24 @@ export function registerCompletion(monaco: typeof Monaco, declared: () => Declar
         range,
       })
 
+      const source = model.getValue()
+
+      // After a dot, the only thing that may be written is a member of what is
+      // before it, and the typechecker is what knows that. Answered first and
+      // returned unconditionally — a fallback to the keywords here is how
+      // `state.` came to offer `action`, `anchor`, `app`.
+      if (/[\w.)\]]\.\w*$/.test(prefix)) {
+        const found = members(source, position.lineNumber, position.column)
+        return {
+          suggestions: found.map((m) =>
+            item(m.name, KIND_OF_MEMBER[m.what] ?? Kind.Field, m.type),
+          ),
+        }
+      }
+
       // The parser's answer to where the cursor is. It parses the file as it
       // stands, half-written blocks and all.
-      const path = context(model.getValue(), position.lineNumber, position.column)
+      const path = context(source, position.lineNumber, position.column)
       const here = innermost(path)
 
       // `credentials of ‹type›` and `verified with ‹policy›`, which name things

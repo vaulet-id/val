@@ -223,6 +223,35 @@ pub extern "C" fn val_context(ptr: *const u8, len: usize) -> *mut u8 {
     write(json!({ "path": path }).to_string())
 }
 
+/// What may be written after a dot at a position.
+///
+/// **The typechecker's answer.** An editor working this out for itself is a
+/// second implementation of what a name means: after `state.` it offered every
+/// keyword in the language, and after `checked.claims.` it would have offered
+/// them too — where the right answer is the credential's claims and where being
+/// wrong teaches the opposite of the rule the language is built on.
+#[no_mangle]
+pub extern "C" fn val_members(ptr: *const u8, len: usize) -> *mut u8 {
+    let input: Json = serde_json::from_str(&read(ptr, len)).unwrap_or(Json::Null);
+    let source = input["source"].as_str().unwrap_or("");
+    let line = input["line"].as_u64().unwrap_or(0) as u32;
+    let column = input["column"].as_u64().unwrap_or(0) as u32;
+
+    let hosts = hosts(&input["hosts"]);
+    let (program, _) = valang::parse::parse(source);
+    let members = valang::typeck::members_at(&program, &hosts, source, line, column);
+
+    write(
+        json!({
+            "members": members
+                .iter()
+                .map(|m| json!({ "name": m.name, "type": m.ty, "what": m.what }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string(),
+    )
+}
+
 #[no_mangle]
 pub extern "C" fn val_words(_ptr: *const u8, _len: usize) -> *mut u8 {
     write(

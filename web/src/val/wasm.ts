@@ -128,6 +128,25 @@ export function context(source: string, line: number, column: number): Block[] {
   return (call('val_context', { source, line, column }) as { path: Block[] }).path
 }
 
+/// One thing that may be written after a dot.
+export type Member = {
+  name: string
+  /// The type, as somebody would write it.
+  type: string
+  /// `claim`, `field`, `member`, `face`, `combinator`, `state`, `context`.
+  what: string
+}
+
+/// What may be written after the dot before the cursor — the typechecker's
+/// answer, not the editor's guess. Empty when the cursor is not after a dot, or
+/// when what is before it has no members: a held credential has none until it
+/// has been through `verify`, and offering some would teach the opposite of the
+/// rule the language is built on.
+export function members(source: string, line: number, column: number): Member[] {
+  return (call('val_members', { source, line, column, hosts: HOSTS }) as { members: Member[] })
+    .members
+}
+
 export type RunResult = {
   action?: string
   wouldNotBuild?: string[]
@@ -160,6 +179,7 @@ type Exports = {
   val_analyse: (ptr: number, len: number) => number
   val_words: (ptr: number, len: number) => number
   val_context: (ptr: number, len: number) => number
+  val_members: (ptr: number, len: number) => number
   val_screen: (ptr: number, len: number) => number
   val_render: (ptr: number, len: number) => number
   val_verify: (ptr: number, len: number) => number
@@ -185,7 +205,8 @@ function call(
     | 'val_run'
     | 'val_verify'
     | 'val_words'
-    | 'val_context',
+    | 'val_context'
+    | 'val_members',
   input: unknown,
 ): unknown {
   if (!wasm) throw new Error('the compiler is not loaded')

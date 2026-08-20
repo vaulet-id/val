@@ -114,6 +114,14 @@ screen Home {
 [screen Home] [node column] [node button]
 ```
 
+The other half of the question is what may be written *after a dot*, and that is
+a question about types rather than about blocks — so the typechecker answers it,
+with `members_at`. It is the same table the checker enforces, which matters most
+where the rule is strictest: `checked.claims.` offers the credential's claims,
+and `receipt.` — held, not verified — offers nothing at all, because there is
+nothing reachable there. An editor that answered from its own idea of what a
+credential has would teach the opposite of the rule the language is built on.
+
 **A block the file ends inside runs to the end of the file**, which is what
 makes the answer usable while somebody is typing: closing it at the last token
 read would put the cursor outside every block at the one moment an editor most
