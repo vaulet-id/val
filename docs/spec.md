@@ -560,6 +560,16 @@ card(text: phrase("You have {points} points", points: state.member.points))
 `phrase` carries the values; the host formats numbers, dates and currency for
 the language it is running in.
 
+A phrase's values sit beside the node's own arguments, so they share one set of
+names: a slot called `color` on a node that has a `color` is refused, and so are
+two phrases on one node that both say `{n}`. Every prop the registry says holds
+a sentence is checked, not the one called `text`.
+
+A key the bundle holds and nothing reads is said rather than refused. An unused
+capability is consent somebody gave for nothing; an unread sentence is one
+somebody translated for nothing, which is worth knowing and not worth stopping
+for.
+
 A second language turns those words into keys:
 
 ```json

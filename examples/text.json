@@ -21,22 +21,6 @@
       "en": "{merchant} · {at}",
       "th": "{merchant} · {at}"
     },
-    "portfolioTotal": {
-      "en": "Total value {value} ({change})",
-      "th": "มูลค่ารวม {value} ({change})"
-    },
-    "holdings": {
-      "en": "Holdings",
-      "th": "ถือครอง"
-    },
-    "holdingLine": {
-      "en": "{symbol} · {quantity} · {value}",
-      "th": "{symbol} · {quantity} · {value}"
-    },
-    "proveAccredited": {
-      "en": "Prove accreditation",
-      "th": "พิสูจน์คุณสมบัติผู้ลงทุน"
-    },
     "tooSmallToEarn": {
       "en": "Purchases under ฿20 do not earn points",
       "th": "ยอดต่ำกว่า 20 บาท ยังไม่ได้แต้ม"

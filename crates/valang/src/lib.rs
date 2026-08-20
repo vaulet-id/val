@@ -84,7 +84,7 @@ pub fn analyse_with_packages(
     diagnostics.extend(check::check(&program));
     diagnostics.extend(typeck::check_types_against(&program, hosts));
     if let Some((bundle, locales)) = bundle {
-        diagnostics.extend(check::check_bundle(&program, bundle, locales));
+        diagnostics.extend(check::check_bundle(&program, bundle, locales, hosts));
     }
     diagnostics.sort_by_key(|d| (d.span.line, d.span.col));
     // The same sentence twice on one line is noise, and noise is how the one

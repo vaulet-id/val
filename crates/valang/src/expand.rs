@@ -417,6 +417,20 @@ fn open_phrases(node: UiNode, d: &mut Vec<Diagnostic>) -> UiNode {
         }
     }
 
+    // Once every phrase is flattened, the node's arguments are one list and a
+    // name in it twice is one of them holding the other's value. Checked here
+    // rather than while flattening, because a prop written after the phrase had
+    // not arrived yet.
+    for (i, a) in args.iter().enumerate() {
+        let Some(name) = &a.name else { continue };
+        if args[..i].iter().any(|x| x.name.as_deref() == Some(name.as_str())) {
+            d.push(Diagnostic::error(
+                a.span,
+                format!("two things on this node are called `{name}`. A phrase's values sit beside the node's own, so they cannot share a name"),
+            ));
+        }
+    }
+
     UiNode {
         args,
         slots,

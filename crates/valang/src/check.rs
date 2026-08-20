@@ -353,6 +353,7 @@ pub fn check_bundle(
     p: &Program,
     bundle: &crate::TextBundle,
     locales: &[String],
+    hosts: &crate::capability::Hosts,
 ) -> Vec<Diagnostic> {
     let mut d = Vec::new();
     let mut want: Vec<(String, crate::diag::Span, &'static str)> = Vec::new();
@@ -371,8 +372,27 @@ pub fn check_bundle(
     for s in &p.screens {
         for n in s.title.iter().chain(s.tree.iter()) {
             walk_ui(n, &mut |node| {
+                let common = hosts.common();
                 for a in &node.args {
-                    let is_text = a.name.as_deref() == Some("text") || (a.name.is_none() && node.kind == "tab");
+                    // Every prop the registry says holds a sentence, not the
+                    // one called `text`. A key written in `detail:` was checked
+                    // in no language at all, because only one name was ever
+                    // looked at.
+                    let declared = a.name.as_ref().and_then(|name| {
+                        hosts
+                            .find(&node.kind)
+                            .and_then(|(_, cap)| cap.props.get(name).cloned())
+                            .or_else(|| common.get(name).cloned())
+                    });
+                    let is_text = match &declared {
+                        Some(ty) => ty.trim_end_matches('?') == "Text",
+                        // Without a registry to ask — `analyse` on its own —
+                        // the name is all there is to go on.
+                        None => {
+                            a.name.as_deref() == Some("text")
+                                || (a.name.is_none() && node.kind == "tab")
+                        }
+                    };
                     if !is_text {
                         continue;
                     }
@@ -423,6 +443,11 @@ pub fn check_bundle(
     // and that is where the error appears.
     let translated = locales.len() > 1;
 
+    // Everything the code reads, so that what the bundle holds and nothing
+    // reads can be named. A package is signed whole: a key nobody reads is a
+    // sentence somebody will translate, pay for, and never see.
+    let read: std::collections::HashSet<String> = want.iter().map(|(k, _, _)| k.clone()).collect();
+
     for (key, span, what) in want {
         let Some(entry) = bundle.get(&key) else {
             if translated {
@@ -448,6 +473,24 @@ pub fn check_bundle(
             }
         }
     }
+    // Said rather than refused. An unused capability is consent somebody gave
+    // for nothing, which is why that one fails a build; an unread key is waste,
+    // and a package may carry sentences its webview tier reads or its next
+    // screen will. Worth knowing, not worth stopping for.
+    //
+    // Only where a package promises more than one language: in one, the words
+    // on the screen are the words and the bundle is optional.
+    if translated {
+        for key in bundle.keys() {
+            if !read.contains(key) {
+                d.push(Diagnostic::warning(
+                    crate::diag::Span { line: 0, col: 0, len: 0 },
+                    format!("`{key}` is in the text bundle and nothing reads it. Somebody translated a sentence nobody sees"),
+                ));
+            }
+        }
+    }
+
     d
 }
 
