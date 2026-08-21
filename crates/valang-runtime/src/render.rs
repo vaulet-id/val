@@ -120,11 +120,23 @@ pub fn render_with(
                 )
             }
             DataSource::Query { audience } => {
-                let rows = host.query(audience, audience);
+                // **Who is asked is the audience in the manifest**, not the
+                // head of the call — `broker.quotes` is an operation on
+                // `broker.co.th`, and this was the one pass that did not ask
+                // `audience_for`. It asked the host for `broker.quotes`, the
+                // host holds answers under the audience, and the empty list
+                // that came back was indistinguishable from an answer.
+                let who = program.audience_for(audience);
+                // A screen declares its data and the host answers before
+                // anything is drawn, so a host that cannot reach this audience
+                // refuses the screen here rather than drawing an empty list.
+                let Some(rows) = host.query(&who, audience) else {
+                    return Err(Trap::Unsupported(format!("this host cannot ask {who} anything")));
+                };
                 let n = rows.len();
                 (
                     Value::List(rows),
-                    Resolved { name: d.name.clone(), grade: "origin", of: audience.clone(), policy: None, rows: n },
+                    Resolved { name: d.name.clone(), grade: "origin", of: who, policy: None, rows: n },
                 )
             }
             DataSource::Unknown => (Value::Null, Resolved { name: d.name.clone(), grade: "unverified", of: String::new(), policy: None, rows: 0 }),

@@ -227,10 +227,16 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
                     answers.insert(format!("{CAPS}/{name}"), answer);
                 }
                 Some(Cap::Query(audience)) => {
-                    answers.insert(
-                        format!("{CAPS}/{name}"),
-                        Ok(Value::List(host.query(&audience, ""))),
-                    );
+                    // Nothing to answer with is not an empty answer. A host
+                    // that cannot reach this audience traps at the line, the
+                    // same as one asked for a credential nobody holds.
+                    let answered = match host.query(&audience, "") {
+                        Some(rows) => Ok(Value::List(rows)),
+                        None => Err(Trap::Unsupported(format!(
+                            "this wallet cannot ask {audience} anything"
+                        ))),
+                    };
+                    answers.insert(format!("{CAPS}/{name}"), answered);
                 }
                 _ => {}
             },

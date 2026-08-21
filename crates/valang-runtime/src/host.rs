@@ -110,10 +110,21 @@ pub trait Host {
         Vec::new()
     }
 
-    /// A query answer. The host performed the presentation and holds the token;
-    /// the application never sees it, and never learns why a query failed.
-    fn query(&self, _audience: &str, _operation: &str) -> Vec<Value> {
-        Vec::new()
+    /// What an audience answered, or **nothing when this host cannot ask it**.
+    ///
+    /// The host performed the presentation and holds the token; the application
+    /// never sees it, and never learns why a query failed.
+    ///
+    /// The two are not the same and the difference is the whole reason this
+    /// returns an `Option`. A broker with no quotes today is an empty list and
+    /// a screen that draws no rows; a host with no way to reach that broker at
+    /// all is a screen that must not be drawn, because an empty list there
+    /// reads as "you hold nothing" — which is a sentence nobody said.
+    ///
+    /// `None` traps at the line that asked, the same as a credential the person
+    /// does not hold.
+    fn query(&self, _audience: &str, _operation: &str) -> Option<Vec<Value>> {
+        None
     }
 
     /// Sign the execution record. The key stays here: the evaluator has no

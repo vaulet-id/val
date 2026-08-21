@@ -85,3 +85,85 @@ fn the_two_draw_every_screen_of_every_example() {
     }
     assert!(drew >= 5, "only {drew} screens were compared, which is fewer than these examples carry");
 }
+
+/// **An audience this host cannot ask is not an audience that answered
+/// nothing**, and the screen is refused rather than drawn empty.
+///
+/// It used to be drawn: `query` answered with a list, a host with no way to
+/// reach anybody answered with an empty one, and a person looking at
+/// "holdings: none" could not tell that from a broker who had not been asked.
+#[test]
+fn a_screen_whose_query_cannot_be_asked_is_not_drawn() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  api.query(audience: "broker.co.th")
+}
+
+state { n: int default 0 }
+
+@main
+screen Home {
+  data {
+    quotes: query broker.quotes
+  }
+
+  column {
+    list(quotes) { q -> tile(text: "row") }
+  }
+}
+"#;
+    let (program, diagnostics) = valang::analyse_fully(src, None, &registries());
+    let errors: Vec<String> = diagnostics
+        .iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.to_string())
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+
+    // A wallet holding nothing and able to ask nobody. The default `query`
+    // answers `None`, which is what every host that has not implemented one
+    // does — this one included, until it does.
+    struct Silent;
+    impl valang_runtime::host::Host for Silent {
+        fn context(&self) -> valang_runtime::host::Context {
+            valang_runtime::host::Context { time_now: 0, random_uuid: String::new() }
+        }
+        fn credential(
+            &self,
+            _ty: &str,
+            _policy: Option<&str>,
+        ) -> Option<std::collections::BTreeMap<String, valang_runtime::value::Value>> {
+            None
+        }
+        fn decide(
+            &self,
+            _effects: &[valang_runtime::host::EffectRequest],
+        ) -> valang_runtime::host::Verdict {
+            valang_runtime::host::Verdict::Approved
+        }
+        fn sign(&self, _bytes: &[u8]) -> Vec<u8> {
+            Vec::new()
+        }
+        fn device_key(&self) -> Vec<u8> {
+            Vec::new()
+        }
+    }
+
+    let walked = valang_runtime::render::render_with(
+        &program,
+        "Home",
+        &Default::default(),
+        &Default::default(),
+        &Silent,
+    );
+    assert!(walked.is_err(), "a screen nobody could answer was drawn anyway");
+
+    let module = valang_wasm::compile::compile_program(&program).expect("it compiles");
+    let mut engine = valang_wasm::WasmEngine::new(&module);
+    let about = valang_wasm::compile::about_of(&module.bytes).expect("about");
+    let ran = engine.screen("Home", &about, &Default::default(), &Silent);
+    assert!(ran.is_err(), "and the other engine drew it: {ran:?}");
+}

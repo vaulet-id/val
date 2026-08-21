@@ -106,11 +106,14 @@ impl Host for Fixture {
         rows
     }
 
-    fn query(&self, audience: &str, _operation: &str) -> Vec<Value> {
+    /// An audience this file has no entry for is one this host cannot ask —
+    /// not one that answered with nothing. A fixture that flattened the two
+    /// would be a fixture where a screen drawing an empty list looks the same
+    /// as a screen that should not have been drawn.
+    fn query(&self, audience: &str, _operation: &str) -> Option<Vec<Value>> {
         self.json["queries"][audience]
             .as_array()
             .map(|rows| rows.iter().map(convert).collect())
-            .unwrap_or_default()
     }
 
     fn decide(&self, _effects: &[EffectRequest]) -> Verdict {

@@ -1096,6 +1096,17 @@ x exists                         // narrowing, in require
 value from { Policy }            // provenance, on an issued claim
 ```
 
+An audience a host cannot reach is **not** an audience that answered nothing:
+the screen is refused rather than drawn, because an empty list where a person
+expected their holdings reads as "you hold nothing", which is a sentence nobody
+said.
+
+**Known and not fixed:** the operation does not survive into the module. `query
+broker.quotes` and `query broker.orders` compile to one import — the audience —
+so a module-running host is told who to ask and not what for. The report is
+right either way, since what it names is the party who sees this. A host walking
+the source has both.
+
 ### Screen data
 
 ```val
