@@ -25,10 +25,6 @@ fn registries() -> valang::capability::Hosts {
 struct Wallet;
 
 impl HostPolicy for Wallet {
-    fn registries(&self) -> valang::capability::Hosts {
-        registries()
-    }
-
     /// Standing in for a wallet that resolves `did:web` — it fetches the
     /// document, finds the key, and says so. There is no network in a test, so
     /// this says yes; what it is standing in for is the point.
@@ -181,9 +177,6 @@ fn a_package_signed_by_somebody_else_is_refused() {
 fn a_key_that_is_not_the_publishers_is_refused() {
     struct Strict;
     impl HostPolicy for Strict {
-        fn registries(&self) -> valang::capability::Hosts {
-            registries()
-        }
         fn owns_key(&self, _publisher: &str, _key: &[u8]) -> bool {
             false
         }
@@ -208,9 +201,6 @@ fn a_key_that_is_not_the_publishers_is_refused() {
 fn a_module_larger_than_this_host_reads_is_refused() {
     struct Small;
     impl HostPolicy for Small {
-        fn registries(&self) -> valang::capability::Hosts {
-            registries()
-        }
         fn largest_module(&self) -> usize {
             16
         }
@@ -251,9 +241,6 @@ fn a_report_that_understates_is_refused() {
 fn a_did_key_publisher_answers_for_itself() {
     struct Default_;
     impl HostPolicy for Default_ {
-        fn registries(&self) -> valang::capability::Hosts {
-            registries()
-        }
     }
 
     let key = keygen();
@@ -280,9 +267,6 @@ fn a_did_key_publisher_answers_for_itself() {
 fn a_publisher_that_must_be_looked_up_is_refused_by_default() {
     struct Default_;
     impl HostPolicy for Default_ {
-        fn registries(&self) -> valang::capability::Hosts {
-            registries()
-        }
     }
 
     let key = keygen();

@@ -152,9 +152,6 @@ fn the_same_package_is_the_same_bytes() {
 struct Vaulet;
 
 impl HostPolicy for Vaulet {
-    fn registries(&self) -> valang::capability::Hosts {
-        registries()
-    }
 
     fn allows(&self, kind: &str, capability: &str) -> bool {
         if kind != "webview" {

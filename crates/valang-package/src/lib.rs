@@ -58,11 +58,6 @@ pub trait HostPolicy {
         kind == "val"
     }
 
-    /// What this host draws with. A package is built against it, and a package
-    /// built against somebody else's catalogue has been checked against
-    /// nothing.
-    fn registries(&self) -> valang::capability::Hosts;
-
     /// Whether this key really belongs to the publisher the manifest names.
     ///
     /// **`did:key` answers itself** — the name *is* the key, so `owns_key` is a
@@ -104,15 +99,11 @@ pub trait HostPolicy {
 /// answers the questions that are the language's, and a host that has no policy
 /// yet is not silently given one.
 ///
-/// Its registry is empty, which means a screen is checked against no catalogue.
-/// That is a real answer rather than an oversight: a host with nothing to draw
-/// with admits nothing worth drawing.
+/// It admits every kind and every catalogue, and — like every host — refuses a
+/// publisher whose name has to be looked up, because looking one up is I/O and
+/// this crate does none.
 pub struct Permissive;
-impl HostPolicy for Permissive {
-    fn registries(&self) -> valang::capability::Hosts {
-        Default::default()
-    }
-}
+impl HostPolicy for Permissive {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
