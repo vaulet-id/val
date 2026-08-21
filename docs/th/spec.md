@@ -924,12 +924,17 @@ receipts.fold(0, add)
 ```val
 credential.issue(Type { … })
 payment.request(to: …, amount: …)
-storage.write(scope: …, id: …, value: …)
-message.send(to: …)
-network.request(…)
 present { disclose … / prove … }
-navigate Screen
 ```
+
+`navigate Screen` เขียนตรงที่มีการกด ไม่ใช่ใน `execute` — มันคือ
+`navigation.navigate` ในทะเบียนของ host และการย้ายหน้าจอไม่ใช่สิ่งที่ batch จะค้าง
+อยู่กลางทางได้
+
+**ยังไม่ถูก emit** และแพ็กเกจที่ใช้จะ build ไม่ผ่าน แทนที่จะ build ผ่านโดยไม่มีมัน:
+`storage.write`, `message.send`, `network.request` ทั้งสามอยู่ในทะเบียนของ host และ
+front end รับ แต่ back end ฝั่ง Wasm ปฏิเสธพร้อมบอกว่าตัวไหน — effect ที่ back end
+เงียบๆ ทิ้งไป คือบรรทัดที่หายไปจาก import section ซึ่งคือรายงานที่พูดน้อยกว่าความจริง
 
 ### นิพจน์
 

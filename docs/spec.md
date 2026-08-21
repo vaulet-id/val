@@ -1058,12 +1058,18 @@ Only in `execute`, never behind a function, offered as one batch.
 ```val
 credential.issue(Type { … })
 payment.request(to: …, amount: …)
-storage.write(scope: …, id: …, value: …)
-message.send(to: …)
-network.request(…)
 present { disclose … / prove … }
-navigate Screen
 ```
+
+`navigate Screen` is written where a press is, not in `execute` — it is a
+`navigation.navigate` in the host's registry and moving between screens is not
+something a batch can be half-way through.
+
+**Not emitted yet**, and a package using one does not build rather than building
+without it: `storage.write`, `message.send`, `network.request`. They are in the
+host registry and the front end accepts them; the Wasm back end refuses, and
+says which — an effect a back end silently dropped would be a line missing from
+the import section, which is a report that understates.
 
 ### Expressions
 
