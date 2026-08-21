@@ -45,8 +45,11 @@ impl<'a> Wasm<'a> {
 /// Everything the imports read and write while the module runs.
 struct Run {
     values: Shared,
-    /// What the host answered before anything ran, by import name.
-    answers: BTreeMap<String, Value>,
+    /// What the host answered before anything ran, by import name — or why it
+    /// could not. A credential the host does not hold is a failure at the line
+    /// that reads it and not before: a module may import a capability it never
+    /// exercises, and refusing up front would stop an action that never asked.
+    answers: BTreeMap<String, Result<Value, Trap>>,
     /// The state the action started from, and the one it is building.
     state: State,
     next: State,
@@ -96,12 +99,12 @@ fn put(map: &mut State, path: &str, value: Value) {
 /// `read:PurchaseReceipt.amount` is one of its claims. Both come from the same
 /// answer, so the host is asked once per credential however many claims are
 /// read off it.
-fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Context, host: &dyn Host, module: &[u8]) -> Result<BTreeMap<String, Value>, String> {
+fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Context, host: &dyn Host, module: &[u8]) -> Result<BTreeMap<String, Result<Value, Trap>>, String> {
     let engine = wasmi::Engine::default();
     let parsed = wasmi::Module::new(&engine, module).map_err(|e| e.to_string())?;
 
-    let mut answers: BTreeMap<String, Value> = BTreeMap::new();
-    let mut credentials: BTreeMap<String, BTreeMap<String, Value>> = BTreeMap::new();
+    let mut answers: BTreeMap<String, Result<Value, Trap>> = BTreeMap::new();
+    let mut credentials: BTreeMap<String, Option<BTreeMap<String, Value>>> = BTreeMap::new();
 
     for import in parsed.imports() {
         let name = import.name().to_string();
@@ -116,34 +119,43 @@ fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Cont
                             None => (line.split('.').next().unwrap_or(&line).to_string(), None),
                         },
                     };
-                    let claims = match credentials.get(&ty) {
+                    let held = match credentials.get(&ty) {
                         Some(c) => c.clone(),
                         None => {
-                            let policy = policy.clone().or_else(|| {
+                            let asked = policy.clone().or_else(|| {
                                 program.trusts.iter().find(|t| t.subject_type == ty).map(|t| t.name.clone())
                             });
-                            let c = host.credential(&ty, policy.as_deref()).unwrap_or_default();
+                            let c = host.credential(&ty, asked.as_deref());
                             credentials.insert(ty.clone(), c.clone());
                             c
                         }
                     };
-                    let value = match line.split_once('.') {
-                        // A claim, when the line names one and not a policy.
-                        Some((_, claim)) if !line.contains(' ') => {
-                            claims.get(claim).cloned().unwrap_or(Value::Null)
-                        }
-                        _ => Value::Credential {
-                            ty: ty.clone(),
-                            claims: claims.clone(),
-                            verified: policy.clone(),
-                        },
+                    let answer = match held {
+                        // The same sentence the evaluator gives, because it is
+                        // the same thing that happened: the host was asked for
+                        // a credential under this policy and had none.
+                        None => Err(Trap::Failed(format!(
+                            "nothing satisfied `{}`",
+                            policy.clone().unwrap_or_else(|| ty.clone())
+                        ))),
+                        Some(claims) => Ok(match line.split_once('.') {
+                            // A claim, when the line names one and not a policy.
+                            Some((_, claim)) if !line.contains(' ') => {
+                                claims.get(claim).cloned().unwrap_or(Value::Null)
+                            }
+                            _ => Value::Credential {
+                                ty: ty.clone(),
+                                claims: claims.clone(),
+                                verified: policy.clone(),
+                            },
+                        }),
                     };
-                    answers.insert(format!("{CAPS}/{name}"), value);
+                    answers.insert(format!("{CAPS}/{name}"), answer);
                 }
                 Some(Cap::Query(audience)) => {
                     answers.insert(
                         format!("{CAPS}/{name}"),
-                        Value::List(host.query(&audience, "")),
+                        Ok(Value::List(host.query(&audience, ""))),
                     );
                 }
                 _ => {}
@@ -156,7 +168,7 @@ fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Cont
                         Some(v) => v.clone(),
                         None => credential_for(program, action, &binding, host).unwrap_or(Value::Null),
                     };
-                    answers.insert(format!("{OPS}/{name}"), value);
+                    answers.insert(format!("{OPS}/{name}"), Ok(value));
                 }
                 Some(Op::Context(what)) => {
                     let value = match what.as_str() {
@@ -164,7 +176,7 @@ fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Cont
                         "uuid" | "random.uuid" => Value::Str(context.random_uuid.clone()),
                         _ => Value::Null,
                     };
-                    answers.insert(format!("{OPS}/{name}"), value);
+                    answers.insert(format!("{OPS}/{name}"), Ok(value));
                 }
                 _ => {}
             },
@@ -290,11 +302,7 @@ fn define_host(
                 // The state `update` produced, read live: `execute` reads what
                 // was just written, not what the action started with.
                 Op::Next(path) => answer(store, linker, &ns, &name, move |run| at(&run.next, &path))?,
-                Op::Input(_) | Op::Context(_) => {
-                    answer(store, linker, &ns, &name, move |run| {
-                        run.answers.get(&key).cloned().unwrap_or(Value::Null)
-                    })?
-                }
+                Op::Input(_) | Op::Context(_) => answers_with(store, linker, &ns, &name, key)?,
                 // `builtin:duration:days` — the name, and the unit when the
                 // language writes one as an argument name.
                 Op::Builtin(what) => {
@@ -323,11 +331,7 @@ fn define_host(
             return Err(format!("`{name}` is not a capability this host knows"));
         };
         match cap {
-            Cap::Read(_) | Cap::Query(_) => {
-                answer(store, linker, &ns, &name, move |run| {
-                    run.answers.get(&key).cloned().unwrap_or(Value::Null)
-                })?
-            }
+            Cap::Read(_) | Cap::Query(_) => answers_with(store, linker, &ns, &name, key)?,
             Cap::Write(path) => takes(store, linker, &ns, &name, move |run, v| {
                 put(&mut run.next, &path, v.clone());
                 v
@@ -393,6 +397,40 @@ fn answer(
         let h = values.borrow_mut().put(value);
         h
     });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// An import whose value the host settled before anything ran — and which stops
+/// the action when the host had nothing to settle it with.
+fn answers_with(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    key: String,
+) -> Result<(), String> {
+    let func =
+        Func::wrap(&mut *store, move |caller: Caller<'_, Shell>| -> Result<i32, wasmi::Error> {
+            let shell = caller.data().clone();
+            let answer = shell.borrow().answers.get(&key).cloned();
+            match answer {
+                Some(Ok(v)) => {
+                    let values = shell.borrow().values.clone();
+                    let h = values.borrow_mut().put(v);
+                    Ok(h)
+                }
+                Some(Err(trap)) => {
+                    shell.borrow_mut().stopped = Some(trap);
+                    Err(wasmi::Error::new("the action stopped"))
+                }
+                None => {
+                    let values = shell.borrow().values.clone();
+                    let h = values.borrow_mut().put(Value::Null);
+                    Ok(h)
+                }
+            }
+        });
     linker.define(ns, name, func).map_err(|e| e.to_string())?;
     Ok(())
 }

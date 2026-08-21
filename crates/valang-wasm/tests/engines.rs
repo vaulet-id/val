@@ -75,3 +75,93 @@ fn the_two_engines_agree_about_a_disclosure() {
     agree(&walked, &ran, "EnterVenue");
     assert_eq!(ran.effects.len(), 1, "one `present` is one request: {:?}", ran.effects);
 }
+
+/// Every action of every example, which is the only version of this test worth
+/// having: two engines agreeing about one program says little, and the shapes
+/// that break are the ones nobody thought to write a case for.
+#[test]
+fn the_two_engines_agree_about_every_example() {
+    let examples: [(&str, &str); 9] = [
+        ("loyalty", include_str!("../../../examples/loyalty.val")),
+        ("door", include_str!("../../../examples/door.val")),
+        ("condo", include_str!("../../../examples/condo.val")),
+        ("transit", include_str!("../../../examples/transit.val")),
+        ("portfolio", include_str!("../../../examples/portfolio.val")),
+        ("referendum", include_str!("../../../examples/referendum.val")),
+        ("note", include_str!("../../../examples/note.val")),
+        ("catalogue", include_str!("../../../examples/catalogue.val")),
+        ("syntax", include_str!("../../../examples/syntax.val")),
+    ];
+
+    let mut ran_any = false;
+    for (name, src) in examples {
+        let (program, diagnostics) = valang::analyse_fully(src, None, &registries());
+        assert!(
+            !diagnostics.iter().any(|d| d.severity == valang::Severity::Error),
+            "{name} does not compile"
+        );
+        for action in &program.actions {
+            let (walked, ran) = both(src, &action.name);
+            agree(&walked, &ran, &format!("{name}.{}", action.name));
+            ran_any = true;
+        }
+    }
+    assert!(ran_any, "no example carried an action, so this compared nothing");
+}
+
+/// The path that is not a commit. An application declining for its own reasons
+/// is an ordinary outcome, and the record has to say the same thing whichever
+/// engine produced it — including which key in the signed bundle the person is
+/// told from.
+#[test]
+fn the_two_engines_agree_about_a_refusal() {
+    const REFUSING: &str = r#"app "x.y"
+version 1
+
+capabilities {
+  credential.read(PurchaseReceipt)
+}
+
+credential PurchaseReceipt {
+  amount: int
+}
+
+trust P(r: PurchaseReceipt) {
+  anchor: "shop.example.com"
+  require {
+    r.signature.valid
+  }
+}
+
+state {
+  points: int default 0
+}
+
+action Earn {
+  input {
+    r: Credential<PurchaseReceipt>
+  }
+
+  verify {
+    const checked = r with P
+  }
+
+  compute {
+    if (checked.claims.amount < 1000000) {
+      refuse "tooSmallToEarn"
+    }
+  }
+
+  update {
+    points: 1
+  }
+}
+"#;
+    let (walked, ran) = both(REFUSING, "Earn");
+    agree(&walked, &ran, "a refusal");
+    assert!(
+        matches!(&ran.outcome, valang_runtime::Outcome::Declined(k) if k == "tooSmallToEarn"),
+        "the module did not decline in the application's own words: {:?}",
+        ran.outcome
+    );
+}
