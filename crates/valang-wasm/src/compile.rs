@@ -380,6 +380,11 @@ pub const KONST_SECTION: &str = "val.konsts";
 /// file.
 pub const ABOUT_SECTION: &str = "val.about";
 
+/// Which compiler emits these modules. It travels with them, because rebuilding
+/// a source with a different front end and getting different bytes proves
+/// nothing about either.
+pub const COMPILER: &str = concat!("valang ", env!("CARGO_PKG_VERSION"));
+
 /// The metadata, in the same canonical encoding as everything else this project
 /// hashes — so two builds of one source are one module here as well.
 fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
@@ -399,6 +404,10 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
     m.insert("addresses".to_string(), strings(&a.addresses));
     m.insert("exports".to_string(), strings(&a.exports));
     m.insert("imports".to_string(), strings(&a.imports));
+    // Which compiler built it. Two front ends can read one source differently —
+    // that is what a compiler is — so a module that did not say could not be
+    // rebuilt and compared by anybody.
+    m.insert("compiler".to_string(), Value::Str(COMPILER.to_string()));
     m.insert(
         "actions".to_string(),
         Value::List(
@@ -434,6 +443,54 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
         ),
     );
     DeterministicCbor.encode(&Value::Map(m))
+}
+
+/// Whether this module is what that source builds.
+///
+/// **The check that ties bytes nobody compiled to a source somebody
+/// published.** A wallet cannot make it — it has no compiler, which is the
+/// point — so it is made by whoever can: the publisher's own release pipeline,
+/// an auditor, a customer given both. Rebuilding and comparing is the whole of
+/// it, which is why the compiler that built it travels inside it.
+pub fn reproduces(
+    source: &str,
+    bundle: Option<(&valang::TextBundle, &[String])>,
+    hosts: &valang::capability::Hosts,
+    module: &[u8],
+) -> Result<(), String> {
+    let stated = about_of(module).ok_or("this is not a module this build can read")?;
+    if stated.compiler != COMPILER {
+        return Err(format!(
+            "built by `{}` and this is `{COMPILER}` — rebuild it with the one that made it",
+            stated.compiler
+        ));
+    }
+    let (program, diagnostics) = valang::analyse_fully(source, bundle, hosts);
+    let errors: Vec<String> = diagnostics
+        .iter()
+        .filter(|d| d.severity == valang::Severity::Error)
+        .map(|d| d.to_string())
+        .collect();
+    if !errors.is_empty() {
+        return Err(format!("that source does not compile: {}", errors.join("; ")));
+    }
+    let built = compile_program(&program).map_err(|missing| missing.join("; "))?;
+    if built.bytes != module {
+        // Hashes, not lengths. Two different modules are very often the same
+        // size — the first edit tried against this was one digit — and a
+        // message comparing lengths reads as though nothing were wrong.
+        let short = |b: &[u8]| {
+            use sha2::Digest;
+            let h: [u8; 32] = sha2::Sha256::digest(b).into();
+            h.iter().take(6).map(|x| format!("{x:02x}")).collect::<String>()
+        };
+        return Err(format!(
+            "that source builds {} and this module is {}",
+            short(&built.bytes),
+            short(module)
+        ));
+    }
+    Ok(())
 }
 
 /// The whole consent sheet, from the bytes a wallet was handed.
@@ -535,6 +592,7 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
         _ => Default::default(),
     };
     Some(About {
+        compiler: text(m.get("compiler")),
         state,
         fields: strings(m.get("fields")),
         hosts: strings(m.get("hosts")),
@@ -989,6 +1047,35 @@ fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
             };
             emit_first(ctx, first, f);
             ctx.call_cap(&crate::abi::Cap::Issue(ty), f);
+        }
+        // **The amount is not in the report, and that is deliberate.** It is
+        // computed, so naming it on a sheet somebody signs at install would
+        // name a number that can differ from the one the host is handed. What
+        // the sheet says is who the money goes to, which is written out; the
+        // amount is shown by the host at the moment, from the request itself,
+        // in a sheet the application cannot draw.
+        "payment.request" => {
+            let to = args.iter().find(|a| a.name.as_deref() == Some("to"));
+            let said = match to.map(|a| &a.value) {
+                Some(Expr::Str { value, .. }) => value.clone(),
+                _ => {
+                    ctx.unsupported.push(
+                        "a payment whose recipient is computed, which cannot be named before it runs"
+                            .to_string(),
+                    );
+                    "—".to_string()
+                }
+            };
+            // The request itself: every argument, named, as the host receives
+            // it — the recipient included, so the host is never reading it out
+            // of an import name.
+            ctx.push_konst(Konst::EmptyRecord, f);
+            for a in args {
+                ctx.push_konst(Konst::Str(a.name.clone().unwrap_or_default()), f);
+                emit(ctx, &a.value, f);
+                ctx.call_op("set", f);
+            }
+            ctx.call_cap(&crate::abi::Cap::Pay(said), f);
         }
         other => {
             // Loud rather than wrong. An effect this back end does not emit is

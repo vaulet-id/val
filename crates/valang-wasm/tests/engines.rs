@@ -178,3 +178,70 @@ action Earn {
         ran.outcome
     );
 }
+
+/// Money, which is the one effect where what the sheet says and what the host
+/// is handed are deliberately different things: the sheet names the recipient,
+/// and the amount travels in the request for the host to show at the moment.
+/// The two engines still have to agree about the request itself.
+#[test]
+fn the_two_engines_agree_about_a_payment() {
+    const PAYING: &str = r#"app "th.co.codefin.pay"
+version 1
+
+capabilities {
+  credential.read(TransitPass)
+  payment.request(to: "shop.example.com")
+}
+
+credential TransitPass {
+  zone: string
+}
+
+trust IssuedByOperator(t: TransitPass) {
+  anchor: "shop.example.com"
+  require {
+    t.signature.valid
+  }
+}
+
+state {
+  paid: int default 0
+}
+
+action Settle {
+  input {
+    ticket: Credential<TransitPass>
+  }
+
+  verify {
+    const checked = ticket with IssuedByOperator
+  }
+
+  compute {
+    const owed = state.paid + 25
+  }
+
+  update {
+    paid: owed
+  }
+
+  execute {
+    payment.request(to: "shop.example.com", amount: owed)
+  }
+}
+"#;
+    let (walked, ran) = both(PAYING, "Settle");
+    agree(&walked, &ran, "a payment");
+
+    assert_eq!(ran.effects.len(), 1, "one payment is one request: {:?}", ran.effects);
+    let paid = &ran.effects[0];
+    assert_eq!(paid.capability, "payment.request");
+    assert!(!paid.reversible, "money that moved has moved");
+    match &paid.payload {
+        valang_runtime::value::Value::Map(m) => {
+            assert_eq!(m.get("to"), Some(&valang_runtime::value::Value::Str("shop.example.com".into())));
+            assert!(matches!(m.get("amount"), Some(valang_runtime::value::Value::Int(_))), "{m:?}");
+        }
+        other => panic!("a payment is a request with a recipient and an amount: {other:?}"),
+    }
+}

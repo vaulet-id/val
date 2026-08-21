@@ -452,13 +452,22 @@ fn define_host(
             Cap::Present => present(store, linker, &ns, &name)?,
             // The record the module built becomes the credential it issues:
             // the type is in the import's own name, which is what a person is
+            // The request as the host receives it. The sheet named who the
+            // money goes to and did not name a number, because the number is
+            // computed — so there is nothing here for the two to disagree
+            // about, and the host shows the amount at the moment from this.
+            Cap::Pay(_) => takes(store, linker, &ns, &name, |run, v| {
+                run.effects.push(EffectRequest {
+                    capability: "payment.request".into(),
+                    operation: "request".into(),
+                    payload: v.clone(),
+                    reversible: false,
+                });
+                v
+            })?,
+            // The record the module built becomes the credential it issues:
+            // the type is in the import's own name, which is what a person is
             // being told is about to be signed for them.
-            // No design yet for what the report should say about an amount that
-            // is computed, so a module may not ask. Refusing beats a sheet that
-            // renders one number while the host is handed another.
-            Cap::Pay(_) => {
-                return Err(format!("`{name}`: this host does not carry payments yet"))
-            }
             Cap::Issue(ty) => takes(store, linker, &ns, &name, move |run, v| {
                 let claims = match &v {
                     Value::Map(m) => m.clone(),
@@ -473,7 +482,6 @@ fn define_host(
                 });
                 credential
             })?,
-            Cap::Pay(_) => effect(store, linker, &ns, &name, "payment.request")?,
         }
     }
     Ok(())
@@ -550,25 +558,6 @@ fn takes(
     });
     linker.define(ns, name, func).map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// An effect that is its own request: one call, one thing asked of the host.
-fn effect(
-    store: &mut Store<Shell>,
-    linker: &mut Linker<Shell>,
-    ns: &str,
-    name: &str,
-    capability: &'static str,
-) -> Result<(), String> {
-    takes(store, linker, ns, name, move |run, v| {
-        run.effects.push(EffectRequest {
-            capability: capability.to_string(),
-            operation: capability.split('.').nth(1).unwrap_or(capability).to_string(),
-            payload: v.clone(),
-            reversible: true,
-        });
-        v
-    })
 }
 
 /// One of the functions the language has and nobody declares. What it means is

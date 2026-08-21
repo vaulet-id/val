@@ -256,42 +256,23 @@ fn an_input_credential_carries_only_what_was_named() {
     assert_eq!(held, vec!["country".to_string()], "a whole credential came in through `input:`");
 }
 
-/// **Payments.** A module passes the amount and the sheet renders the arguments
-/// the author wrote, so the two can differ. There is no design for that yet, so
-/// a module that asks is refused rather than run against a sheet that describes
-/// a different number.
+/// **Payments.** A module passes the amount, so a sheet that named one at
+/// install would name a number that can differ from the one the host is handed.
+/// So the sheet does not name one: it names who the money goes to, which is
+/// written out and cannot be computed, and the amount is shown by the host at
+/// the moment out of the request itself.
 #[test]
-fn a_payment_is_refused_rather_than_described_wrongly() {
-    let bytes = forged(&[("cap", "pay:amount: total", 1)], &[]);
-    // The sheet can still describe it — it is the running that is refused.
+fn a_payment_names_who_and_never_how_much() {
+    let bytes = forged(&[("cap", "pay:shop.example.com", 1)], &[]);
     let wants = valang_wasm::wants_of(&bytes).expect("describable");
-    assert!(!wants.payments.is_empty());
-
-    let module =
-        valang_wasm::compile::Module { bytes, konsts: Vec::new(), functions: Vec::new() };
-    let host = valang_runtime::fixture::Fixture::parse(include_str!(
-        "../../../fixtures/wallet.json"
-    ))
-    .expect("the wallet parses");
-    let about = valang_runtime::About {
-        app: "x.y".into(),
-        version: "1".into(),
-        actions: vec![valang_runtime::ActionAbout { name: "Go".into(), inputs: Vec::new() }],
-        ..Default::default()
-    };
-    let mut engine = valang_wasm::WasmEngine::new(&module);
-    let run = valang_runtime::run_action_with(
-        &about,
-        [0u8; 32],
-        "Go",
-        &Default::default(),
-        &Default::default(),
-        &host,
-        &mut engine,
+    assert_eq!(
+        wants.payments.iter().cloned().collect::<Vec<_>>(),
+        vec!["shop.example.com".to_string()],
+        "the sheet names the recipient and no number"
     );
     assert!(
-        matches!(&run.outcome, valang_runtime::Outcome::Defect(why) if why.contains("payments")),
-        "{:?}",
-        run.outcome
+        !wants.payments.iter().any(|p| p.chars().any(|c| c.is_ascii_digit())),
+        "an amount reached the sheet: {:?}",
+        wants.payments
     );
 }

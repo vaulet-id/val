@@ -855,22 +855,30 @@ emits, and yours may not be one, so a fuel budget is always set.
 **Cannot: ship a report that says less than the module does.** It is derived
 again on the device and compared.
 
-**Can: be somebody else.** A signature says the bytes were not changed. It does
-not say who made them — anybody can generate a key, sign a package, and write
-`did:web:some.bank` in the manifest. Binding a key to a name is the host's job,
-through `owns_key`: resolving the DID document, or a registry it trusts. **A
-host that does not implement it is a host where any publisher can be any
+**Cannot: name a number on the sheet and hand the host another.** A payment's
+amount is computed, so the report does not name one: it names who the money goes
+to, which is written out and cannot be computed. The amount is shown by the host
+at the moment, out of the request itself, in a sheet the application cannot
+draw. A person consents twice — once to the ceiling, once to the number.
+
+**Cannot: be somebody else, when the name carries the key.** `did:key:z6Mk…` is
+the public key written as a name, so `owns_key` is a comparison and needs
+nothing fetched and nobody trusted. A package signed by another key is refused
+by the default policy.
+
+**Can: be somebody else, when the name has to be looked up.** `did:web:some.bank`
+needs a document from a server, which is I/O and so is the host's. The default
+policy refuses such a package rather than admitting one whose publisher is a
+claim; a host that resolves the name says so by implementing `owns_key`. **A
+host that neither resolves nor refuses is a host where any publisher can be any
 publisher.**
 
 **Can: ship a module that is not the source you published.** Nothing on the
 device can tell, because nothing on the device compiles. That is what
-reproducible builds are for, and it is a check somebody does once rather than
-one every phone does at every install.
-
-**Can: nothing with money, yet.** A payment's amount is computed, so a module
-passes it while the sheet renders what the author wrote — and the two can
-differ. A module that asks is refused rather than run against a sheet that
-describes a different number.
+reproducible builds are for — `valpack reproduce <dir> <app.va>` builds the
+source and compares the bytes, and the module names the compiler that made it so
+the comparison is between like and like. It is a check somebody does once,
+rather than one every phone does at every install.
 
 **Can: say different things in different languages.** The bundle is signed and
 checked for missing keys and missing slots; whether the Thai and the English

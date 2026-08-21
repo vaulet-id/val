@@ -190,13 +190,32 @@ impl<'a> Eval<'a> {
             }
 
             Stmt::Effect { name, args, body, .. } => {
-                for a in args {
-                    let payload = self.expr(&a.value, state)?;
+                // **One statement is one request.** It used to be one per
+                // argument, so `payment.request(to: …, amount: …)` asked the
+                // host for two payments — and the host, taking the batch or
+                // none of it, would have taken both.
+                if !args.is_empty() {
+                    let payload = match args.as_slice() {
+                        // One thing, unnamed: the thing itself. A credential
+                        // being issued is a credential, not a record with one
+                        // field.
+                        [only] if only.name.is_none() => self.expr(&only.value, state)?,
+                        _ => {
+                            let mut m = BTreeMap::new();
+                            for a in args {
+                                let v = self.expr(&a.value, state)?;
+                                m.insert(a.name.clone().unwrap_or_default(), v);
+                            }
+                            Value::Map(m)
+                        }
+                    };
                     self.effects.push(EffectRequest {
                         capability: name.clone(),
                         operation: name.split('.').nth(1).unwrap_or(name).to_string(),
                         payload,
-                        reversible: name != "present" && name != "disclose" && name != "prove",
+                        // What can be taken back is the registry's answer, not a
+                        // list of names kept here.
+                        reversible: !self.program.irreversible.contains(name),
                     });
                 }
                 if name == "present" && args.is_empty() {

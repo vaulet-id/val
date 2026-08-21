@@ -3,10 +3,17 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use valang_package::{artifact_hash, build, encode, keygen, read, verify, Manifest, Package, Refusal};
+use valang_package::{
+    artifact_hash, build, did_for, encode, keygen, read, verify, Manifest, Package, Refusal,
+};
 
 fn usage() -> ExitCode {
-    eprintln!("usage:\n  valpack build  <dir> [-o out.va]\n  valpack verify <file.va>");
+    eprintln!(
+        "usage:\n  \
+         valpack build      <dir> [-o out.va]\n  \
+         valpack verify     <file.va>            what a wallet checks\n  \
+         valpack reproduce  <dir> <file.va>      what a wallet cannot: rebuild and compare"
+    );
     ExitCode::from(2)
 }
 
@@ -19,6 +26,59 @@ fn show(pkg: &Package) {
     for (line, values) in &pkg.report {
         println!("    {line:<14} {}", if values.is_empty() { "—".to_string() } else { values.join(", ") });
     }
+}
+
+/// `valpack reproduce <dir> <app.va>` — build that source and compare the bytes.
+///
+/// **The check a wallet cannot make.** It has no compiler, which is the whole
+/// reason a package carries a module and not a source; so this is where the
+/// module is tied back to the source somebody published, by anybody who has
+/// both. Once, by whoever cares — not on every phone at every install.
+fn reproduce(dir: &str, file: &str) -> ExitCode {
+    let Ok(bytes) = std::fs::read(file) else {
+        eprintln!("{file}: cannot read");
+        return ExitCode::FAILURE;
+    };
+    let pkg = match read(&bytes) {
+        Ok(p) => p,
+        Err(r) => {
+            eprintln!("{file}: {}", describe(&r));
+            return ExitCode::FAILURE;
+        }
+    };
+    let sources = read_sources(dir);
+    if sources.is_empty() {
+        eprintln!("{dir}: no .val sources");
+        return ExitCode::FAILURE;
+    }
+    let joined = sources.values().cloned().collect::<Vec<_>>().join("\n");
+    let (text_bundle, locales) = read_text(dir);
+    let bundle = if text_bundle.is_empty() { None } else { Some((&text_bundle, &locales[..])) };
+
+    match valang_wasm::compile::reproduces(&joined, bundle, &registries(), &pkg.module) {
+        Ok(()) => {
+            println!("{} v{} — reproduced", pkg.manifest.app, pkg.manifest.version);
+            println!("  {dir} builds exactly the module {file} carries");
+            println!("  signed by      {}", pkg.manifest.publisher);
+            ExitCode::SUCCESS
+        }
+        Err(why) => {
+            eprintln!("{file}: not what {dir} builds — {why}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// The registries a package is built against. A command line has whatever is on
+/// disk beside the language; a wallet has its own.
+fn registries() -> valang::capability::Hosts {
+    const CORE: &str = include_str!("../../../../hosts/core.json");
+    const VAULET: &str = include_str!("../../../../hosts/vaulet.json");
+    let loaded = [CORE, VAULET]
+        .into_iter()
+        .filter_map(|s| valang::capability::Host::parse(s).ok())
+        .collect();
+    valang::capability::Hosts::of(loaded)
 }
 
 fn read_sources(dir: &str) -> BTreeMap<String, String> {
@@ -92,6 +152,11 @@ fn main() -> ExitCode {
         };
     }
 
+    if cmd == "reproduce" {
+        let Some(file) = args.get(2) else { return usage() };
+        return reproduce(dir, file);
+    }
+
     let sources = read_sources(dir);
     if sources.is_empty() {
         eprintln!("{dir}: no .val sources");
@@ -103,29 +168,21 @@ fn main() -> ExitCode {
     let joined = sources.values().cloned().collect::<Vec<_>>().join("\n");
     let (program, _) = valang::analyse(&joined);
 
+    let key = keygen();
     let (text_bundle, locales) = read_text(dir);
     let manifest = Manifest {
         app: program.app.clone().unwrap_or_default(),
         version: program.version.clone().unwrap_or_default(),
         kind: "val".into(),
-        publisher: "did:web:codefin.io".into(),
+        // The key this build signs with, written as a name. A command line has
+        // no domain and no registry to be found in, so the publisher is the
+        // only thing it can prove it is.
+        publisher: did_for(&key),
         catalogue: "1".into(),
         locales,
     };
 
-    let key = keygen();
-    // The registries a package is compiled against. A command line has
-    // whatever is on disk beside the language; a wallet has its own.
-    let hosts = {
-        const CORE: &str = include_str!("../../../../hosts/core.json");
-        const VAULET: &str = include_str!("../../../../hosts/vaulet.json");
-        let loaded = [CORE, VAULET]
-            .into_iter()
-            .filter_map(|s| valang::capability::Host::parse(s).ok())
-            .collect();
-        valang::capability::Hosts::of(loaded)
-    };
-    let built = build(manifest, sources, text_bundle, &hosts, Some(&key));
+    let built = build(manifest, sources, text_bundle, &registries(), Some(&key));
 
     let pkg: Package = match built {
         Ok(p) => p,

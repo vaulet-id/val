@@ -52,7 +52,10 @@ pub enum Cap {
     Issue(String),
     /// An audience it talks to.
     Query(String),
-    /// Money it moves.
+    /// Money it moves, and who to. **Not how much** — an amount is computed,
+    /// and a sheet naming a number at install would name one that can differ
+    /// from the one the host is handed. The host shows the amount at the
+    /// moment, out of the request itself.
     Pay(String),
     /// A field of state it writes: `member.points`.
     Write(String),

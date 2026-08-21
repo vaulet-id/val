@@ -44,6 +44,10 @@ pub struct Program {
     /// It was the string `"onTap"`, written in three places, so `onRemove` named
     /// an action nothing declared and nobody said so.
     pub handlers: Vec<String>,
+    /// The capabilities that cannot be taken back, as the host's registry
+    /// declares them. Read where an effect is built, so what "irreversible"
+    /// means is answered in one place.
+    pub irreversible: Vec<String>,
     /// Every `//` line in the file, where it was. Held on the program rather
     /// than on the nodes: a comment belongs to a position, and which node it is
     /// about is a guess the printer makes rather than a fact the parser has.

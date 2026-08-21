@@ -28,6 +28,13 @@ impl HostPolicy for Wallet {
     fn registries(&self) -> valang::capability::Hosts {
         registries()
     }
+
+    /// Standing in for a wallet that resolves `did:web` — it fetches the
+    /// document, finds the key, and says so. There is no network in a test, so
+    /// this says yes; what it is standing in for is the point.
+    fn owns_key(&self, _publisher: &str, _key: &[u8]) -> bool {
+        true
+    }
 }
 
 fn manifest() -> Manifest {
@@ -234,4 +241,56 @@ fn a_report_that_understates_is_refused() {
         Err(Refusal::ReportMismatch { line, .. }) => assert_eq!(line, "issues"),
         other => panic!("a package that hid what it issues was admitted: {:?}", other.err()),
     }
+}
+
+/// **A publisher who is who they say.** `did:key` carries the key in the name,
+/// so nothing has to be fetched and nobody has to be trusted: the name and the
+/// key are the same fact written twice. A package signed by a different key is
+/// refused by the default policy, with no host involvement at all.
+#[test]
+fn a_did_key_publisher_answers_for_itself() {
+    struct Default_;
+    impl HostPolicy for Default_ {
+        fn registries(&self) -> valang::capability::Hosts {
+            registries()
+        }
+    }
+
+    let key = keygen();
+    let mut m = manifest();
+    m.publisher = did_for(&key);
+    let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
+    let pkg = build(m.clone(), sources.clone(), text(), &registries(), Some(&key)).expect("builds");
+    install_with(&pkg, &Default_).expect("the key the name carries is the key that signed");
+
+    // The same name, somebody else's key.
+    let impostor = keygen();
+    let forged = build(m, sources, text(), &registries(), Some(&impostor)).expect("builds");
+    match install_with(&forged, &Default_) {
+        Err(Refusal::Unsigned(why)) => assert!(why.contains("does not belong"), "{why}"),
+        other => panic!("an impostor was admitted: {:?}", other.err()),
+    }
+}
+
+/// **A publisher who has to be looked up.** `did:web` needs a document from a
+/// server, which is I/O and so is the host's. A host that does not resolve it
+/// refuses, because admitting it would mean any publisher could be any
+/// publisher — the default is the safe one, not the convenient one.
+#[test]
+fn a_publisher_that_must_be_looked_up_is_refused_by_default() {
+    struct Default_;
+    impl HostPolicy for Default_ {
+        fn registries(&self) -> valang::capability::Hosts {
+            registries()
+        }
+    }
+
+    let key = keygen();
+    let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
+    // `manifest()` says `did:web:codefin.io`.
+    let pkg = build(manifest(), sources, text(), &registries(), Some(&key)).expect("builds");
+    assert!(matches!(install_with(&pkg, &Default_), Err(Refusal::Unsigned(_))));
+
+    // And a host that does resolve it admits the package.
+    install_with(&pkg, &Wallet).expect("a host that resolves the name admits it");
 }

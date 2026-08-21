@@ -245,6 +245,9 @@ pub struct About {
     pub addresses: Vec<String>,
     pub exports: Vec<String>,
     pub imports: Vec<String>,
+    /// Which compiler built the module this came from. A rebuild with another
+    /// front end proves nothing about either.
+    pub compiler: String,
 }
 
 /// One action, and what the host is asked for before it starts.
@@ -301,6 +304,9 @@ impl About {
             addresses: Vec::new(),
             exports: Vec::new(),
             imports: Vec::new(),
+            // Filled in by whatever emits the module. A program has no compiler
+            // of its own to name.
+            compiler: String::new(),
         }
     }
 

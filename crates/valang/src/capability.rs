@@ -491,6 +491,22 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
     handlers.sort();
     program.handlers = handlers;
 
+    // Which effects cannot be taken back, from the registry rather than from a
+    // list of names written into the runtime. It got that list wrong: a payment
+    // was marked reversible while the report called the application
+    // irreversible for having one, so the ordering that puts irreversible
+    // effects last put money first.
+    let mut irreversible: Vec<String> = Vec::new();
+    for host in &usable.loaded {
+        for (name, cap) in &host.capabilities {
+            if !cap.reversible && !irreversible.contains(name) {
+                irreversible.push(name.clone());
+            }
+        }
+    }
+    irreversible.sort();
+    program.irreversible = irreversible;
+
     for id in &program.hosts {
         if !hosts.loaded.iter().any(|h| &h.id() == id) {
             d.push(Diagnostic::error(

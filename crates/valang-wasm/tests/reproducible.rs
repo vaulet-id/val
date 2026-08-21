@@ -40,3 +40,32 @@ fn a_changed_source_is_a_changed_module() {
     assert_ne!(src, edited.as_str(), "the sample edit did not apply");
     assert_ne!(build(src), build(&edited), "an edited source built the same module");
 }
+
+/// **The check a wallet cannot make.** It has no compiler, which is the whole
+/// reason a package carries a module and not a source — so tying the module
+/// back to the source somebody published is done by whoever has both, once,
+/// rather than by every phone at every install.
+#[test]
+fn a_source_either_builds_this_module_or_it_does_not() {
+    let src = include_str!("../../../examples/loyalty.val");
+    let module = build(src);
+
+    valang_wasm::compile::reproduces(src, None, &registries(), &module)
+        .expect("the source it was built from reproduces it");
+
+    let edited = src.replace("satangPerBaht = 100", "satangPerBaht = 50");
+    let why = valang_wasm::compile::reproduces(&edited, None, &registries(), &module)
+        .expect_err("an edited source reproduced it");
+    assert!(why.contains("builds"), "{why}");
+}
+
+/// And a module names the compiler that made it, because rebuilding a source
+/// with a different front end and getting different bytes proves nothing about
+/// either of them.
+#[test]
+fn a_module_says_what_built_it() {
+    let module = build(include_str!("../../../examples/door.val"));
+    let about = valang_wasm::compile::about_of(&module).expect("readable");
+    assert_eq!(about.compiler, valang_wasm::compile::COMPILER);
+    assert!(about.compiler.starts_with("valang "), "{}", about.compiler);
+}

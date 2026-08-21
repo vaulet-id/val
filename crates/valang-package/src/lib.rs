@@ -65,6 +65,12 @@ pub trait HostPolicy {
 
     /// Whether this key really belongs to the publisher the manifest names.
     ///
+    /// **`did:key` answers itself** — the name *is* the key, so `owns_key` is a
+    /// comparison and this crate does it without asking anybody. Every other
+    /// method needs a document fetched from somewhere, which is I/O and so is
+    /// the host's; the default refuses them rather than admitting a package
+    /// whose publisher is a claim.
+    ///
     /// **A signature proves the bytes were not changed. It does not prove who
     /// made them.** Anybody can generate a key, sign a package and write
     /// `did:web:some.bank` in the manifest, and every check in this crate would
@@ -76,8 +82,15 @@ pub trait HostPolicy {
     /// The default says yes, which is right for a build tool and wrong for a
     /// wallet. **A wallet that does not implement this is a wallet where any
     /// publisher can be any publisher.**
-    fn owns_key(&self, _publisher: &str, _key: &[u8]) -> bool {
-        true
+    fn owns_key(&self, publisher: &str, key: &[u8]) -> bool {
+        match key_in_did(publisher) {
+            // The name carries the key: it either is this one or it is not.
+            Some(named) => named == key,
+            // A name that has to be looked up. A host that resolves it says so
+            // by overriding this; one that does not refuses, because admitting
+            // it would mean any publisher could be any publisher.
+            None => false,
+        }
     }
 
     /// The largest module this host will read. Validating one costs time
@@ -151,6 +164,29 @@ pub enum Refusal {
     Malformed(String),
     /// The host will not admit this, and the reason is the host's.
     Refused { by: String },
+}
+
+/// The key a `did:key` names, or nothing for a name that has to be looked up.
+///
+/// `did:key:z6Mk…` is base58btc over the multicodec prefix for an Ed25519
+/// public key and the key itself. Nothing to fetch and nobody to trust: the
+/// name and the key are the same fact written twice.
+pub fn key_in_did(did: &str) -> Option<Vec<u8>> {
+    let rest = did.strip_prefix("did:key:")?;
+    // `z` is base58btc in multibase, and it is the only encoding `did:key`
+    // uses. Another prefix is another encoding and this build does not know it.
+    let bytes = bs58::decode(rest.strip_prefix('z')?).into_vec().ok()?;
+    // 0xed 0x01 — multicodec `ed25519-pub`, little-endian varint.
+    let key = bytes.strip_prefix(&[0xed, 0x01])?;
+    (key.len() == 32).then(|| key.to_vec())
+}
+
+/// The `did:key` for a signing key, which is how a publisher who has no domain
+/// says who they are.
+pub fn did_for(key: &SigningKey) -> String {
+    let mut bytes = vec![0xed, 0x01];
+    bytes.extend_from_slice(&key.verifying_key().to_bytes());
+    format!("did:key:z{}", bs58::encode(bytes).into_string())
 }
 
 /// What integrity says about a module: the hash, as it is written down.
