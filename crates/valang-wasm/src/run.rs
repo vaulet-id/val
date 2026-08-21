@@ -21,11 +21,11 @@ pub struct Values {
 }
 
 impl Values {
-    fn put(&mut self, v: Value) -> i32 {
+    pub(crate) fn put(&mut self, v: Value) -> i32 {
         self.slots.push(v);
         (self.slots.len() - 1) as i32
     }
-    fn get(&self, h: i32) -> Value {
+    pub(crate) fn get(&self, h: i32) -> Value {
         self.slots.get(h as usize).cloned().unwrap_or(Value::Null)
     }
 }
@@ -34,7 +34,7 @@ pub struct Wasm {
     pub konsts: Vec<Konst>,
 }
 
-fn konst_value(k: &Konst) -> Value {
+pub(crate) fn konst_value(k: &Konst) -> Value {
     match k {
         Konst::Int(i) => Value::Int(*i),
         Konst::Str(s) => Value::Str(s.clone()),
@@ -45,7 +45,7 @@ fn konst_value(k: &Konst) -> Value {
     }
 }
 
-type Shared = Rc<RefCell<Values>>;
+pub(crate) type Shared = Rc<RefCell<Values>>;
 
 /// Anything that can hand over the table the handles point into.
 ///

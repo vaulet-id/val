@@ -630,7 +630,24 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
             }
 
             Stmt::Effect { name, args, body, .. } => {
+                // `present { disclose …; prove … }` is one effect and not
+                // several: what the person is shown is one request, and the
+                // host takes all of it or none. Its lines answer with the part
+                // they contribute, and the list is what goes out.
+                if name == "present" && args.is_empty() {
+                    ctx.push_konst(Konst::EmptyList, f);
+                    for line in body {
+                        if let Stmt::Effect { name, args, .. } = line {
+                            emit_effect(ctx, name, args, f);
+                            ctx.call_op("push", f);
+                        }
+                    }
+                    ctx.call_cap(&crate::abi::Cap::Present, f);
+                    f.instruction(&Instruction::Drop);
+                    continue;
+                }
                 emit_effect(ctx, name, args, f);
+                f.instruction(&Instruction::Drop);
                 emit_body(ctx, body, f, next_local);
             }
         }
@@ -735,7 +752,12 @@ fn read_line(ty: &str, policy: Option<&str>) -> String {
     }
 }
 
-/// The effects, which are the whole reason a person is asked anything.
+/// One effect, as the part it contributes.
+///
+/// **Every arm leaves exactly one value on the stack.** A `present` block
+/// gathers those parts into a list and hands it over as one request; anything
+/// else is its own request and the caller drops what comes back. An arm that
+/// left nothing would be a module that does not validate.
 ///
 /// **`prove` takes nothing.** The host evaluates the statement and builds the
 /// proof, because the host is the only one that can; handing the claim to the
@@ -748,12 +770,10 @@ fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
             let path = first.and_then(|e| e.path()).unwrap_or_else(|| "—".into());
             emit_first(ctx, first, f);
             ctx.call_cap(&crate::abi::Cap::Disclose(ctx_claim(ctx, &path)), f);
-            f.instruction(&Instruction::Drop);
         }
         "prove" => {
             let said = valang::report::render(first);
             ctx.call_cap(&crate::abi::Cap::Prove(said), f);
-            f.instruction(&Instruction::Drop);
         }
         "credential.issue" => {
             let ty = match first {
@@ -763,17 +783,15 @@ fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
             };
             emit_first(ctx, first, f);
             ctx.call_cap(&crate::abi::Cap::Issue(ty), f);
-            f.instruction(&Instruction::Drop);
         }
-        // `present { disclose …; prove … }` groups the effects that go out
-        // together. It is not a line in the report itself — what it holds is —
-        // so it emits nothing and its body is lowered by the caller.
-        "present" => {}
         other => {
             // Loud rather than wrong. An effect this back end does not emit is
             // an effect that would be missing from the import section, and a
-            // report short of a line is worse than no module at all.
+            // report short of a line is worse than no module at all. A value
+            // still goes on the stack, because the caller is going to take one
+            // off and a module that will not validate says less than a message.
             ctx.unsupported.push(format!("the effect `{other}`"));
+            ctx.push_konst(Konst::Bool(false), f);
         }
     }
 }
@@ -970,17 +988,51 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
             // It reached the arm below and pushed its arguments onto a stack
             // nothing took them off — a module that would not even validate,
             // which is what says this was never exercised.
-            if ctx.fn_index.get(&name).is_none()
-                && !args.is_empty()
-                && args.iter().all(|a| a.name.is_some())
-            {
-                ctx.push_konst(Konst::EmptyRecord, f);
-                for a in args {
-                    let field = a.name.clone().unwrap_or_default();
-                    ctx.push_konst(Konst::Str(field), f);
-                    emit(ctx, &a.value, f);
-                    ctx.call_op("set", f);
+            // `LoyaltyMember { … }` is a credential being constructed, not a
+            // call: the name is a type this package declares and what follows
+            // is a record. It used to reach the arm below and push its argument
+            // onto a stack nothing took it off — a module that would not even
+            // validate, which is what says this was never exercised.
+            //
+            // The name has to be a declared type and not merely a call with
+            // named arguments: `duration(days: 30)` is a builtin, and building
+            // a record out of that made a date comparison compare a record,
+            // which committed on one engine and refused on the other.
+            let declares = ctx
+                .program
+                .credentials
+                .iter()
+                .chain(&ctx.program.types)
+                .any(|c| c.name == name);
+            if declares {
+                match args.as_slice() {
+                    [only] if only.name.is_none() => emit(ctx, &only.value, f),
+                    _ => {
+                        ctx.push_konst(Konst::EmptyRecord, f);
+                        for a in args {
+                            let field = a.name.clone().unwrap_or_default();
+                            ctx.push_konst(Konst::Str(field), f);
+                            emit(ctx, &a.value, f);
+                            ctx.call_op("set", f);
+                        }
+                    }
                 }
+                return;
+            }
+            // The closed set of functions the language has and nobody
+            // declares. A module has none of its own, so it asks for them —
+            // and the unit of a `duration` travels in the name, because it is
+            // written as an argument name and a module passes values.
+            if valang_runtime::eval::is_builtin(&name) {
+                for a in args {
+                    emit(ctx, &a.value, f);
+                }
+                let named = args.first().and_then(|a| a.name.clone());
+                let what = match named {
+                    Some(unit) if name == "duration" => format!("{name}:{unit}"),
+                    _ => name.clone(),
+                };
+                ctx.call_val(&crate::abi::Op::Builtin(what), args.len(), f);
                 return;
             }
             for a in args {

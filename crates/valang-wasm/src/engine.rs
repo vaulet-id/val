@@ -1,0 +1,505 @@
+//! Walking an action with the module instead of the evaluator.
+//!
+//! **This is what a phone does.** It has no compiler, so it cannot walk a typed
+//! AST; it has a module and the host behind it. Everything a record rests on —
+//! the roots, the hashes, the batch offered to the host, the moment state
+//! commits — belongs to `valang_runtime` and is the same either way. What is
+//! here is evaluation, and the plumbing that answers a module's imports.
+//!
+//! **What the host is asked for is settled before anything runs.** A module's
+//! imports are the whole of what it can reach, so they can be resolved up
+//! front: the credentials, the claims, the query answers, the input. Nothing is
+//! fetched mid-run, which means the host is asked once and a person is
+//! interrupted once.
+
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
+use valang::ast::{ActionDecl, Program, Stmt};
+use valang_runtime::eval::Trap;
+use valang_runtime::host::{Context, EffectRequest, Host};
+use valang_runtime::value::Value;
+use valang_runtime::{Engine, State, Stopped};
+use wasmi::{Caller, Config, Extern, Func, Linker, Store};
+
+use crate::abi::{Cap, Op, CAPS, OPS};
+use crate::compile::Module;
+use crate::run::{konst_value, HasValues, Shared, Values};
+
+/// The module, and what running it is allowed to cost.
+pub struct Wasm<'a> {
+    pub module: &'a Module,
+    /// Totality says an action ends. Fuel says it ends in time, which is a
+    /// different promise and the only one that can be made to somebody standing
+    /// at a till.
+    pub fuel: Option<u64>,
+}
+
+impl<'a> Wasm<'a> {
+    pub fn new(module: &'a Module) -> Wasm<'a> {
+        Wasm { module, fuel: None }
+    }
+}
+
+/// Everything the imports read and write while the module runs.
+struct Run {
+    values: Shared,
+    /// What the host answered before anything ran, by import name.
+    answers: BTreeMap<String, Value>,
+    /// The state the action started from, and the one it is building.
+    state: State,
+    next: State,
+    effects: Vec<EffectRequest>,
+    /// Why it stopped, when it did. A Wasm trap carries a string; this carries
+    /// the outcome the language means by it.
+    stopped: Option<Trap>,
+}
+
+type Shell = Rc<RefCell<Run>>;
+
+impl HasValues for Shell {
+    fn values(&self) -> Shared {
+        self.borrow().values.clone()
+    }
+}
+
+/// Read a dotted path out of a map, which is what `state.member.points` is.
+fn at(map: &State, path: &str) -> Value {
+    let mut here = Value::Map(map.clone());
+    for part in path.split('.') {
+        here = here.field(part).cloned().unwrap_or(Value::Null);
+    }
+    here
+}
+
+/// Write one, growing the maps it passes through. A patch names a path, and a
+/// path that does not exist yet is a field being written for the first time.
+fn put(map: &mut State, path: &str, value: Value) {
+    let parts: Vec<&str> = path.split('.').collect();
+    let Some((last, rest)) = parts.split_last() else { return };
+    let mut here = map;
+    for part in rest {
+        let entry = here.entry((*part).to_string()).or_insert_with(|| Value::Map(Default::default()));
+        if !matches!(entry, Value::Map(_)) {
+            *entry = Value::Map(Default::default());
+        }
+        let Value::Map(inner) = entry else { return };
+        here = inner;
+    }
+    here.insert((*last).to_string(), value);
+}
+
+/// The credential a claim is read through, and the claims themselves.
+///
+/// `read:PurchaseReceipt under ReceiptFromMerchant` is the credential;
+/// `read:PurchaseReceipt.amount` is one of its claims. Both come from the same
+/// answer, so the host is asked once per credential however many claims are
+/// read off it.
+fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Context, host: &dyn Host, module: &[u8]) -> Result<BTreeMap<String, Value>, String> {
+    let engine = wasmi::Engine::default();
+    let parsed = wasmi::Module::new(&engine, module).map_err(|e| e.to_string())?;
+
+    let mut answers: BTreeMap<String, Value> = BTreeMap::new();
+    let mut credentials: BTreeMap<String, BTreeMap<String, Value>> = BTreeMap::new();
+
+    for import in parsed.imports() {
+        let name = import.name().to_string();
+        match import.module() {
+            CAPS => match Cap::parse(&name) {
+                Some(Cap::Read(line)) => {
+                    // `Type under Policy`, `Type — unverified`, or `Type.claim`.
+                    let (ty, policy) = match line.split_once(" under ") {
+                        Some((ty, policy)) => (ty.to_string(), Some(policy.to_string())),
+                        None => match line.split_once(' ') {
+                            Some((ty, _)) => (ty.to_string(), None),
+                            None => (line.split('.').next().unwrap_or(&line).to_string(), None),
+                        },
+                    };
+                    let claims = match credentials.get(&ty) {
+                        Some(c) => c.clone(),
+                        None => {
+                            let policy = policy.clone().or_else(|| {
+                                program.trusts.iter().find(|t| t.subject_type == ty).map(|t| t.name.clone())
+                            });
+                            let c = host.credential(&ty, policy.as_deref()).unwrap_or_default();
+                            credentials.insert(ty.clone(), c.clone());
+                            c
+                        }
+                    };
+                    let value = match line.split_once('.') {
+                        // A claim, when the line names one and not a policy.
+                        Some((_, claim)) if !line.contains(' ') => {
+                            claims.get(claim).cloned().unwrap_or(Value::Null)
+                        }
+                        _ => Value::Credential {
+                            ty: ty.clone(),
+                            claims: claims.clone(),
+                            verified: policy.clone(),
+                        },
+                    };
+                    answers.insert(format!("{CAPS}/{name}"), value);
+                }
+                Some(Cap::Query(audience)) => {
+                    answers.insert(
+                        format!("{CAPS}/{name}"),
+                        Value::List(host.query(&audience, "")),
+                    );
+                }
+                _ => {}
+            },
+            OPS => match Op::parse(&name, |n| crate::compile::IMPORTS.iter().any(|(x, _)| *x == n)) {
+                Some(Op::Input(binding)) => {
+                    // Either something the host collected into `input`, or a
+                    // credential the action declared and the host chose.
+                    let value = match input.get(&binding) {
+                        Some(v) => v.clone(),
+                        None => credential_for(program, action, &binding, host).unwrap_or(Value::Null),
+                    };
+                    answers.insert(format!("{OPS}/{name}"), value);
+                }
+                Some(Op::Context(what)) => {
+                    let value = match what.as_str() {
+                        "time.now" => Value::Int(context.time_now),
+                        "uuid" | "random.uuid" => Value::Str(context.random_uuid.clone()),
+                        _ => Value::Null,
+                    };
+                    answers.insert(format!("{OPS}/{name}"), value);
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    Ok(answers)
+}
+
+/// The credential the action's `input` declared under this name, as the host
+/// chose it — already checked against the policy `verify` will name.
+fn credential_for(program: &Program, action: &ActionDecl, binding: &str, host: &dyn Host) -> Option<Value> {
+    for block in &action.phases {
+        for s in &block.stmts {
+            let Stmt::Binding { name, ty, .. } = s else { continue };
+            if name != binding || ty.name != "Credential" {
+                continue;
+            }
+            let cred_ty = ty.args.first().map(|a| a.name.clone()).unwrap_or_default();
+            let policy = program.trusts.iter().find(|t| t.subject_type == cred_ty).map(|t| t.name.clone());
+            let claims = host.credential(&cred_ty, policy.as_deref())?;
+            return Some(Value::Credential { ty: cred_ty, claims, verified: None });
+        }
+    }
+    None
+}
+
+impl Engine for Wasm<'_> {
+    fn walk(
+        &mut self,
+        program: &Program,
+        action: &ActionDecl,
+        state: &State,
+        input: &State,
+        host: &dyn Host,
+        context: &Context,
+    ) -> Result<(State, Vec<EffectRequest>), Stopped> {
+        let stop = |why: String| Stopped { trap: Trap::Defect(why), effects: Vec::new() };
+
+        let answers = resolve(program, action, input, context, host, &self.module.bytes)
+            .map_err(|e| stop(format!("this module cannot be read: {e}")))?;
+
+        let shell: Shell = Rc::new(RefCell::new(Run {
+            values: Rc::new(RefCell::new(Values::default())),
+            answers,
+            state: state.clone(),
+            next: state.clone(),
+            effects: Vec::new(),
+            stopped: None,
+        }));
+
+        let mut config = Config::default();
+        config.consume_fuel(self.fuel.is_some());
+        let engine = wasmi::Engine::new(&config);
+        let parsed = wasmi::Module::new(&engine, &self.module.bytes[..])
+            .map_err(|e| stop(format!("this module cannot be read: {e}")))?;
+
+        let mut store = Store::new(&engine, shell.clone());
+        if let Some(f) = self.fuel {
+            store.set_fuel(f).map_err(|e| stop(e.to_string()))?;
+        }
+        let mut linker = <Linker<Shell>>::new(&engine);
+
+        let konsts: Vec<Value> = self.module.konsts.iter().map(konst_value).collect();
+        crate::run::define_ops(&mut store, &mut linker, konsts).map_err(&stop)?;
+        define_host(&mut store, &mut linker, &parsed).map_err(&stop)?;
+
+        let instance = linker
+            .instantiate(&mut store, &parsed)
+            .and_then(|i| i.start(&mut store))
+            .map_err(|e| stop(e.to_string()))?;
+
+        let export = format!("action:{}", action.name);
+        let Some(Extern::Func(f)) = instance.get_export(&store, &export) else {
+            return Err(stop(format!("this module does not carry `{}`", action.name)));
+        };
+
+        let mut out = [wasmi::Val::I32(0)];
+        let called = f.call(&mut store, &[], &mut out);
+
+        let run = shell.borrow();
+        if let Some(trap) = run.stopped.clone() {
+            // The action said why it stopped. The Wasm error underneath it is
+            // how it stopped, which is nobody's business but this file's.
+            return Err(Stopped { trap, effects: run.effects.clone() });
+        }
+        if let Err(e) = called {
+            let why = e.to_string();
+            return Err(Stopped {
+                trap: if why.contains("fuel") {
+                    Trap::Failed("this action ran longer than it was given".into())
+                } else {
+                    Trap::Defect(why)
+                },
+                effects: run.effects.clone(),
+            });
+        }
+        Ok((run.next.clone(), run.effects.clone()))
+    }
+}
+
+/// Everything outside the fixed operations: what the host answers, what the
+/// action writes, and what it asks to have done.
+fn define_host(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    module: &wasmi::Module,
+) -> Result<(), String> {
+    for import in module.imports() {
+        let ns = import.module().to_string();
+        let name = import.name().to_string();
+        let key = format!("{ns}/{name}");
+
+        if ns == OPS {
+            let Some(op) = Op::parse(&name, |n| crate::compile::IMPORTS.iter().any(|(x, _)| *x == n))
+            else {
+                return Err(format!("`{name}` is not an operation this host provides"));
+            };
+            match op {
+                // Already defined, and the same in every module.
+                Op::Fixed(_) => continue,
+                Op::State(path) => answer(store, linker, &ns, &name, move |run| at(&run.state, &path))?,
+                // The state `update` produced, read live: `execute` reads what
+                // was just written, not what the action started with.
+                Op::Next(path) => answer(store, linker, &ns, &name, move |run| at(&run.next, &path))?,
+                Op::Input(_) | Op::Context(_) => {
+                    answer(store, linker, &ns, &name, move |run| {
+                        run.answers.get(&key).cloned().unwrap_or(Value::Null)
+                    })?
+                }
+                // `builtin:duration:days` — the name, and the unit when the
+                // language writes one as an argument name.
+                Op::Builtin(what) => {
+                    let (fname, unit) = match what.split_once(':') {
+                        Some((f, u)) => (f.to_string(), Some(u.to_string())),
+                        None => (what.clone(), None),
+                    };
+                    let arity = match import.ty().func() {
+                        Some(ty) => ty.params().len(),
+                        None => 0,
+                    };
+                    builtin_import(store, linker, &ns, &name, fname, unit, arity)?
+                }
+                Op::Refuse(what) => stops(store, linker, &ns, &name, move || Trap::Refused(what.clone()))?,
+                Op::Defect => stops(store, linker, &ns, &name, || {
+                    Trap::Defect("a `require` did not hold".into())
+                })?,
+                Op::Unverified => stops(store, linker, &ns, &name, || {
+                    Trap::Failed("a credential did not satisfy the policy it was checked against".into())
+                })?,
+            }
+            continue;
+        }
+
+        let Some(cap) = Cap::parse(&name) else {
+            return Err(format!("`{name}` is not a capability this host knows"));
+        };
+        match cap {
+            Cap::Read(_) | Cap::Query(_) => {
+                answer(store, linker, &ns, &name, move |run| {
+                    run.answers.get(&key).cloned().unwrap_or(Value::Null)
+                })?
+            }
+            Cap::Write(path) => takes(store, linker, &ns, &name, move |run, v| {
+                put(&mut run.next, &path, v.clone());
+                v
+            })?,
+            // A line of a `present`, which answers with the part it contributes
+            // rather than sending anything: one block is one request.
+            Cap::Disclose(_) => takes(store, linker, &ns, &name, |_, v| {
+                let mut m = BTreeMap::new();
+                m.insert("kind".into(), Value::Str("disclose".into()));
+                m.insert("of".into(), v);
+                Value::Map(m)
+            })?,
+            Cap::Prove(said) => answer(store, linker, &ns, &name, move |_| {
+                let mut m = BTreeMap::new();
+                m.insert("kind".into(), Value::Str("prove".into()));
+                m.insert("statement".into(), Value::Str(said.clone()));
+                Value::Map(m)
+            })?,
+            Cap::Present => takes(store, linker, &ns, &name, |run, v| {
+                run.effects.push(EffectRequest {
+                    capability: "disclosure.present".into(),
+                    operation: "present".into(),
+                    payload: v.clone(),
+                    reversible: false,
+                });
+                v
+            })?,
+            // The record the module built becomes the credential it issues:
+            // the type is in the import's own name, which is what a person is
+            // being told is about to be signed for them.
+            Cap::Issue(ty) => takes(store, linker, &ns, &name, move |run, v| {
+                let claims = match &v {
+                    Value::Map(m) => m.clone(),
+                    _ => Default::default(),
+                };
+                let credential = Value::Credential { ty: ty.clone(), claims, verified: None };
+                run.effects.push(EffectRequest {
+                    capability: "credential.issue".into(),
+                    operation: "issue".into(),
+                    payload: credential.clone(),
+                    reversible: true,
+                });
+                credential
+            })?,
+            Cap::Pay(_) => effect(store, linker, &ns, &name, "payment.request")?,
+        }
+    }
+    Ok(())
+}
+
+/// An import that takes nothing and answers with a value.
+fn answer(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    f: impl Fn(&Run) -> Value + Send + Sync + 'static,
+) -> Result<(), String> {
+    let func = Func::wrap(&mut *store, move |caller: Caller<'_, Shell>| -> i32 {
+        let shell = caller.data().clone();
+        let value = f(&shell.borrow());
+        let values = shell.borrow().values.clone();
+        let h = values.borrow_mut().put(value);
+        h
+    });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// An import that takes one value and answers with one.
+fn takes(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    f: impl Fn(&mut Run, Value) -> Value + Send + Sync + 'static,
+) -> Result<(), String> {
+    let func = Func::wrap(&mut *store, move |caller: Caller<'_, Shell>, h: i32| -> i32 {
+        let shell = caller.data().clone();
+        let values = shell.borrow().values.clone();
+        let given = values.borrow().get(h);
+        let out = f(&mut shell.borrow_mut(), given);
+        let h = values.borrow_mut().put(out);
+        h
+    });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// An effect that is its own request: one call, one thing asked of the host.
+fn effect(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    capability: &'static str,
+) -> Result<(), String> {
+    takes(store, linker, ns, name, move |run, v| {
+        run.effects.push(EffectRequest {
+            capability: capability.to_string(),
+            operation: capability.split('.').nth(1).unwrap_or(capability).to_string(),
+            payload: v.clone(),
+            reversible: true,
+        });
+        v
+    })
+}
+
+/// One of the functions the language has and nobody declares. What it means is
+/// `valang_runtime::eval::builtin` and nothing here — a second answer to what
+/// `duration(days: 30)` is would be the two engines disagreeing about a date.
+fn builtin_import(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    fname: String,
+    unit: Option<String>,
+    arity: usize,
+) -> Result<(), String> {
+    let call = move |caller: &Caller<'_, Shell>, given: Vec<Value>| -> Result<i32, wasmi::Error> {
+        let shell = caller.data().clone();
+        match valang_runtime::eval::builtin(&fname, unit.as_deref(), &given) {
+            Ok(v) => {
+                let values = shell.borrow().values.clone();
+                let h = values.borrow_mut().put(v);
+                Ok(h)
+            }
+            Err(trap) => {
+                shell.borrow_mut().stopped = Some(trap);
+                Err(wasmi::Error::new("the action stopped"))
+            }
+        }
+    };
+    let read = |caller: &Caller<'_, Shell>, hs: &[i32]| -> Vec<Value> {
+        let values = caller.data().borrow().values.clone();
+        let v = values.borrow();
+        hs.iter().map(|h| v.get(*h)).collect()
+    };
+    match arity {
+        1 => {
+            let f = Func::wrap(&mut *store, move |caller: Caller<'_, Shell>, a: i32| {
+                let given = read(&caller, &[a]);
+                call(&caller, given)
+            });
+            linker.define(ns, name, f).map_err(|e| e.to_string())?;
+        }
+        2 => {
+            let f = Func::wrap(&mut *store, move |caller: Caller<'_, Shell>, a: i32, b: i32| {
+                let given = read(&caller, &[a, b]);
+                call(&caller, given)
+            });
+            linker.define(ns, name, f).map_err(|e| e.to_string())?;
+        }
+        n => return Err(format!("`{name}` takes {n} arguments, and this host wires one or two")),
+    }
+    Ok(())
+}
+
+/// An import that ends the action, and says in the language's own terms why.
+fn stops(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    why: impl Fn() -> Trap + Send + Sync + 'static,
+) -> Result<(), String> {
+    let func =
+        Func::wrap(&mut *store, move |caller: Caller<'_, Shell>| -> Result<i32, wasmi::Error> {
+            caller.data().borrow_mut().stopped = Some(why());
+            Err(wasmi::Error::new("the action stopped"))
+        });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
+    Ok(())
+}

@@ -442,41 +442,17 @@ impl<'a> Eval<'a> {
             }
         }
 
-        if name == "duration" {
-            let n = args.first().map(|a| self.expr(&a.value, state)).transpose()?.and_then(|v| v.as_int()).unwrap_or(0);
-            let unit = args.first().and_then(|a| a.name.clone()).unwrap_or_else(|| "days".into());
-            let ms = match unit.as_str() {
-                "hours" => 3_600_000,
-                "days" => 86_400_000,
-                "years" => 31_536_000_000,
-                other => return Err(Trap::Unsupported(format!("`duration` has no unit `{other}`"))),
-            };
-            return Ok(Value::Int(n.checked_mul(ms).ok_or_else(|| Trap::Overflow("duration".into()))?));
-        }
-
-        // The rest of the closed set. The type checker knows their arity and
-        // their types; without them here a program it accepted stopped at run
-        // time with `no function named min`, which is the two halves of one
-        // compiler disagreeing about what the language has.
-        if matches!(name.as_str(), "min" | "max" | "abs") {
-            let mut ns = Vec::new();
+        // The closed set. The type checker knows their arity and their types;
+        // without them here a program it accepted stopped at run time with `no
+        // function named min`, which is the two halves of one compiler
+        // disagreeing about what the language has.
+        if is_builtin(&name) {
+            let unit = args.first().and_then(|a| a.name.clone());
+            let mut values = Vec::new();
             for a in args {
-                let v = self.expr(&a.value, state)?;
-                ns.push(v.as_int().ok_or_else(|| {
-                    Trap::Unsupported(format!("`{name}` takes whole numbers"))
-                })?);
+                values.push(self.expr(&a.value, state)?);
             }
-            return match (name.as_str(), ns.as_slice()) {
-                ("min", [a, b]) => Ok(Value::Int(*a.min(b))),
-                ("max", [a, b]) => Ok(Value::Int(*a.max(b))),
-                // Trapping rather than wrapping, as every other arithmetic here
-                // does: the absolute value of the smallest i64 is not an i64.
-                ("abs", [a]) => a
-                    .checked_abs()
-                    .map(Value::Int)
-                    .ok_or_else(|| Trap::Overflow("abs".into())),
-                _ => Err(Trap::Unsupported(format!("`{name}` was given {} arguments", ns.len()))),
-            };
+            return builtin(&name, unit.as_deref(), &values);
         }
 
         if let Some(f) = self.program.functions.iter().find(|f| f.name == name).cloned() {
@@ -616,22 +592,57 @@ impl<'a> Eval<'a> {
 /// A predicate as text, for a host that has to build a circuit out of it. Not
 /// pretty-printing for its own sake: the statement is what gets proved, so it
 /// is what the execution record has to carry.
-fn render(e: &Expr) -> String {
-    match e {
-        Expr::Num { value, .. } => value.to_string(),
-        Expr::Str { value, .. } => format!("\"{value}\""),
-        Expr::Bool { value, .. } => value.to_string(),
-        Expr::Binary { op, lhs, rhs, .. } => format!("{} {op} {}", render(lhs), render(rhs)),
-        Expr::Call { callee, args, .. } => format!(
-            "{}({})",
-            render(callee),
-            args.iter().map(|a| render(&a.value)).collect::<Vec<_>>().join(", ")
-        ),
-        Expr::Member { obj, name, .. } => format!("{}.{name}", render(obj)),
-        Expr::Ident { name, .. } => name.clone(),
-        Expr::Lambda { .. } => "…".into(),
-        other => other.path().unwrap_or_else(|| "…".into()),
+/// The functions the language has and nobody declares.
+///
+/// **One implementation.** The tree-walking evaluator called them, and a module
+/// cannot — it has no functions of its own — so it imports them and this is
+/// what answers. A second copy over here is a second answer to what `duration`
+/// means, and the units are exactly the sort of thing two copies drift on.
+pub fn builtin(name: &str, unit: Option<&str>, args: &[Value]) -> Result<Value, Trap> {
+    if name == "duration" {
+        let n = args.first().and_then(|v| v.as_int()).unwrap_or(0);
+        let ms = match unit.unwrap_or("days") {
+            "hours" => 3_600_000,
+            "days" => 86_400_000,
+            "years" => 31_536_000_000,
+            other => return Err(Trap::Unsupported(format!("`duration` has no unit `{other}`"))),
+        };
+        return Ok(Value::Int(n.checked_mul(ms).ok_or_else(|| Trap::Overflow("duration".into()))?));
     }
+
+    let mut ns = Vec::new();
+    for v in args {
+        ns.push(
+            v.as_int()
+                .ok_or_else(|| Trap::Unsupported(format!("`{name}` takes whole numbers")))?,
+        );
+    }
+    match (name, ns.as_slice()) {
+        ("min", [a, b]) => Ok(Value::Int(*a.min(b))),
+        ("max", [a, b]) => Ok(Value::Int(*a.max(b))),
+        // Trapping rather than wrapping, as every other arithmetic here does:
+        // the absolute value of the smallest i64 is not an i64.
+        ("abs", [a]) => a.checked_abs().map(Value::Int).ok_or_else(|| Trap::Overflow("abs".into())),
+        _ => Err(Trap::Unsupported(format!("`{name}` was given {} arguments", ns.len()))),
+    }
+}
+
+/// Which names those are. Written here as well as in the type checker for the
+/// same reason the arity is: one of them refuses a program and the other runs
+/// it, and a name in only one is a program that compiles and then stops.
+pub fn is_builtin(name: &str) -> bool {
+    matches!(name, "duration" | "min" | "max" | "abs")
+}
+
+/// How a statement is written down where a person reads it.
+///
+/// **One renderer.** There was a second one here and it disagreed with the
+/// first: a proof of an age came out as `duration(20)` from one and
+/// `duration(…)` from the other, which is two different statements in two
+/// records of the same run. The one that matters is the one the capability
+/// report names, because that is what the person agreed to.
+fn render(e: &Expr) -> String {
+    valang::report::render(Some(e))
 }
 
 /// What a combinator was handed: a function written where it is used, or the

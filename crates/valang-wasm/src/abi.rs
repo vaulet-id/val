@@ -56,6 +56,17 @@ pub enum Cap {
     Pay(String),
     /// A field of state it writes: `member.points`.
     Write(String),
+    /// The block that hands a disclosure and a proof over together.
+    ///
+    /// **One `present` is one effect**, and that is why this exists rather than
+    /// each line emitting its own: what the person is shown is one request, and
+    /// the host takes all of it or none. `disclose` and `prove` answer with the
+    /// part they contribute and this is handed the list.
+    ///
+    /// It carries no line of its own in the report — the lines are its parts —
+    /// but it is in `cap` and not in `val` because a module that imports it can
+    /// send something out, which is exactly what a person consents to.
+    Present,
 }
 
 impl Cap {
@@ -68,6 +79,7 @@ impl Cap {
             Cap::Query(x) => ("query", x),
             Cap::Pay(x) => ("pay", x),
             Cap::Write(x) => ("write", x),
+            Cap::Present => ("present", ""),
         }
     }
 
@@ -75,6 +87,9 @@ impl Cap {
     /// one import, which is what makes the list a set rather than a log.
     pub fn name(&self) -> String {
         let (kind, what) = self.parts();
+        if what.is_empty() {
+            return kind.to_string();
+        }
         format!("{kind}:{what}")
     }
 
@@ -82,6 +97,9 @@ impl Cap {
     /// refuses a module that imports one, rather than running something it
     /// could not describe to the person.
     pub fn parse(name: &str) -> Option<Cap> {
+        if name == "present" {
+            return Some(Cap::Present);
+        }
         let (kind, what) = name.split_once(':')?;
         if what.is_empty() {
             return None;
@@ -112,8 +130,9 @@ impl Cap {
             // claim to the module would be the same answer with the privacy
             // removed, which is the thing `prove` exists instead of.
             Cap::Prove(_) => 0,
-            // The rest are handed the value they act on.
-            Cap::Disclose(_) | Cap::Issue(_) | Cap::Pay(_) | Cap::Write(_) => 1,
+            // The rest are handed the value they act on — `present` the list
+            // of parts its lines produced.
+            Cap::Disclose(_) | Cap::Issue(_) | Cap::Pay(_) | Cap::Write(_) | Cap::Present => 1,
         }
     }
 }
@@ -142,6 +161,11 @@ pub enum Op {
     Input(String),
     /// `context:time.now`
     Context(String),
+    /// `builtin:duration:days`, `builtin:min` — a function the language has and
+    /// nobody declares. A module has no functions of its own, so it asks; the
+    /// unit of a `duration` is in the name because it is written as an argument
+    /// name and a module passes values.
+    Builtin(String),
     /// `refuse:tooSmallToEarn` — the application declining, in words from the
     /// signed text bundle. An outcome, not an effect.
     Refuse(String),
@@ -160,6 +184,7 @@ impl Op {
             Op::Next(x) => format!("next:{x}"),
             Op::Input(x) => format!("input:{x}"),
             Op::Context(x) => format!("context:{x}"),
+            Op::Builtin(x) => format!("builtin:{x}"),
             Op::Refuse(x) => format!("refuse:{x}"),
             Op::Defect => "defect".into(),
             Op::Unverified => "unverified".into(),
@@ -186,6 +211,7 @@ impl Op {
             "next" => Op::Next(what),
             "input" => Op::Input(what),
             "context" => Op::Context(what),
+            "builtin" => Op::Builtin(what),
             "refuse" => Op::Refuse(what),
             _ => return None,
         })
@@ -248,6 +274,8 @@ impl Wants {
                 Cap::Query(x) => w.audiences.insert(x),
                 Cap::Pay(x) => w.payments.insert(x),
                 Cap::Write(x) => w.writes.insert(x),
+                // Its parts are the lines; it adds none of its own.
+                Cap::Present => false,
             };
         }
         w
