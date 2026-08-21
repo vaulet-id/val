@@ -72,8 +72,7 @@ fn reproduce(dir: &str, file: &str) -> ExitCode {
 /// The registries a package is built against. A command line has whatever is on
 /// disk beside the language; a wallet has its own.
 fn registries() -> valang::capability::Hosts {
-    const CORE: &str = include_str!("../../../../hosts/core.json");
-    const VAULET: &str = include_str!("../../../../hosts/vaulet.json");
+    use valang_hosts::{CORE, VAULET};
     let loaded = [CORE, VAULET]
         .into_iter()
         .filter_map(|s| valang::capability::Host::parse(s).ok())

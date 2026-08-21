@@ -282,8 +282,7 @@ fn packages(dirs: &[String]) -> valang::expand::Packages {
 /// whatever is on disk beside the language. The core one is built in because a
 /// package naming nothing else is checked against it.
 fn hosts() -> valang::capability::Hosts {
-    const CORE: &str = include_str!("../../../hosts/core.json");
-    const VAULET: &str = include_str!("../../../hosts/vaulet.json");
+    use valang_hosts::{CORE, VAULET};
 
     let mut loaded = Vec::new();
     for source in [CORE, VAULET] {

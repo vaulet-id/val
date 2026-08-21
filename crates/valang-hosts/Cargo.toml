@@ -1,0 +1,8 @@
+[package]
+name = "valang-hosts"
+version = "0.1.0"
+edition = "2021"
+description = "The host registries this project publishes, as documents rather than as code"
+
+[dependencies]
+valang.workspace = true

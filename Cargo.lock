@@ -1097,7 +1097,15 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "valang",
+ "valang-hosts",
  "valang-wasm",
+]
+
+[[package]]
+name = "valang-hosts"
+version = "0.1.0"
+dependencies = [
+ "valang",
 ]
 
 [[package]]
@@ -1111,6 +1119,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "valang",
+ "valang-hosts",
  "valang-runtime",
  "valang-wasm",
 ]
