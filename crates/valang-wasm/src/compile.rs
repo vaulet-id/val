@@ -156,6 +156,20 @@ impl Ctx<'_> {
         f.instruction(&Instruction::Call(index));
     }
 
+    /// Record that the module needs a capability nothing in it calls.
+    ///
+    /// The one case is the gate: whether somebody holds a credential is an
+    /// answer only the host can give, and a module that asked would be reading
+    /// the credential in order to learn it was absent. The import is still
+    /// carried, because the import section *is* the capability report — a gate
+    /// that did not appear there would be an application looking at a
+    /// credential the sheet never mentioned.
+    fn needs_cap(&mut self, cap: &crate::abi::Cap) {
+        if self.collecting {
+            self.dynamic.insert((crate::abi::CAPS, cap.name()), cap.arity());
+        }
+    }
+
     fn call_cap(&mut self, cap: &crate::abi::Cap, f: &mut Function) {
         self.call_dyn(crate::abi::CAPS, cap.name(), cap.arity(), f);
     }
@@ -222,6 +236,10 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
         }
         for s in &program.screens {
             screen_tree(&mut ctx, s);
+        }
+        for gate in &program.admits {
+            let cap = crate::abi::Cap::Check(read_line(&gate.credential, Some(&gate.policy)));
+            ctx.needs_cap(&cap);
         }
     }
 
@@ -397,6 +415,21 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
     // that is what a compiler is — so a module that did not say could not be
     // rebuilt and compared by anybody.
     m.insert("compiler".to_string(), Value::Str(COMPILER.to_string()));
+    m.insert(
+        "admits".to_string(),
+        Value::List(
+            a.admits
+                .iter()
+                .map(|g| {
+                    let mut one = BTreeMap::new();
+                    one.insert("credential".to_string(), Value::Str(g.credential.clone()));
+                    one.insert("policy".to_string(), Value::Str(g.policy.clone()));
+                    one.insert("phrase".to_string(), Value::Str(g.phrase.clone()));
+                    Value::Map(one)
+                })
+                .collect(),
+        ),
+    );
     m.insert("screens".to_string(), strings(&a.screens));
     m.insert("opens".to_string(), Value::Str(a.opens.clone()));
     m.insert(
@@ -534,7 +567,7 @@ pub fn about_of(bytes: &[u8]) -> Option<valang_runtime::About> {
 fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
     use valang_runtime::decode::decode;
     use valang_runtime::value::Value;
-    use valang_runtime::{About, ActionAbout, Declared};
+    use valang_runtime::{About, ActionAbout, Declared, Gate};
 
     let data = custom_section(bytes, ABOUT_SECTION)?;
     let Value::Map(m) = decode(data).ok()? else { return None };
@@ -548,6 +581,20 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
             .map(|x| match x {
                 Value::Str(s) => s.clone(),
                 _ => String::new(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let admits: Vec<Gate> = match m.get("admits") {
+        Some(Value::List(xs)) => xs
+            .iter()
+            .filter_map(|x| {
+                let Value::Map(g) = x else { return None };
+                Some(Gate {
+                    credential: text(g.get("credential")),
+                    policy: text(g.get("policy")),
+                    phrase: text(g.get("phrase")),
+                })
             })
             .collect(),
         _ => Vec::new(),
@@ -598,6 +645,7 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
         capabilities: strings(m.get("capabilities")),
         policies: strings(m.get("policies")),
         actions,
+        admits,
     })
 }
 

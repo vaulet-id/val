@@ -1,0 +1,29 @@
+{
+  "_comment": "The staff package's own bundle. `notStaff` is the one sentence somebody may read before they have read anything else about this application, so it says what to do rather than what went wrong.",
+  "locales": [
+    "en",
+    "th"
+  ],
+  "keys": {
+    "rotaTitle": {
+      "en": "Rota",
+      "th": "ตารางเวร"
+    },
+    "onShift": {
+      "en": "Your shift: {shift}",
+      "th": "เวรของคุณ: {shift}"
+    },
+    "pickShift": {
+      "en": "Which shift",
+      "th": "เวรไหน"
+    },
+    "claim": {
+      "en": "Claim it",
+      "th": "รับเวรนี้"
+    },
+    "notStaff": {
+      "en": "This application opens for Acme staff. Ask HR for a badge, then open it again.",
+      "th": "แอปนี้เปิดให้พนักงาน Acme เท่านั้น ขอบัตรพนักงานจากฝ่ายบุคคลแล้วเปิดอีกครั้ง"
+    }
+  }
+}

@@ -11,7 +11,7 @@ use crate::diag::{Diagnostic, Span};
 /// else the package declared.
 pub const RESERVED: &[&str] = &[
     // The shell.
-    "app", "version", "capabilities", "enum", "credential", "type", "state",
+    "app", "version", "capabilities", "admits", "enum", "credential", "type", "state",
     "trust", "anchor", "refines", "function", "action", "screen", "data",
     "input", "require", "verify", "compute", "update", "execute", "present",
     "component", "host",
@@ -172,6 +172,14 @@ impl Parser {
         }
     }
 
+    /// Consume the rest of a line, for recovery inside a block whose lines are
+    /// independent — one bad line should not take the others with it.
+    fn skip_line(&mut self) {
+        while !self.eof() && self.peek().kind != Kind::Newline && !self.at("}") {
+            self.bump();
+        }
+    }
+
     /// Consume a balanced block, for recovery after an error inside one.
     fn skip_block(&mut self) {
         if !self.eat("{") {
@@ -262,6 +270,25 @@ impl Parser {
                         ));
                     }
                 }
+                "admits" => {
+                    let at = self.peek().span;
+                    self.bump();
+                    self.open(ScopeKind::Capabilities, "admits");
+                    let more = self.admits();
+                    self.close();
+                    // One block, for the same reason `capabilities` is one: a
+                    // door with two lists of who may come through has two
+                    // answers to one question.
+                    if p.admits.is_empty() {
+                        p.admits = more;
+                        p.admits_span = at;
+                    } else {
+                        self.diagnostics.push(Diagnostic::error(
+                            at,
+                            "a package says who it opens for once. This is the second block, and a door has one list",
+                        ));
+                    }
+                }
                 "enum" => p.enums.push(self.enum_decl()),
                 "credential" => p.credentials.push(self.credential_decl()),
                 "type" => {
@@ -343,6 +370,72 @@ impl Parser {
                 continue;
             }
             out.push(Capability { name, args, span });
+        }
+        out
+    }
+
+    /// `EmployeeBadge with EmployeeOfAcme else "needBadge"`, one per line.
+    ///
+    /// Every part is required. The policy, because a gate that accepted
+    /// anything shaped like a badge accepts a badge somebody made; the phrase,
+    /// because a door that closes without saying why leaves the person with a
+    /// fault report instead of an instruction.
+    fn admits(&mut self) -> Vec<Admit> {
+        let mut out = Vec::new();
+        self.expect("{");
+        loop {
+            self.skip_newlines();
+            if self.eof() || self.eat("}") {
+                break;
+            }
+            let start = self.peek().span;
+            if self.peek().kind != Kind::Ident {
+                self.diagnostics.push(Diagnostic::error(
+                    start,
+                    "this block names a credential, so a line begins with one",
+                ));
+                self.bump();
+                continue;
+            }
+            let credential = self.bump().text;
+            if !self.eat("with") {
+                self.diagnostics.push(Diagnostic::error(
+                    self.peek().span,
+                    format!("`{credential}` has to be checked against a policy: `{credential} with SomePolicy`. A gate that accepted anything of the right shape accepts one somebody made"),
+                ));
+                self.skip_line();
+                continue;
+            }
+            let policy = if self.peek().kind == Kind::Ident {
+                self.bump().text
+            } else {
+                self.diagnostics.push(Diagnostic::error(
+                    self.peek().span,
+                    "`with` names a `trust` policy declared in this package",
+                ));
+                self.skip_line();
+                continue;
+            };
+            if !self.eat("else") {
+                self.diagnostics.push(Diagnostic::error(
+                    self.peek().span,
+                    format!("say what the person is told when they hold no {credential}: `else \"someKey\"`, a key in the text bundle. A door that closes without saying why is a fault report"),
+                ));
+                self.skip_line();
+                continue;
+            }
+            let end = self.peek().span;
+            let phrase = if self.peek().kind == Kind::Str {
+                self.bump().text
+            } else {
+                self.diagnostics.push(Diagnostic::error(
+                    end,
+                    "`else` names a key in the text bundle, in quotes — never a sentence written here, which is a sentence in one language that nobody reviewed",
+                ));
+                self.skip_line();
+                continue;
+            };
+            out.push(Admit { credential, policy, phrase, span: start.to(end) });
         }
         out
     }

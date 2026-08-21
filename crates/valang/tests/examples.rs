@@ -27,6 +27,7 @@ const DOOR: &str = include_str!("../../../examples/door.val");
 const WALLET: &str = include_str!("../../../examples/wallet.val");
 const PORTFOLIO: &str = include_str!("../../../examples/portfolio.val");
 const REJECTED: &str = include_str!("../../../examples/rejected.val");
+const STAFF: &str = include_str!("../../../examples/staff.val");
 
 #[test]
 fn the_valid_examples_have_nothing_to_say_about_them() {
@@ -38,6 +39,7 @@ fn the_valid_examples_have_nothing_to_say_about_them() {
     for (name, src) in [
         ("door", DOOR),
         ("portfolio", PORTFOLIO),
+        ("staff", STAFF),
         ("the loyalty package", loyalty_package.as_str()),
     ] {
         let e = errors(src);

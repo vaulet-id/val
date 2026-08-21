@@ -251,6 +251,15 @@ pub struct About {
     /// Which compiler built the module this came from. A rebuild with another
     /// front end proves nothing about either.
     pub compiler: String,
+    /// Who this application opens for at all, and what the person is told when
+    /// they are not one of them.
+    ///
+    /// **The host answers this, and the module never asks.** A module that
+    /// asked would be reading the credential in order to learn it was absent —
+    /// the read the gate exists instead of. So the gate is stated here, the
+    /// `check` import that names it is in the module, and a host that cannot
+    /// find both refuses the package.
+    pub admits: Vec<Gate>,
     /// The screens it draws, and which one it opens at.
     ///
     /// A host has to know where to start, and `@main` is where the application
@@ -259,6 +268,25 @@ pub struct About {
     /// that works for one application.
     pub screens: Vec<String>,
     pub opens: String,
+}
+
+/// A credential somebody must hold before this application opens.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Gate {
+    pub credential: String,
+    pub policy: String,
+    /// A key in the signed text bundle. The words are the publisher's, so a
+    /// door that does not open still says what to do about it.
+    pub phrase: String,
+}
+
+impl Gate {
+    /// The `check` import a module carries for this gate, and the line the
+    /// capability report shows for it. One naming, so a gate that named
+    /// something the module cannot check is a mismatch a host can see.
+    pub fn line(&self) -> String {
+        format!("{} under {}", self.credential, self.policy)
+    }
 }
 
 /// One action, and what the host is asked for before it starts.
@@ -318,6 +346,15 @@ impl About {
             // Filled in by whatever emits the module. A program has no compiler
             // of its own to name.
             compiler: String::new(),
+            admits: p
+                .admits
+                .iter()
+                .map(|a| Gate {
+                    credential: a.credential.clone(),
+                    policy: a.policy.clone(),
+                    phrase: a.phrase.clone(),
+                })
+                .collect(),
             screens: p.screens.iter().map(|s| s.name.clone()).collect(),
             opens: p
                 .screens
@@ -470,6 +507,21 @@ pub fn run_action(
         host,
         &mut Walk { program },
     )
+}
+
+/// Whether this host will open the application at all.
+///
+/// **The gate is evaluated before anything else happens** — before a screen is
+/// resolved, before an action runs — and the module is not consulted. Asking it
+/// would mean handing it the credential so that it could discover the
+/// credential was absent, which is the read a gate exists instead of: what an
+/// admitted application learns is that the door opened.
+///
+/// Every line has to pass. Two gates are two conditions and never a choice: a
+/// door that opened for either of two badges would be written as one policy
+/// over one credential, where a reviewer can see it is a choice.
+pub fn admission<'a>(about: &'a About, host: &dyn Host) -> Option<&'a Gate> {
+    about.admits.iter().find(|g| host.credential(&g.credential, Some(&g.policy)).is_none())
 }
 
 /// The same, with whichever engine evaluates it.

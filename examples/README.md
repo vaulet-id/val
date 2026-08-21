@@ -21,6 +21,7 @@ to disagree on purpose.
 | [`condo.val`](condo.val) | a vote weighted by a share of a building, with the statutory cap checked on the server. Its handler is Python |
 | [`transit.val`](transit.val) | tap to ride, with the fare cap on the operator's server. Its handler is Go |
 | [`note.val`](note.val) | a form: the wallet holds what is typed, and the action is handed it |
+| [`staff.val`](staff.val) | an application that does not open for everybody: one `admits` line, answered by the host |
 | [`catalogue.val`](catalogue.val) | every component the wallet ships, on one screen, with what each prop does |
 | [`syntax.val`](syntax.val) | the parts of the language that are not about credentials — loops, conditions, defaults, and what to do when something is missing |
 | [`kit.val`](kit.val) | components published for another package to draw, and nothing else |

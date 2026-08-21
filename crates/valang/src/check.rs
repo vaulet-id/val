@@ -29,7 +29,42 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     policies_name_an_anchor(p, &mut d);
     navigation_goes_somewhere(p, &mut d);
     every_action_is_reachable(p, &mut d);
+    admits_can_be_answered(p, &mut d);
     d
+}
+
+/// A gate names a credential this package declared and a policy over that same
+/// credential.
+///
+/// Both halves have been wrong in the same file: a policy over the wrong
+/// subject type checks a signature on something else and passes, which is a
+/// door that opens for the wrong badge rather than one that fails to open.
+fn admits_can_be_answered(p: &Program, d: &mut Vec<Diagnostic>) {
+    for a in &p.admits {
+        if !p.credentials.iter().any(|c| c.name == a.credential) {
+            d.push(Diagnostic::error(
+                a.span,
+                format!("`{}` is not a credential this package declares. A door names what it opens for in this package's own words", a.credential),
+            ));
+            continue;
+        }
+        let Some(policy) = p.trusts.iter().find(|t| t.name == a.policy) else {
+            d.push(Diagnostic::error(
+                a.span,
+                format!("`{}` is not a `trust` policy in this package", a.policy),
+            ));
+            continue;
+        };
+        if policy.subject_type != a.credential {
+            d.push(Diagnostic::error(
+                a.span,
+                format!(
+                    "`{}` is a policy over `{}`, and this gate is about `{}`. Checked against it, a `{}` would be admitted by the signature on something else",
+                    a.policy, policy.subject_type, a.credential, a.credential
+                ),
+            ));
+        }
+    }
 }
 
 /// An action is reached by a press. Declaring one binds nothing — if no screen
@@ -379,6 +414,12 @@ pub fn check_bundle(
                 }
             });
         }
+    }
+    // What a person is told at a door that did not open. The one sentence in
+    // the package somebody may read before they have read anything else, so it
+    // is held to the same rule as every other: a key, in every locale.
+    for a in &p.admits {
+        want.push((a.phrase.clone(), a.span, "refusal"));
     }
     // Key to the slots the node fills it with, so the two can be compared.
     let mut filled: Vec<(String, crate::diag::Span, Vec<String>)> = Vec::new();
@@ -844,6 +885,13 @@ fn capability_key(name: &str, arg: Option<&str>) -> String {
 
 fn capabilities_declared_and_used(p: &Program, d: &mut Vec<Diagnostic>) {
     let mut used: HashSet<String> = HashSet::new();
+
+    // A gate looks at a credential and does not read it, so it is a `check` and
+    // not a `read` — the difference the sheet turns into two different
+    // sentences about the same application.
+    for a in &p.admits {
+        used.insert(capability_key("credential.check", Some(&a.credential)));
+    }
 
     for a in &p.actions {
         for block in &a.phases {

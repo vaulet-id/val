@@ -504,10 +504,39 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
         }
     }
 
-    // 5. What this host will admit, which is not the language's business.
+    // 5. A gate the module does not back.
+    //
+    //    Who may open an application is the host's to evaluate — "you do not
+    //    hold one" is an answer only a wallet can give — so the gate is stated
+    //    rather than measured. What keeps a statement honest is that the
+    //    credential it names has to be one the module's own import section says
+    //    this application looks at. A gate naming anything else is a sheet
+    //    describing a door that is not there.
+    let wants = valang_wasm::abi::wants_of(&p.module)
+        .map_err(|e| Refusal::Malformed(format!("this module cannot be read: {e}")))?;
+    for gate in &about.admits {
+        if !wants.checks.contains(&gate.line()) {
+            return Err(Refusal::Refused {
+                by: format!(
+                    "this package says it opens only for `{}`, and its module never looks at one. A door on the sheet and no door in the code is the sheet being wrong",
+                    gate.line()
+                ),
+            });
+        }
+        if !p.text_bundle.contains_key(&gate.phrase) {
+            return Err(Refusal::Refused {
+                by: format!(
+                    "`{}` is what somebody is told when this application does not open for them, and it is in no language. A door that closes without saying why is a fault report",
+                    gate.phrase
+                ),
+            });
+        }
+    }
+
+    // 6. What this host will admit, which is not the language's business.
     ceiling(p, policy)?;
 
-    // 6. Every locale the manifest promises has every key.
+    // 7. Every locale the manifest promises has every key.
     locales(p)?;
 
     Ok(Installed {

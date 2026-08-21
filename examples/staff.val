@@ -1,0 +1,80 @@
+// An application that does not open for everybody.
+//
+// The `admits` block is the whole point of this example: without a current
+// Acme badge, this application does not draw its first screen, does not run an
+// action, and is not a thing the person can look at. Everything else here is
+// ordinary.
+//
+// **The host answers the door, and this program never asks.** There is no way
+// to write "does the person hold one?" in VAL, and that is deliberate: a
+// program that could ask would be holding the credential in order to find out
+// it was absent, which is the read a gate exists instead of. What an admitted
+// application learns is that it opened.
+
+app "th.co.acme.staff"
+version 1
+
+capabilities {
+  // A check and not a read. This application is told the door opened; it is
+  // never told the badge number, the department or the date — and a sheet
+  // saying "reads your employee badge" about it would be false.
+  credential.check(EmployeeBadge)
+}
+
+credential EmployeeBadge {
+  employee_id: string
+  department:  string
+  valid_until: date
+}
+
+trust EmployedByAcme(badge: EmployeeBadge) {
+  // The company's own anchor, and so a badge the company revoked stops opening
+  // this door without anybody shipping a new version.
+  anchor: "th.co.acme.hr"
+
+  require {
+    badge.signature.valid
+    badge.status.active
+    badge.holder.bound
+  }
+}
+
+// One line, and it is a condition rather than a preference: a person without a
+// badge that passes `EmployedByAcme` sees `notStaff` and no screen.
+//
+// The policy is not optional — a gate that admitted anything shaped like a
+// badge admits a badge somebody made — and neither is the sentence, because a
+// door that closes without saying why leaves the person with a fault report
+// instead of an instruction.
+admits {
+  EmployeeBadge with EmployedByAcme else "notStaff"
+}
+
+state {
+  shift: string default ""
+}
+
+action ClaimShift {
+  input {
+    which: string
+  }
+
+  require {
+    which != ""
+  }
+
+  update {
+    shift: which
+  }
+}
+
+@main
+screen Rota {
+  title: phrase("rotaTitle")
+
+  column {
+    card(text: phrase("onShift", shift: state.shift))
+    field(text: phrase("pickShift"), icon: document, into: which)
+    button(text: phrase("claim"), emphasis: primary, onTap: ClaimShift)
+  }
+}

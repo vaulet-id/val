@@ -8,6 +8,10 @@ pub struct Program {
     pub app: Option<String>,
     pub version: Option<String>,
     pub capabilities: Vec<Capability>,
+    /// Who this application opens for at all. Empty for almost every
+    /// application, and the whole of what some of them are.
+    pub admits: Vec<Admit>,
+    pub admits_span: Span,
     pub enums: Vec<EnumDecl>,
     pub credentials: Vec<CredentialDecl>,
     /// Plain records. The same shape as a credential's claims and none of the
@@ -119,6 +123,31 @@ pub struct Capability {
     /// `credential.read`, `disclosure.present`, `api.query`
     pub name: String,
     pub args: Vec<Arg>,
+    pub span: Span,
+}
+
+/// A credential somebody must hold before this application opens.
+///
+/// **The host decides this, not the module.** "You do not hold one" is an
+/// answer only the wallet can give — a module that asked would be asking for
+/// the credential in order to learn it was absent, which is the read the gate
+/// exists instead of. So the compiler records the line and emits the `check`
+/// import that names it, and the host resolves it before the first screen.
+///
+/// It is a check and never a read: the application learns that the door opened
+/// and nothing else about what opened it.
+#[derive(Debug, Clone)]
+pub struct Admit {
+    /// `EmployeeBadge` — a credential this package declared.
+    pub credential: String,
+    /// The policy it is checked against. Not optional: a gate that accepted
+    /// anything shaped like a badge is a gate that accepts a badge somebody
+    /// made.
+    pub policy: String,
+    /// What the person is told when they do not hold one, as a key in the
+    /// signed text bundle. Also not optional — a door that closes without
+    /// saying why is a fault report, and the words are the publisher's.
+    pub phrase: String,
     pub span: Span,
 }
 

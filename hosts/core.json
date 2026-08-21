@@ -110,6 +110,12 @@
         "of": "Credential"
       }
     },
+    "credential.check": {
+      "consent": true,
+      "props": {
+        "of": "Type"
+      }
+    },
     "credential.read": {
       "consent": true,
       "props": {

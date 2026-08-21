@@ -55,6 +55,7 @@ app "th.co.codefin.loyalty"     // reverse-DNS, in quotes
 version 1
 
 capabilities { … }              // what this app may do — declared once per package
+admits { … }                    // who it opens for at all — optional, declared once
 enum · credential · type        // data declarations
 state { … }                     // what persists between actions
 trust … { … }                   // named verification policies
@@ -227,6 +228,48 @@ credential.issue(LoyaltyMember {
 under that policy. Mix in anything else and it does not compile. Whoever
 receives the credential can then check how the number was reached instead of
 taking your signature's word for it.
+
+### Who the application opens for
+
+Most applications open for anybody holding the phone. Some do not:
+
+```val
+admits {
+  EmployeeBadge with EmployedByAcme else "notStaff"
+}
+```
+
+Without a credential that passes `EmployedByAcme`, this application does not
+draw its first screen and does not run an action. The person is shown
+`notStaff` — a key in the text bundle, so the words are the publisher's,
+reviewed and translated like every other sentence in the package.
+
+**The host answers the door, and the program never asks.** There is no way to
+write "does this person hold one?" in VAL, and the omission is the design: a
+program that could ask would be holding the credential in order to discover it
+was absent, which is exactly the read the gate exists instead of. What an
+admitted application learns is that it opened.
+
+So the gate is a `credential.check`, never a `credential.read` — the difference
+the consent sheet turns into two different sentences about the same
+application. Declare it:
+
+```val
+capabilities { credential.check(EmployeeBadge) }
+```
+
+Both halves of a line are required. Without the policy, a gate admits anything
+shaped like a badge, including one somebody made; without the sentence, a door
+closes in silence and the person is left with a fault report instead of an
+instruction. Every line must pass — two gates are two conditions and never a
+choice, because a door that opened for either of two credentials is one policy
+over one credential, written where a reviewer can see that is what it is.
+
+The gate is the one thing on the consent sheet a host **evaluates** rather than
+**measures**, so what keeps it honest is [the check below](#what-the-host-checks-before-admitting-your-package):
+the credential it names has to be one the module's own import section says this
+application looks at. A door on the sheet and no door in the code is refused as
+a sheet that is wrong.
 
 ---
 
@@ -817,7 +860,9 @@ keeps it and refuses a changed surface at an unchanged version.
    would stop being the whole of what it can do.
 4. The report it ships is the report its module produces.
 5. The module and the manifest name the same application at the same version.
-6. Every locale your manifest promises has every key.
+6. Every gate it states is one its module carries the `check` import for, and
+   the sentence a closed door shows is in the bundle.
+7. Every locale your manifest promises has every key.
 
 Then its own policy: whether an app of your kind may hold those capabilities,
 and whether it provides the registry version you built against.
@@ -855,6 +900,13 @@ one that says anything.
 
 **Cannot: sign a record that understates.** The capability list in every record
 is measured from the import section, not read from the metadata beside the code.
+
+**Cannot: put a door on the sheet that is not in the code.** Who an application
+opens for is the one thing on the sheet a host evaluates rather than measures —
+"you do not hold one" is an answer only a wallet can give. So a stated gate has
+to name a credential the module's import section says this application looks at.
+Overstating it that way is caught; understating it costs the publisher their own
+gate and nobody else anything.
 
 **Cannot: hang the phone.** Totality is a property of programs this compiler
 emits, and yours may not be one, so a fuel budget is always set.

@@ -45,11 +45,36 @@ irreversible   one disclosure
 It lists the claims you touch, not just the credentials; where anything goes;
 and whether anything happens that cannot be taken back.
 
-You cannot understate it. The wallet recomputes the report from your sources and
-refuses the package if it does not match what you shipped.
+You cannot understate it. The wallet measures the report from the module's own
+import section — what a module can call is what it imports — and refuses the
+package if that is not what you shipped.
 
-Note: this is also why the sources travel in the package. A hash over compiled
-output proves it is the output somebody signed; it never proves it is the
-program somebody read.
+## Who the application opens for
+
+Most applications open for anybody holding the phone. If yours does not, say so:
+
+```val
+capabilities { credential.check(EmployeeBadge) }
+
+admits {
+  EmployeeBadge with EmployedByAcme else "notStaff"
+}
+```
+
+Without a credential that passes the policy, the application does not draw its
+first screen and does not run an action. The person is shown `notStaff` — a key
+in your text bundle, so the words are yours, reviewed and translated like every
+other sentence you ship.
+
+**The wallet answers the door, and your program never asks.** You cannot write
+"does this person hold one?" in VAL, and that is the point: a program that could
+ask would be holding the credential in order to find out it was absent. That is
+a read, and a gate exists instead of it. Which is why the line above is a
+`credential.check` and not a `credential.read` — your application is told it
+opened and never what opened it, and the sheet says exactly that.
+
+Both halves are required. Without the policy you admit anything shaped like a
+badge, including one somebody made; without the sentence the door closes in
+silence, and the person is left with a fault report instead of an instruction.
 
 Next: [credentials and trust](04-credentials-and-trust.md).
