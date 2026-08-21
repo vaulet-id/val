@@ -1,10 +1,22 @@
-//! The `.va` package.
+//! The `.va` package: a compiled Micro App, signed by whoever published it.
+//!
+//! **It carries the module and no source.** A wallet has no compiler and is
+//! never going to have one — compiling on a phone is not a thing anybody
+//! ships — so what a wallet is handed is what runs, and every check it makes is
+//! a check on those bytes: they hash to what the package says, the publisher
+//! signed them, what they can reach is what the package claimed, and this is
+//! that application at that version.
+//!
+//! The old worry — that a hash over bytecode proves it is the bytecode somebody
+//! signed and never that it is the program somebody read — is answered by
+//! **reproducible builds** rather than by shipping the source to every phone.
+//! The publisher publishes their source; anybody who cares builds it and
+//! compares the bytes, once. And a wallet never has to take the report on
+//! trust either, because it derives it from the module's import section: what a
+//! module can reach is what it imports, and it imports nothing else.
 //!
 //! It answers, to somebody who did not build it: who published this, which
-//! version is running, whether it was modified, what it may do, and **what is
-//! actually executing** — which is why the sources are in it. A hash over
-//! bytecode proves it is the bytecode somebody signed; it never proves it is
-//! the program somebody read (§1).
+//! version is running, whether it was modified, and what it may do.
 
 use std::collections::BTreeMap;
 
@@ -38,8 +50,11 @@ pub trait HostPolicy {
         true
     }
 
-    /// Whether a package of this kind may carry VAL sources at all.
-    fn expects_sources(&self, kind: &str) -> bool {
+    /// Whether a package of this kind carries a compiled module at all.
+    ///
+    /// The tier that does is the tier whose report can be derived; the tier
+    /// that does not ships a declaration, and that is why its ceiling is lower.
+    fn expects_module(&self, kind: &str) -> bool {
         kind == "val"
     }
 
@@ -80,25 +95,32 @@ pub struct Manifest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
     pub manifest: Manifest,
-    /// Path to text. Several files, one scope, no imports across packages.
-    pub sources: BTreeMap<String, String>,
+    /// **The compiled module, and no source.** A wallet has no compiler and is
+    /// never going to have one: what it is handed is what runs. The source is
+    /// the publisher's to publish, and anybody who wants to check them can
+    /// build it and compare the bytes — which is a thing done once, by whoever
+    /// cares, and not on every phone at every install.
+    pub module: Vec<u8>,
     pub text_bundle: BTreeMap<String, BTreeMap<String, String>>,
-    /// Derived, and shipped only so a store can list it. The host recomputes
-    /// it and refuses on mismatch, because the host owns the checker.
+    /// Derived, and shipped only so a store can list it. The host derives it
+    /// again from the module and refuses on mismatch, because a publisher's
+    /// copy is evidence of nothing.
     pub report: BTreeMap<String, Vec<String>>,
-    pub integrity: BTreeMap<String, String>,
+    /// What the module hashes to. One entry, because there is one artifact.
+    pub integrity: String,
     pub signature: Option<Vec<u8>>,
     pub public_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
-    /// A source in the package does not hash to what integrity says it does.
+    /// The module does not hash to what integrity says it does.
     Modified(String),
     /// The signature is absent, malformed, or not this publisher's.
     Unsigned(String),
-    /// The program does not compile. A publisher's build passing proves
-    /// nothing: the host runs the checks itself.
+    /// The publisher's build did not produce something admissible: it does not
+    /// compile, or the module and the manifest do not name the same
+    /// application at the same version.
     WouldNotBuild(Vec<String>),
     /// The shipped report is not the one the code produces. Understating what
     /// an application does is the one lie a package could otherwise tell.
@@ -106,6 +128,11 @@ pub enum Refusal {
     Malformed(String),
     /// The host will not admit this, and the reason is the host's.
     Refused { by: String },
+}
+
+/// What integrity says about a module: the hash, as it is written down.
+pub fn hex_of(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
 }
 
 fn hex(b: &[u8]) -> String {
@@ -130,10 +157,7 @@ fn signable(p: &Package) -> Vec<u8> {
     );
     m.insert("manifest".into(), Value::Map(man));
 
-    m.insert(
-        "sources".into(),
-        Value::Map(p.sources.iter().map(|(k, v)| (k.clone(), Value::Str(v.clone()))).collect()),
-    );
+    m.insert("module".into(), Value::Bytes(p.module.clone()));
     m.insert(
         "text".into(),
         Value::Map(
@@ -154,10 +178,7 @@ fn signable(p: &Package) -> Vec<u8> {
                 .collect(),
         ),
     );
-    m.insert(
-        "integrity".into(),
-        Value::Map(p.integrity.iter().map(|(k, v)| (k.clone(), Value::Str(v.clone()))).collect()),
-    );
+    m.insert("integrity".into(), Value::Str(p.integrity.clone()));
 
     DeterministicCbor.encode(&Value::Map(m))
 }
@@ -181,9 +202,12 @@ pub fn report_rows(r: &Report) -> BTreeMap<String, Vec<String>> {
     out
 }
 
-/// Build a package from sources. The report is derived here and recomputed by
-/// the host; shipping it is a convenience for a store listing and evidence of
-/// nothing on its own.
+/// Build a package from sources — on the publisher's machine, which is the only
+/// place a compiler runs.
+///
+/// The report is derived here from the module this produces, and derived again
+/// by the host from the module it receives; shipping it is a convenience for a
+/// store listing and evidence of nothing on its own.
 pub fn build(
     manifest: Manifest,
     sources: BTreeMap<String, String>,
@@ -239,16 +263,35 @@ pub fn build(
         return Err(Refusal::WouldNotBuild(disagreements));
     }
 
-    let integrity = sources
-        .iter()
-        .map(|(path, text)| (path.clone(), hex(&Sha256::digest(text.as_bytes()))))
-        .collect();
+    // The artifact. Compiling happens here, on the publisher's machine, once —
+    // and never again anywhere else.
+    //
+    // A package with no sources produces no module rather than an empty one:
+    // the tier that carries no code is the tier whose report cannot be derived,
+    // and a module with nothing in it would look like a derivation that found
+    // nothing to say.
+    let module = if sources.is_empty() {
+        Vec::new()
+    } else {
+        valang_wasm::compile::compile_program(&program).map_err(Refusal::WouldNotBuild)?.bytes
+    };
+    let integrity = hex(&Sha256::digest(&module));
 
     let mut pkg = Package {
         manifest,
-        sources,
+        // Derived where there is something to derive it from, and left for the
+        // publisher to declare where there is not. That difference is the whole
+        // difference between the tiers, and it is why one of them has a lower
+        // ceiling.
+        report: if module.is_empty() {
+            BTreeMap::new()
+        } else {
+            report_rows(&valang_wasm::compile::report_of_module(&module).ok_or_else(|| {
+                Refusal::Malformed("the module it just built cannot be read".into())
+            })?)
+        },
+        module,
         text_bundle,
-        report: report_rows(&valang_wasm::report_of(&program).map_err(Refusal::WouldNotBuild)?),
         integrity,
         signature: None,
         public_key: None,
@@ -280,12 +323,12 @@ pub struct Installed {
     pub text_bundle: BTreeMap<String, BTreeMap<String, String>>,
 }
 
-/// A program and the text it was compiled from, which cannot be separated: the
-/// runtime hashes exactly this text into every execution record, so a verifier
-/// can say which code ran.
+/// What runs, and what a record says about it. They cannot be separated: the
+/// record names the hash of exactly these bytes, so somebody holding the
+/// package and the record can say the two are the same thing.
 pub struct Code {
-    pub program: valang::ast::Program,
-    pub source: String,
+    pub module: Vec<u8>,
+    pub about: valang_runtime::About,
 }
 
 pub fn verify(p: &Package) -> Result<(), Refusal> {
@@ -300,21 +343,18 @@ pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> 
 
 /// Admit a package, or refuse it, and hand back what to run.
 ///
-/// This is what a host does when somebody installs an application: check that
-/// nothing was modified after it was signed, that the publisher is who it says,
-/// that it compiles **against this host's catalogue**, that the manifest and
-/// the code name the same application, that the report it ships is the report
-/// its code produces, and that this host admits what it asks for.
+/// **Nothing here compiles anything.** A wallet is handed a module and checks
+/// it: that it hashes to what the package says, that the publisher signed those
+/// bytes, that what it can do is what the package claimed, that it is this
+/// application at this version, and that this host admits what it asks for.
+/// Compiling happened once, on the publisher's machine — and whoever wants to
+/// know that the module is the source the publisher published builds the source
+/// and compares the bytes, which is a thing done by someone who cares rather
+/// than by every phone at every install.
 pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, Refusal> {
-    // 1. Nothing was modified after it was signed.
-    for (path, text) in &p.sources {
-        let want = p.integrity.get(path).ok_or_else(|| Refusal::Malformed(format!("{path} has no integrity entry")))?;
-        if hex(&Sha256::digest(text.as_bytes())) != *want {
-            return Err(Refusal::Modified(path.clone()));
-        }
-    }
-    if p.integrity.len() != p.sources.len() {
-        return Err(Refusal::Malformed("integrity names a file the package does not carry".into()));
+    // 1. The bytes are the bytes.
+    if hex(&Sha256::digest(&p.module)) != p.integrity {
+        return Err(Refusal::Modified("the module".into()));
     }
 
     // 2. The publisher is who the package says.
@@ -326,80 +366,58 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
     let signature = Signature::from_slice(sig).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
     key.verify(&signable(p), &signature).map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
 
-    // A package with no sources is a tier where none of the next two checks can
-    // be made — and that is the reason the tier has a lower ceiling, not a
-    // consequence of it. **The report can only be derived from code the host
-    // compiled.** For anything else it is a declaration, and a declaration is
+    // A package with no module is a tier where the next two checks cannot be
+    // made — and that is the reason the tier has a lower ceiling, not a
+    // consequence of it. **A report can only be derived from something that
+    // runs.** For anything else it is a declaration, and a declaration is
     // exactly what a person cannot check.
-    if !policy.expects_sources(&p.manifest.kind) {
-        if !p.sources.is_empty() {
+    if !policy.expects_module(&p.manifest.kind) {
+        if !p.module.is_empty() {
             return Err(Refusal::Refused {
-                by: format!("a `{}` package carries no VAL sources", p.manifest.kind),
+                by: format!("a `{}` package carries no module", p.manifest.kind),
             });
         }
         ceiling(p, policy)?;
         locales(p)?;
         return Ok(Installed { manifest: p.manifest.clone(), code: None, text_bundle: p.text_bundle.clone() });
     }
-    if p.sources.is_empty() {
+    if p.module.is_empty() {
         return Err(Refusal::Refused {
-            by: format!("a `{}` package carries VAL sources, and this one carries none", p.manifest.kind),
+            by: format!("a `{}` package carries a module, and this one carries none", p.manifest.kind),
         });
     }
 
-    // 3. It compiles — checked here, not taken on trust from a build we did not
-    //    run.
-    let joined = p.sources.values().cloned().collect::<Vec<_>>().join("\n");
-    // The host's own registries, which is the only copy that matters: what this
-    // wallet ships is what this package has to have been written against.
-    let (program, diagnostics) =
-        valang::analyse_fully(&joined, Some((&p.text_bundle, &p.manifest.locales)), &policy.registries());
-    let errors: Vec<String> = diagnostics
-        .iter()
-        .filter(|d| d.severity == valang::Severity::Error)
-        .map(|d| d.to_string())
-        .collect();
-    if !errors.is_empty() {
-        return Err(Refusal::WouldNotBuild(errors));
-    }
+    // 3. It is a module this host can describe, and everything it reaches for
+    //    is something this host provides. A module importing a name we do not
+    //    know is refused rather than linked: what the list says it can do would
+    //    stop being the whole of what it can do.
+    let about = valang_wasm::compile::about_of(&p.module)
+        .ok_or_else(|| Refusal::Malformed("this is not a module this host can read".into()))?;
+    let sheet = valang_wasm::compile::report_of_module(&p.module)
+        .ok_or_else(|| Refusal::Refused { by: "this module reaches for something this host does not provide".into() })?;
 
-    // The manifest is what a host reads before it reads the code, and a person
+    // The manifest is what a host reads before it reads the module, and a person
     // reads the name off it. Two answers to which application this is means the
     // one on the consent sheet is not the one that runs.
-    //
-    // Only where there is code to disagree with: a webview package carries none,
-    // and what it does is checked from its report instead.
     let mut disagreements = Vec::new();
-    if !p.sources.is_empty() {
-        match &program.app {
-            Some(app) if *app != p.manifest.app => disagreements.push(format!(
-                "the manifest calls this `{}` and the code calls it `{app}`",
-                p.manifest.app
-            )),
-            None => disagreements
-                .push("the manifest names an application and the code names none".to_string()),
-            _ => {}
-        }
-        match &program.version {
-            Some(v) if *v != p.manifest.version => disagreements.push(format!(
-                "the manifest says version {} and the code says {v}",
-                p.manifest.version
-            )),
-            None => {
-                disagreements.push("the manifest has a version and the code has none".to_string())
-            }
-            _ => {}
-        }
+    if about.app != p.manifest.app {
+        disagreements.push(format!(
+            "the manifest calls this `{}` and the module calls it `{}`",
+            p.manifest.app, about.app
+        ));
+    }
+    if about.version != p.manifest.version {
+        disagreements.push(format!(
+            "the manifest says version {} and the module says {}",
+            p.manifest.version, about.version
+        ));
     }
     if !disagreements.is_empty() {
         return Err(Refusal::WouldNotBuild(disagreements));
     }
 
-    // 4. The report it ships is the report its code produces.
-    // From the module: what an application does to the person is the import
-    // section of the thing that runs, and a package whose code will not compile
-    // to one cannot be admitted at all.
-    let derived = report_rows(&valang_wasm::report_of(&program).map_err(Refusal::WouldNotBuild)?);
+    // 4. The report it ships is the report its module produces.
+    let derived = report_rows(&sheet);
     for (line, values) in &derived {
         let shipped = p.report.get(line).cloned().unwrap_or_default();
         if shipped != *values {
@@ -419,7 +437,7 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
 
     Ok(Installed {
         manifest: p.manifest.clone(),
-        code: Some(Code { program, source: joined }),
+        code: Some(Code { module: p.module.clone(), about }),
         text_bundle: p.text_bundle.clone(),
     })
 }
@@ -550,7 +568,10 @@ pub fn read(bytes: &[u8]) -> Result<Package, Refusal> {
 
     Ok(Package {
         manifest,
-        sources: map_of_str(b.get("sources")),
+        module: match b.get("module") {
+            Some(Value::Bytes(x)) => x.clone(),
+            _ => Vec::new(),
+        },
         text_bundle: match b.get("text") {
             Some(Value::Map(m)) => m.iter().map(|(k, v)| (k.clone(), map_of_str(Some(v)))).collect(),
             _ => BTreeMap::new(),
@@ -570,7 +591,7 @@ pub fn read(bytes: &[u8]) -> Result<Package, Refusal> {
                 .collect(),
             _ => BTreeMap::new(),
         },
-        integrity: map_of_str(b.get("integrity")),
+        integrity: str_at(b.get("integrity")),
         signature,
         public_key,
     })

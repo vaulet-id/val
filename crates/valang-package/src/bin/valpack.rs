@@ -12,10 +12,10 @@ fn usage() -> ExitCode {
 
 fn show(pkg: &Package) {
     println!("{} v{} — admitted", pkg.manifest.app, pkg.manifest.version);
-    println!("  every source hashes to what integrity says");
+    println!("  the module hashes to what integrity says");
     println!("  the signature is over these bytes");
-    println!("  it compiles, checked here and not taken on trust");
-    println!("  the report it ships is the report its code produces");
+    println!("  it imports only what this host provides");
+    println!("  the report it ships is the report its module produces");
     for (line, values) in &pkg.report {
         println!("    {line:<14} {}", if values.is_empty() { "—".to_string() } else { values.join(", ") });
     }
@@ -33,6 +33,25 @@ fn read_sources(dir: &str) -> BTreeMap<String, String> {
         }
     }
     out
+}
+
+/// The signed text bundle beside the sources: `text.json`.
+///
+/// Read with the language's own reader, because a second one disagreed with it
+/// and built packages whose bundle had three entries called `_comment`,
+/// `locales` and `keys`.
+fn read_text(dir: &str) -> (BTreeMap<String, BTreeMap<String, String>>, Vec<String>) {
+    let path = std::path::Path::new(dir).join("text.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return (BTreeMap::new(), vec!["en".to_string()]);
+    };
+    match valang::read_bundle(&text) {
+        Some((keys, locales)) if !locales.is_empty() => (keys, locales),
+        _ => {
+            eprintln!("{}: not a text bundle", path.display());
+            (BTreeMap::new(), vec!["en".to_string()])
+        }
+    }
 }
 
 fn describe(r: &Refusal) -> String {
@@ -84,13 +103,14 @@ fn main() -> ExitCode {
     let joined = sources.values().cloned().collect::<Vec<_>>().join("\n");
     let (program, _) = valang::analyse(&joined);
 
+    let (text_bundle, locales) = read_text(dir);
     let manifest = Manifest {
         app: program.app.clone().unwrap_or_default(),
         version: program.version.clone().unwrap_or_default(),
         kind: "val".into(),
         publisher: "did:web:codefin.io".into(),
         catalogue: "1".into(),
-        locales: vec!["th".into(), "en".into()],
+        locales,
     };
 
     let key = keygen();
@@ -105,7 +125,7 @@ fn main() -> ExitCode {
             .collect();
         valang::capability::Hosts::of(loaded)
     };
-    let built = build(manifest, sources, BTreeMap::new(), &hosts, Some(&key));
+    let built = build(manifest, sources, text_bundle, &hosts, Some(&key));
 
     let pkg: Package = match built {
         Ok(p) => p,
@@ -128,7 +148,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
             println!("{} v{}", pkg.manifest.app, pkg.manifest.version);
-            println!("  sources        {}", pkg.sources.len());
+            println!("  module         {} bytes", pkg.module.len());
             println!("  artifact hash  {}", &artifact_hash(&pkg)[..24]);
             println!("  signed by      {}", pkg.manifest.publisher);
             println!("  written        {out} ({} bytes)", bytes.len());

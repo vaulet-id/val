@@ -65,7 +65,8 @@ fn a_source_changed_after_signing_is_caught() {
     let mut pkg = build(manifest(), sources(), text(), &registries(), Some(&key)).expect("builds");
     // The one attack the integrity table exists for: the reviewed program is
     // not the program that runs.
-    pkg.sources.insert("loyalty.val".into(), LOYALTY.replace("/ satangPerBaht", "* satangPerBaht"));
+    let last = pkg.module.len() - 1;
+    pkg.module[last] ^= 0xff;
     assert!(matches!(verify(&pkg), Err(Refusal::Modified(_))));
 }
 
@@ -193,13 +194,13 @@ fn a_webview_may_not_issue_a_credential() {
 }
 
 #[test]
-fn a_webview_carrying_val_sources_is_refused() {
+fn a_webview_carrying_a_module_is_refused() {
     let key = keygen();
     let mut m = manifest();
     m.kind = "webview".into();
     let pkg = build(m, sources(), text(), &registries(), Some(&key)).unwrap();
     match verify_with(&pkg, &Vaulet) {
-        Err(Refusal::Refused { by }) => assert!(by.contains("carries no VAL sources"), "{by}"),
+        Err(Refusal::Refused { by }) => assert!(by.contains("carries no module"), "{by}"),
         other => panic!("got {other:?}"),
     }
 }

@@ -237,6 +237,14 @@ pub struct About {
     /// for those and nothing else: state this application never declared is not
     /// its state.
     pub fields: Vec<String>,
+    /// The rest of what a person is shown, which is about the package rather
+    /// than about its effects: the hosts it needs, the addresses a link can
+    /// reach, and what it exports and imports. A wallet renders one sheet and
+    /// has one place to render it from.
+    pub hosts: Vec<String>,
+    pub addresses: Vec<String>,
+    pub exports: Vec<String>,
+    pub imports: Vec<String>,
 }
 
 /// One action, and what the host is asked for before it starts.
@@ -289,6 +297,10 @@ impl About {
                 .collect(),
             state: initial_state(p, &State::new()),
             fields: p.state.iter().map(|f| f.name.clone()).collect(),
+            hosts: Vec::new(),
+            addresses: Vec::new(),
+            exports: Vec::new(),
+            imports: Vec::new(),
         }
     }
 

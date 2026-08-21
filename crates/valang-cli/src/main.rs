@@ -8,30 +8,7 @@ use std::process::ExitCode;
 
 /// The text bundle beside the sources. Checking code without it is checking
 /// half a package, and it is the half that says what a person reads.
-fn parse_bundle(text: &str) -> Option<(valang::TextBundle, Vec<String>)> {
-    let json: serde_json::Value = serde_json::from_str(text).ok()?;
-    let locales = json["locales"]
-        .as_array()?
-        .iter()
-        .filter_map(|l| l.as_str().map(str::to_string))
-        .collect();
-    let keys = json["keys"]
-        .as_object()?
-        .iter()
-        .map(|(key, per_locale)| {
-            let inner = per_locale
-                .as_object()
-                .map(|m| {
-                    m.iter()
-                        .filter_map(|(l, t)| t.as_str().map(|t| (l.clone(), t.to_string())))
-                        .collect()
-                })
-                .unwrap_or_default();
-            (key.clone(), inner)
-        })
-        .collect();
-    Some((keys, locales))
-}
+use valang::read_bundle as parse_bundle;
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();

@@ -15,6 +15,9 @@ sha2 = "0.10"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 
+# A text bundle on disk is JSON, and JSON is a specification.
+serde_json = "1"
+
 # The report comes from the compiled module, so building a package and
 # admitting one both need the back end.
 valang-wasm = { path = "../valang-wasm" }

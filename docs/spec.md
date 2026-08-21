@@ -763,12 +763,21 @@ valpack build  ./dir -o app.va
 valpack verify app.va
 ```
 
-A `.va` is one signed document: your sources, the manifest, the text bundle, the
-derived capability report, a hash per file, and a signature over all of it. The
-same inputs produce the same bytes.
+A `.va` is one signed document: **the compiled module**, the manifest, the text
+bundle, the derived capability report, the module's hash, and a signature over
+all of it. The same inputs produce the same bytes.
 
-**The sources travel in the package**, so the host can check it from first
-principles rather than trusting your build.
+**No source travels in the package.** A wallet has no compiler — compiling on a
+phone is not a thing anybody ships — so what it is handed is what runs, and
+every check it makes is a check on those bytes. It still takes nothing on
+trust: what an application can do is the module's **import section**, which a
+wallet reads off the bytes in linear time, and a module can reach only what it
+imports.
+
+That a module is the source you published is answered by **reproducible
+builds**, not by shipping the source to every phone: the same source and the
+same compiler produce the same bytes, so anybody who cares builds it once and
+compares.
 
 ### The capability report
 
@@ -800,13 +809,14 @@ keeps it and refuses a changed surface at an unchanged version.
 
 ### What the host checks before admitting your package
 
-1. Every source hashes to what integrity says.
+1. The module hashes to what integrity says.
 2. The signature is over these bytes, by the key your manifest names.
-3. It compiles **against that host's own registry** — checked there, not taken
-   from your build, and against the catalogue that will draw it rather than
-   against one somebody else published.
-4. The report it ships is the report its code produces.
-5. Every locale your manifest promises has every key.
+3. It imports **only what that host provides** — a name the host does not know
+   is a refusal rather than a link, because otherwise the list of what it can do
+   would stop being the whole of what it can do.
+4. The report it ships is the report its module produces.
+5. The module and the manifest name the same application at the same version.
+6. Every locale your manifest promises has every key.
 
 Then its own policy: whether an app of your kind may hold those capabilities,
 and whether it provides the registry version you built against.
@@ -836,21 +846,29 @@ server sign a credential for a run that does not verify.
 ## How it runs
 
 ```
-.val sources
-     │
-     ├─ lexer → parser → typed AST
-     ├─ type checking          Verified<P>, T?, provenance
-     ├─ capability and trust analysis
-     ├─ determinism and totality
-     │
-     ├─ evaluator              walks the typed AST
-     └─ Wasm back end          for hard fuel limits and signed bytecode
+                 the publisher's machine          │        the device
+                                                  │
+.val sources                                      │   .va  (module + manifest
+     │                                            │        + text + signature)
+     ├─ lexer → parser → typed AST                │        │
+     ├─ type checking      Verified<P>, T?, …     │        ├─ the bytes hash right
+     ├─ capability and trust analysis             │        ├─ the publisher signed them
+     ├─ determinism and totality                  │        ├─ its imports are the report
+     │                                            │        └─ run it
+     ├─ evaluator          walks the typed AST    │
+     └─ Wasm back end   ───────────── module ─────┼────────→ wasmi
 ```
 
 Both back ends read the same typed AST; there is no intermediate representation
 between them. The Wasm back end keeps values host-side and passes `i32` handles,
 so no allocator is needed, and trapping integer overflow maps to Wasm traps
-directly. iOS forbids JIT, so the runtime interprets.
+directly. iOS forbids JIT, so the runtime interprets — which is also why nothing
+on a device compiles anything.
+
+The module carries what a record needs beside the code: which application, which
+version, the capabilities declared, the policies, the credentials each action
+asks for, and the state's declared defaults. A wallet fills in an execution
+record from the bytes and nothing else.
 
 ### What the host supplies
 

@@ -343,7 +343,13 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
     let pool = encode_konsts(&ctx.konsts);
     module.section(&CustomSection { name: KONST_SECTION.into(), data: pool.into() });
 
-    let about = encode_about(&valang_runtime::About::of(program));
+    let mut about = valang_runtime::About::of(program);
+    let paper = valang::report::report(program);
+    about.hosts = paper.hosts.iter().cloned().collect();
+    about.addresses = paper.addresses.iter().cloned().collect();
+    about.exports = paper.exports.iter().cloned().collect();
+    about.imports = paper.imports.iter().cloned().collect();
+    let about = encode_about(&about);
     module.section(&CustomSection { name: ABOUT_SECTION.into(), data: about.into() });
 
     if !ctx.unsupported.is_empty() {
@@ -389,6 +395,10 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
     m.insert("policies".to_string(), strings(&a.policies));
     m.insert("state".to_string(), Value::Map(a.state.clone()));
     m.insert("fields".to_string(), strings(&a.fields));
+    m.insert("hosts".to_string(), strings(&a.hosts));
+    m.insert("addresses".to_string(), strings(&a.addresses));
+    m.insert("exports".to_string(), strings(&a.exports));
+    m.insert("imports".to_string(), strings(&a.imports));
     m.insert(
         "actions".to_string(),
         Value::List(
@@ -424,6 +434,35 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
         ),
     );
     DeterministicCbor.encode(&Value::Map(m))
+}
+
+/// The whole consent sheet, from the bytes a wallet was handed.
+///
+/// **No source, no compiler, nothing taken on trust.** What it does to the
+/// person is the import section; which application it is and what else a person
+/// is owed is the section beside it.
+pub fn report_of_module(bytes: &[u8]) -> Option<valang::report::Report> {
+    let about = about_of(bytes)?;
+    let wants = crate::abi::wants_of(bytes).ok()?;
+    let set = |xs: Vec<String>| xs.into_iter().collect();
+    Some(valang::report::Report {
+        app: about.app,
+        version: about.version,
+        reads: wants.reads_as_lines(),
+        discloses: wants.discloses.clone(),
+        proves: wants.proves.clone(),
+        issues: wants.issues,
+        audiences: wants.audiences,
+        payments: wants.payments.clone(),
+        writes: wants.writes,
+        hosts: set(about.hosts),
+        addresses: set(about.addresses),
+        exports: set(about.exports),
+        imports: set(about.imports),
+        irreversible: !wants.discloses.is_empty()
+            || !wants.proves.is_empty()
+            || !wants.payments.is_empty(),
+    })
 }
 
 /// Read it back, from bytes and nothing else. This is the first thing a wallet
@@ -483,6 +522,10 @@ pub fn about_of(bytes: &[u8]) -> Option<valang_runtime::About> {
     Some(About {
         state,
         fields: strings(m.get("fields")),
+        hosts: strings(m.get("hosts")),
+        addresses: strings(m.get("addresses")),
+        exports: strings(m.get("exports")),
+        imports: strings(m.get("imports")),
         app: text(m.get("app")),
         version: text(m.get("version")),
         capabilities: strings(m.get("capabilities")),

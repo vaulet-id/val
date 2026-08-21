@@ -30,6 +30,38 @@ pub fn analyse(src: &str) -> (ast::Program, Vec<Diagnostic>) {
 /// The text bundle a package ships. Key to locale to template.
 pub type TextBundle = std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>;
 
+/// Read a text bundle off disk: `{ "locales": [...], "keys": { key: { locale:
+/// text } } }`.
+///
+/// One reader, because two of them disagreed: `valc` read the shape above and
+/// the packager read the top level as the keys, so it built a package whose
+/// bundle had three entries called `_comment`, `locales` and `keys` — and every
+/// program that says a word to anybody was refused for a missing language.
+pub fn read_bundle(text: &str) -> Option<(TextBundle, Vec<String>)> {
+    let json: serde_json::Value = serde_json::from_str(text).ok()?;
+    let locales = json["locales"]
+        .as_array()?
+        .iter()
+        .filter_map(|l| l.as_str().map(str::to_string))
+        .collect();
+    let keys = json["keys"]
+        .as_object()?
+        .iter()
+        .map(|(key, per_locale)| {
+            let inner = per_locale
+                .as_object()
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(l, t)| t.as_str().map(|t| (l.clone(), t.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default();
+            (key.clone(), inner)
+        })
+        .collect();
+    Some((keys, locales))
+}
+
 /// Analyse against the bundle as well as the code. They are signed as one
 /// package, so checking them apart would mean signing a pairing nobody verified
 /// (§9) — and every sentence a person reads is in there rather than in the

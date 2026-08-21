@@ -1,9 +1,10 @@
-//! The whole path a wallet takes: bytes arrive, the host admits them, the
-//! program runs, and a record is signed.
+//! The path a wallet walks: bytes arrive, the wallet admits them, an action
+//! runs, and a record is signed.
 //!
-//! This is what "installing a Micro App" is. It is written as one test on
-//! purpose — the steps are only worth anything together, and each of them
-//! existed separately for a while without anything proving they composed.
+//! **Nothing here compiles anything.** The package carries a module the
+//! publisher built and signed; the wallet checks the bytes, reads what they can
+//! do off them, and runs them. A step that needed a source would be a step that
+//! needed a compiler on the phone.
 
 use std::collections::BTreeMap;
 
@@ -53,7 +54,8 @@ fn text() -> BTreeMap<String, BTreeMap<String, String>> {
     ])
 }
 
-fn packaged() -> Vec<u8> {
+/// The publisher's build, which is the only place a compiler runs.
+fn published() -> Vec<u8> {
     let key = keygen();
     let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
     let pkg = build(manifest(), sources, text(), &registries(), Some(&key)).expect("builds");
@@ -61,23 +63,36 @@ fn packaged() -> Vec<u8> {
 }
 
 #[test]
-fn a_package_arrives_as_bytes_and_an_action_runs() {
-    let bytes = packaged();
+fn a_wallet_installs_a_package_and_runs_it() {
+    let bytes = published();
 
     // What the wallet is handed. Nothing before this point is trusted.
     let pkg = read(&bytes).expect("the bytes are a package");
+    assert!(!pkg.module.is_empty(), "a package carries the module that runs");
+
     let installed = install_with(&pkg, &Wallet).expect("this host admits it");
-    let code = installed.code.expect("a `val` package carries code");
+    let code = installed.code.expect("a `val` package carries a module");
+
+    // What the person is shown, derived from the module the wallet holds.
+    let sheet = valang_wasm::compile::report_of_module(&code.module).expect("it says what it does");
+    assert!(sheet.issues.contains("LoyaltyMember"), "{sheet}");
 
     let host = Fixture::parse(WALLET).expect("the wallet parses");
-    let state = valang_runtime::initial_state(&code.program, &host.state());
-    let run = valang_runtime::run_action(
-        &code.program,
-        &code.source,
+    let module = valang_wasm::compile::Module {
+        konsts: valang_wasm::konsts_of(&code.module).expect("its constants travel with it"),
+        bytes: code.module.clone(),
+        functions: Vec::new(),
+    };
+    let code_hash: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(&code.module).into();
+    let mut engine = valang_wasm::WasmEngine::new(&module);
+    let run = valang_runtime::run_action_with(
+        &code.about,
+        code_hash,
         "ScanToEarn",
-        &state,
+        &code.about.initial(&host.state()),
         &BTreeMap::new(),
         &host,
+        &mut engine,
     );
 
     assert!(
@@ -90,42 +105,63 @@ fn a_package_arrives_as_bytes_and_an_action_runs() {
     assert!(!run.record.signature.is_empty(), "nothing signed the record");
 }
 
-/// The property the two-compile version could not have: **what was checked is
-/// what runs.** The record hashes the source the program was compiled from, and
-/// that is the text the package carried — so a verifier holding the package and
-/// holding the record can say they are the same code, which is the whole claim.
+/// **The record names the module.** Somebody holding the package and the record
+/// can say the two are the same thing, without holding any source and without
+/// having compiled anything.
 #[test]
-fn the_record_names_the_code_that_was_admitted() {
-    let bytes = packaged();
+fn the_record_names_the_module_the_package_carried() {
+    let bytes = published();
     let pkg = read(&bytes).expect("the bytes are a package");
-    let installed = install_with(&pkg, &Wallet).expect("admitted");
-    let code = installed.code.expect("carries code");
+    let code = install_with(&pkg, &Wallet).expect("admitted").code.expect("carries a module");
 
     let host = Fixture::parse(WALLET).expect("the wallet parses");
-    let state = valang_runtime::initial_state(&code.program, &host.state());
-    let run = valang_runtime::run_action(
-        &code.program,
-        &code.source,
+    let module = valang_wasm::compile::Module {
+        konsts: valang_wasm::konsts_of(&code.module).expect("constants"),
+        bytes: code.module.clone(),
+        functions: Vec::new(),
+    };
+    let code_hash: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(&pkg.module).into();
+    let mut engine = valang_wasm::WasmEngine::new(&module);
+    let run = valang_runtime::run_action_with(
+        &code.about,
+        code_hash,
         "ScanToEarn",
-        &state,
+        &code.about.initial(&host.state()),
         &BTreeMap::new(),
         &host,
+        &mut engine,
     );
 
-    // Computed here from the package's own text, by a different route than the
-    // runtime took to fill the record in.
-    let expected: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(code.source.as_bytes()).into();
-    assert_eq!(run.record.code_hash, expected, "the record names other code than the package carried");
+    assert_eq!(run.record.code_hash, code_hash);
+    assert_eq!(
+        valang_package::hex_of(&pkg.module),
+        pkg.integrity,
+        "and the package says the same about those bytes"
+    );
 }
 
-/// A source changed after signing is refused, and the program never exists —
-/// there is nothing to accidentally run.
+/// A module changed after signing is refused, and nothing is handed back to
+/// run. This is the whole of what the signature is for once no source travels.
 #[test]
-fn a_modified_package_never_produces_a_program() {
+fn a_modified_module_is_refused() {
     let key = keygen();
     let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
     let mut pkg = build(manifest(), sources, text(), &registries(), Some(&key)).expect("builds");
-    pkg.sources.insert("loyalty.val".to_string(), LOYALTY.replace("version 1", "version 2"));
+
+    // One byte, somewhere nobody would look.
+    let last = pkg.module.len() - 1;
+    pkg.module[last] ^= 0xff;
 
     assert!(matches!(install_with(&pkg, &Wallet), Err(Refusal::Modified(_))));
+}
+
+/// And a module whose bytes still hash right but were signed by somebody else.
+#[test]
+fn a_package_signed_by_somebody_else_is_refused() {
+    let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
+    let mut pkg =
+        build(manifest(), sources, text(), &registries(), Some(&keygen())).expect("builds");
+    pkg.public_key = Some(keygen().verifying_key().to_bytes().to_vec());
+
+    assert!(matches!(install_with(&pkg, &Wallet), Err(Refusal::Unsigned(_))));
 }

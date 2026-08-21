@@ -174,9 +174,13 @@ cargo run --bin valpack -- verify <dir>
 a host runs over a package it received. `valrun` walks one action and prints the
 execution record: roots before and after, the batch the host was offered, and
 the state's leaves with their hashes; its wallet is a stub and says so.
-`valpack` builds a `.va` and verifies one the way a host would — every source
-hashed, the signature over those bytes, the program compiled here rather than
-taken on trust, and the shipped report recomputed and compared.
+`valpack` builds a `.va` and verifies one the way a wallet would. **The package
+carries the compiled module and no source**, because a wallet has no compiler:
+the module hashes to what integrity says, the publisher signed those bytes, what
+it imports is what this host provides, and the report it ships is derived again
+from the module and compared. That the module is the source somebody published
+is answered by building that source and comparing bytes — once, by whoever
+cares, rather than on every phone at every install.
 
 All twelve of `rejected.val`'s programs are refused, each with the message its
 own comment says it is owed. The order of work is [§12 of the spec](docs/spec.md).

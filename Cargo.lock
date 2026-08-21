@@ -955,6 +955,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "rand",
+ "serde_json",
  "sha2",
  "valang",
  "valang-runtime",
