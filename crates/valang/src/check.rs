@@ -956,7 +956,7 @@ fn capabilities_declared_and_used(p: &Program, d: &mut Vec<Diagnostic>) {
         for block in &a.phases {
             walk_stmts(&block.stmts, &mut |s| {
                 if let Stmt::Effect { name, args, .. } = s {
-                    if name == "present" || name == "disclose" || name == "prove" {
+                    if crate::ast::capability_of(name) == "disclosure.present" {
                         used.insert("disclosure.present".into());
                     } else if name == "credential.issue" {
                         // `credential.issue(LoyaltyMember { … })` — the type is

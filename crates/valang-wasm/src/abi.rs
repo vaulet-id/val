@@ -135,6 +135,19 @@ impl Cap {
         })
     }
 
+    /// Whether an effect built from this can be taken back.
+    ///
+    /// **Here rather than at each site that builds one.** It was written out
+    /// three times where the requests are made, and a fourth answer lived in
+    /// the front end under a different key — which is how a disclosure came to
+    /// be offered as something the person could undo.
+    ///
+    /// A module cannot be asked: this is what the host knows about its own
+    /// capabilities, and the module only names which one it is reaching for.
+    pub fn reversible(&self) -> bool {
+        !matches!(self, Cap::Disclose(_) | Cap::Prove(_) | Cap::Present | Cap::Pay(_))
+    }
+
     /// How many handles it takes. The value it answers with is one handle, the
     /// same as everything else in this ABI.
     pub fn arity(&self) -> usize {

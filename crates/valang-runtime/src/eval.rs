@@ -214,8 +214,14 @@ impl<'a> Eval<'a> {
                         operation: name.split('.').nth(1).unwrap_or(name).to_string(),
                         payload,
                         // What can be taken back is the registry's answer, not a
-                        // list of names kept here.
-                        reversible: !self.program.irreversible.contains(name),
+                        // list of names kept here — asked under the capability's
+                        // own name, because `present` is written one way and
+                        // declared another.
+                        reversible: !self
+                            .program
+                            .irreversible
+                            .iter()
+                            .any(|c| c == valang::ast::capability_of(name)),
                     });
                 }
                 if name == "present" && args.is_empty() {

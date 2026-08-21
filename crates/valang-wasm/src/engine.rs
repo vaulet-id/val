@@ -554,7 +554,7 @@ fn define_host(
                     capability: "payment.request".into(),
                     operation: "request".into(),
                     payload: v.clone(),
-                    reversible: false,
+                    reversible: Cap::Pay(String::new()).reversible(),
                 });
                 v
             })?,
@@ -571,7 +571,7 @@ fn define_host(
                     capability: "credential.issue".into(),
                     operation: "issue".into(),
                     payload: credential.clone(),
-                    reversible: true,
+                    reversible: Cap::Issue(String::new()).reversible(),
                 });
                 credential
             })?,
@@ -795,7 +795,7 @@ fn present(
             capability: "disclosure.present".into(),
             operation: "present".into(),
             payload: Value::List(parts),
-            reversible: false,
+            reversible: Cap::Present.reversible(),
         });
         let values = shell.borrow().values.clone();
         let h = values.borrow_mut().put(Value::Null);

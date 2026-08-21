@@ -282,7 +282,6 @@ capabilities {
   credential.read(Id)
   credential.issue(Card)
   disclosure.present
-  storage.write
 }
 
 credential Id as "https://org.vaulet.id/example/credential/id" {
@@ -321,7 +320,6 @@ action Go {
     present {
       disclose checked.claims.country
     }
-    storage.write(key: "a", value: "b")
     credential.issue(Card { who: "me" })
   }
 }
@@ -354,10 +352,13 @@ screen Home {
             _ => None,
         })
         .collect();
-    let last = names.last().cloned().unwrap_or_default();
-    assert!(
-        last == "present" || last == "credential.issue",
-        "the irreversible effect is not last: {names:?}"
+    // Written disclosure-first and offered issue-first. The assertion used to
+    // accept either name as the last one, which is a test that passes whatever
+    // the compiler does with the order it is about.
+    assert_eq!(
+        names,
+        ["credential.issue", "present"],
+        "a disclosure cannot be taken back, so it is offered last"
     );
 }
 

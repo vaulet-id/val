@@ -245,3 +245,88 @@ action Settle {
         other => panic!("a payment is a request with a recipient and an amount: {other:?}"),
     }
 }
+
+/// **A disclosure is not something the person can undo, and both engines have
+/// to say so.**
+///
+/// They said different things: the module-running side had it written out at
+/// the call site, and the source-walking side asked the registry under the
+/// statement's name — `present` — while the registry declares it as
+/// `disclosure.present`, so it found nothing and answered "reversible".
+///
+/// The sheet renders that difference as a warning icon, which is the whole of
+/// what it is for.
+#[test]
+fn both_engines_agree_that_a_disclosure_cannot_be_taken_back() {
+    let src = r#"
+app "x.y"
+version 1
+
+capabilities {
+  credential.read(NationalId)
+  credential.issue(Card)
+  disclosure.present
+}
+
+credential NationalId as "https://dopa.go.th/credential/national-id" {
+  given_name:  string
+  family_name: string
+  birthdate:   date
+  country:     string
+}
+
+credential Card as "https://org.vaulet.id/example/credential/card" {
+  who: string
+}
+
+trust Issued(id: NationalId) {
+  anchor: "th.go.dopa"
+  require {
+    id.signature.valid
+  }
+}
+
+state { n: int default 0 }
+
+action Go {
+  input {
+    id: Credential<NationalId>
+  }
+
+  verify {
+    const checked = id with Issued
+  }
+
+  update {
+    n: 1
+  }
+
+  execute {
+    present {
+      disclose checked.claims.country
+    }
+    credential.issue(Card { who: "me" })
+  }
+}
+
+@main
+screen Home {
+  column {
+    button(text: "go", onTap: Go)
+  }
+}
+"#;
+    let (ran, walked) = both(src, "Go");
+
+    // Written disclosure-first and offered issue-first: what cannot be taken
+    // back goes last, and the compiler is what puts it there.
+    let order: Vec<&str> = ran.effects.iter().map(|e| e.capability.as_str()).collect();
+    assert_eq!(order, ["credential.issue", "disclosure.present"], "{:?}", ran.effects);
+
+    for effects in [&ran.effects, &walked.effects] {
+        let present = effects.iter().find(|e| e.capability == "disclosure.present").expect("one");
+        assert!(!present.reversible, "a disclosure cannot be taken back");
+        let issued = effects.iter().find(|e| e.capability == "credential.issue").expect("one");
+        assert!(issued.reversible, "a credential can be revoked by whoever issued it");
+    }
+}

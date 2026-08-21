@@ -1065,11 +1065,17 @@ present { disclose … / prove … }
 `navigation.navigate` in the host's registry and moving between screens is not
 something a batch can be half-way through.
 
-**Not emitted yet**, and a package using one does not build rather than building
-without it: `storage.write`, `message.send`, `network.request`. They are in the
-host registry and the front end accepts them; the Wasm back end refuses, and
-says which — an effect a back end silently dropped would be a line missing from
-the import section, which is a report that understates.
+`storage.write`, `message.send` and `network.request` were in the host registry
+and in this list, and no back end emitted any of them. Two of the three were
+also arguing with decisions this language had already made — `state` is what is
+hashed and replayed, so a second store outside it is state the record does not
+cover; and `api.query` exists precisely so that an application cannot reach the
+network itself. They are gone rather than implemented. `message.send` will come
+back the day something sends a message, with the lowering and a host that
+performs it in the same change.
+
+Declaring a capability this host does not have is now an error **on the line it
+is written**, rather than a build failure with no line in it.
 
 ### Expressions
 

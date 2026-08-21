@@ -18,6 +18,13 @@
       },
       "primary": "text"
     },
+    "api.query": {
+      "consent": true,
+      "props": {
+        "audience": "string",
+        "presenting": "Type?"
+      }
+    },
     "audio": {
       "draws": true,
       "props": {
@@ -104,16 +111,16 @@
       },
       "children": true
     },
-    "credential.issue": {
-      "consent": true,
-      "props": {
-        "of": "Credential"
-      }
-    },
     "credential.check": {
       "consent": true,
       "props": {
         "of": "Type"
+      }
+    },
+    "credential.issue": {
+      "consent": true,
+      "props": {
+        "of": "Credential"
       }
     },
     "credential.read": {
@@ -251,13 +258,6 @@
         "of": "string"
       }
     },
-    "message.send": {
-      "consent": true,
-      "props": {
-        "to": "string"
-      },
-      "reversible": false
-    },
     "navigation.back": {
       "props": {
         "with": "Record?"
@@ -268,12 +268,6 @@
         "to": "Screen",
         "as": "Transition?",
         "present": "Present?"
-      }
-    },
-    "network.request": {
-      "consent": true,
-      "props": {
-        "audience": "string"
       }
     },
     "notice": {
@@ -382,14 +376,6 @@
         "value": "Text"
       },
       "primary": "text"
-    },
-    "storage.write": {
-      "consent": true,
-      "props": {
-        "scope": "string",
-        "id": "string",
-        "value": "any"
-      }
     },
     "text": {
       "draws": true,

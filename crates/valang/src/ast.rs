@@ -118,6 +118,22 @@ pub struct ComponentDecl {
     pub span: Span,
 }
 
+/// The capability a statement is a use of.
+///
+/// `present`, `disclose` and `prove` are three ways of writing one capability,
+/// and everything else is written as the capability itself. **One naming**: the
+/// checker asks whether it was declared, the evaluator asks whether it can be
+/// taken back, and the pass that orders a batch asks the same question — and
+/// they were three copies of this `match`, one of which did not have the arm
+/// for `present`, so a disclosure was offered to the person marked as something
+/// they could undo.
+pub fn capability_of(statement: &str) -> &str {
+    match statement {
+        "present" | "disclose" | "prove" => "disclosure.present",
+        other => other,
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Capability {
     /// `credential.read`, `disclosure.present`, `api.query`

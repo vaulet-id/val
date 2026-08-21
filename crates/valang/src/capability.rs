@@ -284,6 +284,29 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
     let common = usable.common();
     let declared_capabilities: Vec<String> =
         program.capabilities.iter().map(|c| c.name.clone()).collect();
+
+    // **A capability this host does not have, said where it was written.**
+    //
+    // It used to be caught by the back end refusing to emit the effect, which
+    // is a build failure with no line in it — and only for a capability
+    // something in the program actually used. One declared and never reached
+    // was consent asked for a thing that does not exist, and nothing said so.
+    for c in &program.capabilities {
+        if !usable.loaded.iter().any(|h| h.capabilities.contains_key(&c.name)) {
+            d.push(Diagnostic::error(
+                c.span,
+                format!(
+                    "`{}` is not something {} provides. A capability is a thing the host does, and one it has never heard of is a line the person would be asked to agree to for nothing",
+                    c.name,
+                    if declared.is_empty() {
+                        "this host".to_string()
+                    } else {
+                        declared.join(", ")
+                    }
+                ),
+            ));
+        }
+    }
     let mut uses: Vec<String> = Vec::new();
 
     // Drawn capabilities, in the tree — and in the components, which a package
@@ -505,7 +528,39 @@ pub fn check(program: &mut crate::ast::Program, hosts: &Hosts) -> Vec<crate::dia
         }
     }
     irreversible.sort();
-    program.irreversible = irreversible;
+    program.irreversible = irreversible.clone();
+
+    // **And the ordering that list exists for.**
+    //
+    // A batch is offered to the host whole, and it may refuse it — but only up
+    // to the first thing that cannot be taken back. So what cannot be undone
+    // goes last, and the compiler is what puts it there rather than the author
+    // remembering to.
+    //
+    // Stable, so two effects of the same kind stay in the order they were
+    // written: the author's order is meaningful and this is not a sort of it.
+    //
+    // It was documented in three places and implemented in none. The test that
+    // should have caught it accepted either name as the last one, which is a
+    // test that passes whatever the compiler does with the order it is about.
+    for action in &mut program.actions {
+        for block in &mut action.phases {
+            if block.phase != crate::ast::Phase::Execute {
+                continue;
+            }
+            let undoable = |s: &crate::ast::Stmt| match s {
+                crate::ast::Stmt::Effect { name, .. } => {
+                    !irreversible.iter().any(|c| c == crate::ast::capability_of(name))
+                }
+                // Anything that is not an effect is not part of the batch and
+                // keeps its place.
+                _ => true,
+            };
+            let (undoes, stands): (Vec<_>, Vec<_>) =
+                block.stmts.iter().cloned().partition(undoable);
+            block.stmts = undoes.into_iter().chain(stands).collect();
+        }
+    }
 
     for id in &program.hosts {
         if !hosts.loaded.iter().any(|h| &h.id() == id) {
