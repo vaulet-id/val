@@ -10,6 +10,11 @@ repository.workspace = true
 valang-runtime = { path = "../valang-runtime" }
 sha2 = "0.10"
 ed25519-dalek = "2"
+# A wallet whose identity key is on the Secure Enclave signs with P-256, and a
+# verifier that only knew one curve could not read its records.
+p256 = { version = "0.13", features = ["ecdsa"] }
 
 [dev-dependencies]
 valang.workspace = true
+# A P-256 wallet, for the tests that are about one.
+rand_core = { version = "0.6", features = ["getrandom"] }

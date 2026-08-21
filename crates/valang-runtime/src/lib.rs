@@ -24,7 +24,7 @@ use valang::ast::{Phase, Program, Stmt};
 
 use canonical::{Canonical, DeterministicCbor};
 use eval::{Eval, Trap};
-use host::{Context, EffectRequest, Host, Limits, Verdict};
+use host::{Alg, Context, EffectRequest, Host, Limits, Verdict};
 use merkle::{Hash, Leaf};
 use value::Value;
 
@@ -104,6 +104,9 @@ pub struct ExecutionRecord {
     /// before there was anything to attest to.
     pub signature: Vec<u8>,
     pub device_key: Vec<u8>,
+    /// What signed it. In the token's header as well, where a verifier reads
+    /// it — this is the same fact, kept where the record is built.
+    pub alg: Alg,
 }
 
 /// The record's bytes, canonically. Kept because a host may want to hash a
@@ -153,7 +156,7 @@ fn within(state: &State, enc: &DeterministicCbor, limits: Limits) -> Result<(), 
 /// JWT that any library verifies. The host holds the key; this only decides
 /// which bytes it is asked about.
 fn sign_record(record: &mut ExecutionRecord, host: &dyn Host) {
-    let input = attestation::signing_input(record, &record.device_key);
+    let input = attestation::signing_input(record, &record.device_key, record.alg);
     record.signature = host.sign(input.as_bytes());
 }
 
@@ -495,6 +498,7 @@ pub fn run_action_with(
         outcome: Outcome::Defect("no such action".into()),
         signature: Vec::new(),
         device_key: host.device_key(),
+        alg: host.alg(),
     };
 
     let Some(action) = action else {

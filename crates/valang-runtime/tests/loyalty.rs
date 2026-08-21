@@ -277,7 +277,7 @@ fn the_record_is_signed_whichever_way_the_run_went() {
         // The outcome is inside the signed bytes, so the two runs cannot be
         // swapped for one another — and what is signed is the JWS signing input,
         // so a publisher checks it with an ordinary JWT library.
-        let input = valang_runtime::attestation::signing_input(&run.record, &run.record.device_key);
+        let input = valang_runtime::attestation::signing_input(&run.record, &run.record.device_key, run.record.alg);
         assert_eq!(Wallet { approve }.sign(input.as_bytes()), run.record.signature);
         assert_eq!(valang_runtime::attestation::jwt(&run.record).split('.').count(), 3);
     }

@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
 use valang_runtime::attestation::{b64_decode, VCT};
+use valang_runtime::host::Alg;
 use valang_runtime::value::Value;
 
 /// A record, as it arrived. Decoded rather than trusted: every field below is
@@ -101,6 +102,27 @@ pub struct Verified {
 /// which is the point of having made it one. What is left is the part no
 /// standard covers, because nobody has needed it before: whether the code that
 /// ran is the code somebody published, and whether the state went backwards.
+/// Which algorithm the token says signed it.
+///
+/// Read out of the header rather than assumed, and refused when it is one this
+/// build does not know — a verifier that guessed would be checking a signature
+/// against the wrong curve and calling the failure a forgery.
+fn alg_of(header: &str) -> Result<Alg, Refusal> {
+    let raw = b64_decode(header).ok_or_else(|| Refusal::Malformed("the header is not base64url".into()))?;
+    let text = String::from_utf8(raw).map_err(|_| Refusal::Malformed("the header is not UTF-8".into()))?;
+    let said = text
+        .split("\"alg\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').nth(1))
+        .ok_or_else(|| Refusal::Malformed("the header names no algorithm".into()))?
+        .to_string();
+    match said.as_str() {
+        "EdDSA" => Ok(Alg::EdDSA),
+        "ES256" => Ok(Alg::ES256),
+        other => Err(Refusal::Unsigned(format!("`{other}` is not an algorithm this build reads"))),
+    }
+}
+
 pub fn verify(token: &str, expect: &Expectation) -> Result<Verified, Refusal> {
     let mut parts = token.split('.');
     let (h, p, sig) = match (parts.next(), parts.next(), parts.next(), parts.next()) {
@@ -111,16 +133,35 @@ pub fn verify(token: &str, expect: &Expectation) -> Result<Verified, Refusal> {
     // 1. The signature over the signing input, before anything is read out of
     //    the payload. A verifier that parsed first would be deciding about a
     //    record it had not authenticated.
-    let key: [u8; 32] = expect
-        .device_key
-        .try_into()
-        .map_err(|_| Refusal::Unsigned("the device key is not a key".into()))?;
-    let key = VerifyingKey::from_bytes(&key).map_err(|_| Refusal::Unsigned("malformed device key".into()))?;
+    //
+    //    Which algorithm, from the header — not from an assumption. A wallet
+    //    whose identity key is on the Secure Enclave signs with P-256, and a
+    //    verifier that only knew Ed25519 could not read its records at all.
     let raw = b64_decode(sig).ok_or_else(|| Refusal::Unsigned("the signature is not base64url".into()))?;
-    let signature =
-        Signature::from_slice(&raw).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
-    key.verify(format!("{h}.{p}").as_bytes(), &signature)
-        .map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
+    let signed = format!("{h}.{p}");
+    match alg_of(h)? {
+        Alg::EdDSA => {
+            let key: [u8; 32] = expect
+                .device_key
+                .try_into()
+                .map_err(|_| Refusal::Unsigned("the device key is not an Ed25519 key".into()))?;
+            let key = VerifyingKey::from_bytes(&key)
+                .map_err(|_| Refusal::Unsigned("malformed device key".into()))?;
+            let signature = Signature::from_slice(&raw)
+                .map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
+            key.verify(signed.as_bytes(), &signature)
+                .map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
+        }
+        Alg::ES256 => {
+            use p256::ecdsa::signature::Verifier as _;
+            let key = p256::ecdsa::VerifyingKey::from_sec1_bytes(expect.device_key)
+                .map_err(|_| Refusal::Unsigned("the device key is not a P-256 point".into()))?;
+            let signature = p256::ecdsa::Signature::from_slice(&raw)
+                .map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
+            key.verify(signed.as_bytes(), &signature)
+                .map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
+        }
+    }
 
     // 2. Now it is worth reading.
     let claims = b64_decode(p).ok_or_else(|| Refusal::Malformed("the payload is not base64url".into()))?;

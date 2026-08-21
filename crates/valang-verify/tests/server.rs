@@ -200,3 +200,115 @@ fn a_packages_sources_hash_to_one_thing() {
     renamed.insert("two.val".to_string(), "b".to_string());
     assert_ne!(code_hash_of(&forwards), code_hash_of(&renamed));
 }
+
+/// **A wallet whose identity key is on the Secure Enclave.** It holds a P-256
+/// key and cannot be handed an Ed25519 one, so a record it signs says `ES256`
+/// in its header — and a verifier that assumed one curve could not read any of
+/// its records at all.
+///
+/// The host beside it is a real one: it wraps the fixture and swaps only the
+/// signing, because what is being tested is the signature and nothing else.
+mod secure_enclave {
+    use super::*;
+    use p256::ecdsa::signature::Signer as _;
+    use valang_runtime::host::{Alg, Context, EffectRequest, Verdict};
+
+    struct Enclave {
+        wallet: Fixture,
+        key: p256::ecdsa::SigningKey,
+    }
+
+    impl Host for Enclave {
+        fn context(&self) -> Context {
+            self.wallet.context()
+        }
+        fn credential(&self, ty: &str, policy: Option<&str>) -> Option<BTreeMap<String, Value>> {
+            self.wallet.credential(ty, policy)
+        }
+        fn decide(&self, effects: &[EffectRequest]) -> Verdict {
+            self.wallet.decide(effects)
+        }
+        fn credentials_of(
+            &self,
+            ty: &str,
+            policy: Option<&str>,
+            order: Option<(&str, bool)>,
+            limit: Option<i64>,
+        ) -> Vec<BTreeMap<String, Value>> {
+            self.wallet.credentials_of(ty, policy, order, limit)
+        }
+        fn alg(&self) -> Alg {
+            Alg::ES256
+        }
+        fn sign(&self, bytes: &[u8]) -> Vec<u8> {
+            let signature: p256::ecdsa::Signature = self.key.sign(bytes);
+            signature.to_bytes().to_vec()
+        }
+        fn device_key(&self) -> Vec<u8> {
+            self.key.verifying_key().to_encoded_point(false).as_bytes().to_vec()
+        }
+    }
+
+    #[test]
+    fn a_record_signed_on_p256_verifies() {
+        let (program, diagnostics) = valang::analyse(LOYALTY);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let enclave = Enclave {
+            wallet: host(),
+            key: p256::ecdsa::SigningKey::random(&mut rand_core::OsRng),
+        };
+        let run = run_action(
+            &program,
+            LOYALTY,
+            "ScanToEarn",
+            &enclave.wallet.state(),
+            &BTreeMap::new(),
+            &enclave,
+        );
+
+        let token = jwt(&run.record);
+        let header = valang_runtime::attestation::b64_decode(token.split('.').next().unwrap())
+            .expect("the header is base64url");
+        let header = String::from_utf8(header).expect("and UTF-8");
+        assert!(header.contains("\"alg\":\"ES256\""), "{header}");
+        assert!(header.contains("\"crv\":\"P-256\""), "the key travels as an EC JWK: {header}");
+
+        let expect = Expectation {
+            code_hash: &run.record.code_hash,
+            device_key: &run.record.device_key,
+            last_root: None,
+            spent: &never_spent,
+        };
+        verify(&token, &expect).expect("a P-256 wallet's record verifies");
+    }
+
+    /// And it is still a signature: another key's record is refused.
+    #[test]
+    fn somebody_elses_p256_key_is_refused() {
+        let (program, _) = valang::analyse(LOYALTY);
+        let enclave = Enclave {
+            wallet: host(),
+            key: p256::ecdsa::SigningKey::random(&mut rand_core::OsRng),
+        };
+        let run = run_action(
+            &program,
+            LOYALTY,
+            "ScanToEarn",
+            &enclave.wallet.state(),
+            &BTreeMap::new(),
+            &enclave,
+        );
+        let stranger = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng)
+            .verifying_key()
+            .to_encoded_point(false)
+            .as_bytes()
+            .to_vec();
+        let expect = Expectation {
+            code_hash: &run.record.code_hash,
+            device_key: &stranger,
+            last_root: None,
+            spent: &never_spent,
+        };
+        assert!(matches!(verify(&jwt(&run.record), &expect), Err(Refusal::Unsigned(_))));
+    }
+}

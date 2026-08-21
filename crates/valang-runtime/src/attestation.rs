@@ -13,6 +13,7 @@
 //! code hashes are computed over, because those have to be canonical. What
 //! changed is the envelope somebody else has to open.
 
+use crate::host::Alg;
 use crate::{ExecutionRecord, Outcome};
 use crate::merkle::hex;
 use crate::value::Value;
@@ -180,19 +181,38 @@ pub fn payload(r: &ExecutionRecord) -> String {
 /// The header, carrying the device's public key so the token is self-contained.
 /// Binding that key to a person is somebody else's job and a separate question —
 /// this says which key signed, not whose it is.
-pub fn header(device_key: &[u8]) -> String {
-    format!(
-        "{{\"alg\":\"EdDSA\",\"typ\":\"val-record+jwt\",\"jwk\":{{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":{}}}}}",
-        json_string(&b64(device_key))
-    )
+///
+/// The algorithm is the host's, because the key is: a wallet whose identity
+/// lives on the Secure Enclave holds a P-256 key and cannot be handed an
+/// Ed25519 one.
+pub fn header(device_key: &[u8], alg: Alg) -> String {
+    let jwk = match alg {
+        Alg::EdDSA => format!(
+            "{{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":{}}}",
+            json_string(&b64(device_key))
+        ),
+        // SEC1 uncompressed: `0x04`, x, y. A JWK carries the halves apart.
+        Alg::ES256 => {
+            let (x, y) = match device_key {
+                [0x04, rest @ ..] if rest.len() == 64 => rest.split_at(32),
+                other => other.split_at(other.len() / 2),
+            };
+            format!(
+                "{{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":{},\"y\":{}}}",
+                json_string(&b64(x)),
+                json_string(&b64(y))
+            )
+        }
+    };
+    format!("{{\"alg\":{},\"typ\":\"val-record+jwt\",\"jwk\":{jwk}}}", json_string(alg.name()))
 }
 
 /// What gets signed: `base64url(header) . base64url(payload)`, per RFC 7515.
-pub fn signing_input(r: &ExecutionRecord, device_key: &[u8]) -> String {
-    format!("{}.{}", b64(header(device_key).as_bytes()), b64(payload(r).as_bytes()))
+pub fn signing_input(r: &ExecutionRecord, device_key: &[u8], alg: Alg) -> String {
+    format!("{}.{}", b64(header(device_key, alg).as_bytes()), b64(payload(r).as_bytes()))
 }
 
 /// The whole token. A publisher's server takes this and nothing else.
 pub fn jwt(r: &ExecutionRecord) -> String {
-    format!("{}.{}", signing_input(r, &r.device_key), b64(&r.signature))
+    format!("{}.{}", signing_input(r, &r.device_key, r.alg), b64(&r.signature))
 }

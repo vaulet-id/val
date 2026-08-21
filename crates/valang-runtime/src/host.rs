@@ -56,6 +56,26 @@ impl Default for Limits {
     }
 }
 
+/// How a record is signed. Both are JWS algorithms and both are named in the
+/// token, so a verifier reads which one rather than assuming.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Alg {
+    /// Ed25519. The public half is the 32-byte key.
+    EdDSA,
+    /// ECDSA on P-256, which is what a Secure Enclave holds. The public half is
+    /// the uncompressed SEC1 point: `0x04`, then x, then y.
+    ES256,
+}
+
+impl Alg {
+    pub fn name(self) -> &'static str {
+        match self {
+            Alg::EdDSA => "EdDSA",
+            Alg::ES256 => "ES256",
+        }
+    }
+}
+
 pub trait Host {
     fn context(&self) -> Context;
 
@@ -100,6 +120,18 @@ pub trait Host {
     /// business holding one, and a runtime that could sign could sign a record
     /// of a run that did not happen.
     fn sign(&self, bytes: &[u8]) -> Vec<u8>;
+
+    /// What it signs with.
+    ///
+    /// **The host's, not the language's.** A record is a JWS, and JWS has more
+    /// than one algorithm for the good reason that devices do: a wallet whose
+    /// identity key is on the Secure Enclave has a P-256 key and cannot be
+    /// given an Ed25519 one. Baking `EdDSA` in meant such a wallet either
+    /// signed records with a second key nobody knows it by, or could not sign
+    /// them at all.
+    fn alg(&self) -> Alg {
+        Alg::EdDSA
+    }
 
     /// The public half, so a verifier can check the signature without asking
     /// the device for anything.
