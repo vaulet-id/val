@@ -251,6 +251,14 @@ pub struct About {
     /// Which compiler built the module this came from. A rebuild with another
     /// front end proves nothing about either.
     pub compiler: String,
+    /// The screens it draws, and which one it opens at.
+    ///
+    /// A host has to know where to start, and `@main` is where the application
+    /// said. Written down here because a wallet has no program to read the
+    /// directive off — and hard-coding a screen's name into a host is a host
+    /// that works for one application.
+    pub screens: Vec<String>,
+    pub opens: String,
 }
 
 /// One action, and what the host is asked for before it starts.
@@ -310,6 +318,14 @@ impl About {
             // Filled in by whatever emits the module. A program has no compiler
             // of its own to name.
             compiler: String::new(),
+            screens: p.screens.iter().map(|s| s.name.clone()).collect(),
+            opens: p
+                .screens
+                .iter()
+                .find(|s| s.is_main())
+                .or_else(|| p.screens.first())
+                .map(|s| s.name.clone())
+                .unwrap_or_default(),
         }
     }
 

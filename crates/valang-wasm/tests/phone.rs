@@ -82,3 +82,14 @@ fn bytes_that_are_not_this_are_refused() {
     assert!(valang_wasm::wants_of(b"not a module at all").is_err());
     assert!(valang_wasm::compile::about_of(b"not a module at all").is_none());
 }
+
+/// **Where it opens.** A wallet has no program to read `@main` off, and a host
+/// with a screen's name written into it is a host that works for one
+/// application.
+#[test]
+fn a_module_says_which_screen_it_opens_at() {
+    let bytes = shipped(include_str!("../../../examples/portfolio.val"));
+    let about = valang_wasm::compile::about_of(&bytes).expect("it says what it is");
+    assert_eq!(about.opens, "Portfolio");
+    assert!(about.screens.contains(&"Portfolio".to_string()), "{:?}", about.screens);
+}

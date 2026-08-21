@@ -397,6 +397,8 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
     // that is what a compiler is — so a module that did not say could not be
     // rebuilt and compared by anybody.
     m.insert("compiler".to_string(), Value::Str(COMPILER.to_string()));
+    m.insert("screens".to_string(), strings(&a.screens));
+    m.insert("opens".to_string(), Value::Str(a.opens.clone()));
     m.insert(
         "actions".to_string(),
         Value::List(
@@ -583,6 +585,8 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
     };
     Some(About {
         compiler: text(m.get("compiler")),
+        screens: strings(m.get("screens")),
+        opens: text(m.get("opens")),
         state,
         fields: strings(m.get("fields")),
         hosts: strings(m.get("hosts")),
