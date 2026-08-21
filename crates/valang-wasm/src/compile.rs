@@ -105,10 +105,6 @@ struct Ctx<'a> {
     /// against a credential that did not satisfy its policy — and the outcome
     /// is the difference.
     phase: Option<Phase>,
-    /// Names bound by `x with Policy`, to the credential type behind the
-    /// policy. Built while lowering rather than by a walk of its own: what an
-    /// import is called has to come from the same pass that emits the call.
-    verified: BTreeMap<String, String>,
     /// What this back end met and does not emit.
     unsupported: Vec<String>,
     /// The next scratch slot, for the expressions that need somewhere to put a
@@ -168,12 +164,6 @@ impl Ctx<'_> {
         self.call_dyn(crate::abi::OPS, op.name(), arity, f);
     }
 
-    /// The credential type behind a name bound by `x with Policy`, which is what
-    /// a report calls a claim read through it: the author wrote
-    /// `checked.claims.amount` and the person is being told `PurchaseReceipt`.
-    fn verified_type(&self, binding: &str) -> Option<String> {
-        self.verified.get(binding).cloned()
-    }
 }
 
 /// Compile every `function` in the program. Actions are not compiled: their
@@ -209,7 +199,6 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
         dyn_index: BTreeMap::new(),
         collecting: false,
         phase: None,
-        verified: BTreeMap::new(),
         locals: BTreeMap::new(),
         fn_index: BTreeMap::new(),
         unsupported: Vec::new(),
@@ -232,7 +221,7 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
             action_body(&mut ctx, a);
         }
         for s in &program.screens {
-            screen_data(&mut ctx, s);
+            screen_tree(&mut ctx, s);
         }
     }
 
@@ -323,9 +312,9 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
             funcs.function(arity_type[&0]);
             let index =
                 import_count + (program.functions.len() + program.actions.len() + i) as u32;
-            exports.export(&format!("data:{}", s.name), wasm_encoder::ExportKind::Func, index);
-            names.push(format!("data:{}", s.name));
-            let body = screen_data(&mut ctx, s);
+            exports.export(&format!("screen:{}", s.name), wasm_encoder::ExportKind::Func, index);
+            names.push(format!("screen:{}", s.name));
+            let body = screen_tree(&mut ctx, s);
             code.function(&body);
         }
     }
@@ -506,6 +495,7 @@ pub fn report_of_module(bytes: &[u8]) -> Option<valang::report::Report> {
         app: about.app,
         version: about.version,
         reads: wants.reads_as_lines(),
+        checks: wants.checks_as_lines(),
         discloses: wants.discloses.clone(),
         proves: wants.proves.clone(),
         issues: wants.issues,
@@ -745,15 +735,6 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
     for s in body {
         match s {
             Stmt::Let { name, value, .. } => {
-                // `const checked = receipt with Policy` — what this name means
-                // for the rest of the action, recorded as it is lowered so the
-                // claims read through it can be named after the credential
-                // rather than after the binding.
-                if let Expr::With { policy, .. } = value {
-                    if let Some(t) = ctx.program.trusts.iter().find(|t| t.name == *policy) {
-                        ctx.verified.insert(name.clone(), t.subject_type.clone());
-                    }
-                }
                 emit(ctx, value, f);
                 let slot = *next_local;
                 *next_local += 1;
@@ -826,6 +807,8 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
             Stmt::Data { name, source, .. } => {
                 match source {
                     DataSource::Credentials { ty, policy, .. } => {
+                        // A `data` line in an action reads rows the same way a
+                        // screen does: they are values it works with.
                         ctx.call_cap(&crate::abi::Cap::Read(read_line(ty, policy.as_deref())), f);
                     }
                     DataSource::Query { audience } => {
@@ -929,7 +912,6 @@ fn body_of(ctx: &mut Ctx, params: &[Field], body: &[Stmt]) -> Function {
 /// to judge from the effects it was handed — which is the same division the
 /// tree-walking evaluator makes.
 fn action_body(ctx: &mut Ctx, a: &ActionDecl) -> Function {
-    ctx.verified.clear();
     let stmts: Vec<Stmt> = a.phases.iter().flat_map(|b| b.stmts.iter().cloned()).collect();
     ctx.locals.clear();
     let extra = count_lets(&stmts);
@@ -951,21 +933,27 @@ fn action_body(ctx: &mut Ctx, a: &ActionDecl) -> Function {
     out
 }
 
-/// What a screen reads, as a function that reads it.
+/// A screen, as a function that builds the tree a host draws.
 ///
-/// **Not a screen resolver.** Drawing is not emitted yet; this exists because a
-/// screen's `data` lines are capabilities — `credentials of Receipt verified
-/// with Policy` is a read, and a query is an audience — and a report that
-/// missed them would understate what the person is agreeing to. It is exported
-/// under `data:` rather than `screen:` so that nothing mistakes it for the
-/// other thing later.
-///
-/// The tree adds nothing of its own: a screen has no `verify`, so every value
-/// in it came from a `data` line or from state, and both are already named.
-fn screen_data(ctx: &mut Ctx, s: &ScreenDecl) -> Function {
+/// **The tree that comes out has already made up its mind.** An `if` stands for
+/// the branch it chose, a `for` for the rows it drew, a `list` for its rows —
+/// so what a host receives is a description of what to draw and never a
+/// condition or a loop. A host that had to implement those would be a host
+/// implementing the language, in whatever it happens to be written in, and then
+/// again in the next one.
+fn screen_tree(ctx: &mut Ctx, s: &ScreenDecl) -> Function {
     ctx.locals.clear();
-    ctx.verified.clear();
-    let mut out = Function::new(vec![]);
+
+    let named = s.data.len() as u32 + count_lets(&s.compute);
+    let room = named + tree_locals(&s.tree) + count_scratch(&s.compute);
+    let mut out = Function::new(if room > 0 { vec![(room, ValType::I32)] } else { vec![] });
+    let mut next_local = 0;
+    ctx.next_scratch = named;
+    ctx.scratch_used = ctx.next_scratch;
+
+    // What the screen declared it needs, answered before anything is drawn.
+    // Which is why there is no half-drawn screen and no prompt arriving
+    // mid-scroll.
     for d in &s.data {
         match &d.source {
             DataSource::Credentials { ty, policy, .. } => {
@@ -980,11 +968,232 @@ fn screen_data(ctx: &mut Ctx, s: &ScreenDecl) -> Function {
                 ctx.push_konst(Konst::Bool(false), &mut out);
             }
         }
-        out.instruction(&Instruction::Drop);
+        let slot = next_local;
+        next_local += 1;
+        out.instruction(&Instruction::LocalSet(slot));
+        ctx.locals.insert(d.name.clone(), slot);
     }
-    ctx.push_konst(Konst::Bool(false), &mut out);
+
+    // A screen derives and does not act — the same rules as an action's
+    // `compute`, which is why a total is not kept in state.
+    emit_body(ctx, &s.compute, &mut out, &mut next_local);
+
+    let tree = ctx.scratch();
+    ctx.push_konst(Konst::EmptyList, &mut out);
+    out.instruction(&Instruction::LocalSet(tree));
+    emit_nodes(ctx, &s.tree, tree, &mut out);
+    out.instruction(&Instruction::LocalGet(tree));
     out.instruction(&Instruction::End);
     out
+}
+
+/// How many slots a tree wants. Generous on purpose: one too few is a module
+/// that will not validate, and one too many is a local nothing reads.
+fn tree_locals(nodes: &[UiNode]) -> u32 {
+    let mut n = 0;
+    for node in nodes {
+        node.walk(&mut |x| {
+            n += 2;
+            if x.kind == "for" || x.kind == "list" {
+                n += 4;
+            }
+        });
+    }
+    n + 8
+}
+
+/// A run of sibling nodes, appended to the list in `into`.
+///
+/// One node in, one node out is not enough: an `if` stands for the branch it
+/// chose, which may be several nodes or none.
+fn emit_nodes(ctx: &mut Ctx, nodes: &[UiNode], into: u32, f: &mut Function) {
+    for n in nodes {
+        match n.kind.as_str() {
+            "if" => {
+                match n.args.first() {
+                    Some(a) => emit(ctx, &a.value, f),
+                    None => ctx.push_konst(Konst::Bool(false), f),
+                }
+                ctx.call_op("truthy", f);
+                f.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                emit_nodes(ctx, &n.children, into, f);
+                f.instruction(&Instruction::Else);
+                emit_nodes(ctx, &n.otherwise, into, f);
+                f.instruction(&Instruction::End);
+            }
+            // The body once per row, spliced where the loop was written.
+            "for" => {
+                let rows = match n.args.first() {
+                    Some(a) => a.value.clone(),
+                    None => Expr::Error { span: n.span },
+                };
+                emit_rows(ctx, &rows, n.lambda.as_deref(), &n.children, into, f);
+            }
+            _ => {
+                f.instruction(&Instruction::LocalGet(into));
+                emit_node(ctx, n, f);
+                ctx.call_op("push", f);
+                f.instruction(&Instruction::LocalSet(into));
+            }
+        }
+    }
+}
+
+/// A loop over rows, drawing the body once per row into `into`.
+fn emit_rows(
+    ctx: &mut Ctx,
+    over: &Expr,
+    binder: Option<&str>,
+    children: &[UiNode],
+    into: u32,
+    f: &mut Function,
+) {
+    use wasm_encoder::BlockType;
+
+    let list = ctx.scratch();
+    let index = ctx.scratch();
+    let length = ctx.scratch();
+    let row = ctx.scratch();
+
+    emit(ctx, over, f);
+    f.instruction(&Instruction::LocalTee(list));
+    ctx.call_op("len", f);
+    f.instruction(&Instruction::LocalSet(length));
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::LocalSet(index));
+
+    f.instruction(&Instruction::Block(BlockType::Empty));
+    f.instruction(&Instruction::Loop(BlockType::Empty));
+    f.instruction(&Instruction::LocalGet(index));
+    f.instruction(&Instruction::LocalGet(length));
+    f.instruction(&Instruction::I32GeS);
+    f.instruction(&Instruction::BrIf(1));
+
+    f.instruction(&Instruction::LocalGet(list));
+    f.instruction(&Instruction::LocalGet(index));
+    ctx.call_op("at", f);
+    f.instruction(&Instruction::LocalSet(row));
+
+    // The row belongs to the loop. Bound without restoring, a loop inside a
+    // loop takes the outer row's name and the line after it sees whatever the
+    // last turn left.
+    let saved = ctx.locals.clone();
+    if let Some(bind) = binder {
+        ctx.locals.insert(bind.to_string(), row);
+    }
+    emit_nodes(ctx, children, into, f);
+    ctx.locals = saved;
+
+    f.instruction(&Instruction::LocalGet(index));
+    f.instruction(&Instruction::I32Const(1));
+    f.instruction(&Instruction::I32Add);
+    f.instruction(&Instruction::LocalSet(index));
+    f.instruction(&Instruction::Br(0));
+    f.instruction(&Instruction::End);
+    f.instruction(&Instruction::End);
+}
+
+/// One node: what to draw, what to draw it with, and what is under it.
+fn emit_node(ctx: &mut Ctx, n: &UiNode, f: &mut Function) {
+    ctx.push_konst(Konst::EmptyRecord, f);
+    ctx.push_konst(Konst::Str("kind".into()), f);
+    ctx.push_konst(Konst::Str(n.kind.clone()), f);
+    ctx.call_op("set", f);
+
+    // The arguments, named as the registry names them.
+    ctx.push_konst(Konst::Str("args".into()), f);
+    ctx.push_konst(Konst::EmptyRecord, f);
+    for (i, a) in n.args.iter().enumerate() {
+        let key = a.name.clone().unwrap_or_else(|| i.to_string());
+        ctx.push_konst(Konst::Str(key.clone()), f);
+        emit_arg(ctx, &key, &a.value, f);
+        ctx.call_op("set", f);
+
+        // `onTap: Detail(receipt: r)` — the target's own arguments, evaluated
+        // here where `r` is bound, so what a screen is opened with is a value
+        // rather than an expression somebody has to evaluate later.
+        if key == "onTap" {
+            if let Expr::Call { args: given, .. } = &a.value {
+                let named: Vec<&Arg> = given.iter().filter(|g| g.name.is_some()).collect();
+                if !named.is_empty() {
+                    ctx.push_konst(Konst::Str("onTapWith".into()), f);
+                    ctx.push_konst(Konst::EmptyRecord, f);
+                    for g in named {
+                        ctx.push_konst(Konst::Str(g.name.clone().unwrap_or_default()), f);
+                        emit(ctx, &g.value, f);
+                        ctx.call_op("set", f);
+                    }
+                    ctx.call_op("set", f);
+                }
+            }
+        }
+    }
+    ctx.call_op("set", f);
+
+    ctx.push_konst(Konst::Str("children".into()), f);
+    let kids = ctx.scratch();
+    ctx.push_konst(Konst::EmptyList, f);
+    f.instruction(&Instruction::LocalSet(kids));
+    if n.kind == "list" {
+        // `list(receipts) { r -> row(…) }` becomes the rows themselves rather
+        // than a template and a promise. Expanding it in the renderer would put
+        // `limit`, `order by` and `verified with` in whatever language the
+        // renderer happens to be written in — and then in the next one too.
+        let over = n
+            .args
+            .iter()
+            .find(|a| a.name.as_deref() == Some("of"))
+            .or_else(|| n.args.first())
+            .map(|a| a.value.clone())
+            .unwrap_or(Expr::Error { span: n.span });
+        emit_rows(ctx, &over, n.lambda.as_deref(), &n.children, kids, f);
+    } else {
+        emit_nodes(ctx, &n.children, kids, f);
+    }
+    f.instruction(&Instruction::LocalGet(kids));
+    ctx.call_op("set", f);
+}
+
+/// One argument of a drawn thing.
+///
+/// **A name that names nothing is a word.** `emphasis: primary` and
+/// `color: foreground.primary` are the catalogue's own vocabulary, which the
+/// language does not define and cannot evaluate; handing back null instead
+/// would silently demote every primary button on every screen. The evaluator
+/// decides this by trying and seeing; here it is known before anything runs,
+/// which is the same answer arrived at earlier.
+fn emit_arg(ctx: &mut Ctx, key: &str, value: &Expr, f: &mut Function) {
+    if key == "onTap" {
+        if let Some(name) = value.path() {
+            ctx.push_konst(Konst::Str(name), f);
+            return;
+        }
+    }
+    match word_of(ctx, value) {
+        Some(word) => ctx.push_konst(Konst::Str(word), f),
+        None => emit(ctx, value, f),
+    }
+}
+
+/// The word a path is, when it is one. A path rooted at something the runtime
+/// binds is never a word: `state.missing` resolving to its own name would hide
+/// a mistake behind a sentence.
+fn word_of(ctx: &Ctx, e: &Expr) -> Option<String> {
+    let path = e.path()?;
+    let root = path.split('.').next().unwrap_or_default();
+    if matches!(root, "state" | "context" | "next") {
+        return None;
+    }
+    if ctx.locals.contains_key(root) {
+        return None;
+    }
+    if ctx.program.enums.iter().any(|en| en.name == root) {
+        return None;
+    }
+    if ctx.program.functions.iter().any(|fun| fun.name == root) {
+        return None;
+    }
+    Some(path)
 }
 
 /// How a credential read is written where a person reads it. One string, and
@@ -1021,7 +1230,10 @@ fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
             // before it ran, and a sheet that cannot name it is a sheet that
             // does not describe it.
             let said = match first {
-                Some(e) if e.path().is_some() => ctx_claim(ctx, &e.path().unwrap_or_default()),
+                Some(e) if e.path().is_some() => valang::report::in_credential_terms(
+                    ctx.program,
+                    &e.path().unwrap_or_default(),
+                ),
                 Some(Expr::Str { .. } | Expr::Num { .. } | Expr::Bool { .. }) => {
                     valang::report::render(first)
                 }
@@ -1036,7 +1248,11 @@ fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
             ctx.call_cap(&crate::abi::Cap::Disclose(said), f);
         }
         "prove" => {
-            let said = valang::report::render(first);
+            // In the person's terms, not the author's: they are being asked
+            // about their national ID, not about a local binding called
+            // `checked`.
+            let said =
+                valang::report::in_credential_terms(ctx.program, &valang::report::render(first));
             ctx.call_cap(&crate::abi::Cap::Prove(said), f);
         }
         "credential.issue" => {
@@ -1089,17 +1305,7 @@ fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
     }
 }
 
-/// `checked.claims.country` is what the author wrote; `NationalId.country` is
-/// what the person is asked about.
-fn ctx_claim(ctx: &Ctx, path: &str) -> String {
-    match path.split_once(".claims.") {
-        Some((base, rest)) => match ctx.verified_type(base) {
-            Some(ty) => format!("{ty}.{rest}"),
-            None => path.to_string(),
-        },
-        None => path.to_string(),
-    }
-}
+
 
 fn emit_first(ctx: &mut Ctx, first: Option<&Expr>, f: &mut Function) {
     match first {
@@ -1134,7 +1340,7 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
                 .find(|t| t.name == *policy)
                 .map(|t| t.subject_type.clone())
                 .unwrap_or_else(|| "?".into());
-            ctx.call_cap(&crate::abi::Cap::Read(read_line(&ty, Some(policy))), f);
+            ctx.call_cap(&crate::abi::Cap::Check(read_line(&ty, Some(policy))), f);
         }
 
         // `Tier.gold` is one value, not a lookup: an enum member is a constant.
@@ -1156,9 +1362,13 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
                     ctx.call_val(&crate::abi::Op::Context(rest.to_string()), 0, f);
                     return;
                 }
-                if let Some((base, claim)) = path.split_once(".claims.") {
-                    if let Some(ty) = ctx.verified_type(base) {
-                        ctx.call_cap(&crate::abi::Cap::Read(format!("{ty}.{claim}")), f);
+                // `checked.claims.amount` — a claim read through a credential
+                // this action checked. Named after the credential, because that
+                // is what the person is being asked about.
+                if path.contains(".claims.") {
+                    let named = valang::report::in_credential_terms(ctx.program, &path);
+                    if named != path {
+                        ctx.call_cap(&crate::abi::Cap::Read(named), f);
                         return;
                     }
                 }
@@ -1170,8 +1380,11 @@ fn emit(ctx: &mut Ctx, e: &Expr, f: &mut Function) {
                 }
             }
             emit(ctx, obj, f);
-            let n = ctx.konst(Konst::Str(name.clone()));
-            f.instruction(&Instruction::I32Const(n as i32));
+            // The *name*, as a value — not the index of one. Pushing the index
+            // handed `field` a handle into whatever slot happened to share the
+            // number, and every field read off a value that was not state came
+            // back as a read from nothing.
+            ctx.push_konst(Konst::Str(name.clone()), f);
             ctx.call_op("field", f);
         }
 

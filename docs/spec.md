@@ -786,6 +786,7 @@ The compiler derives it from your code; you cannot write or edit it.
 ```
 reads          PurchaseReceipt.amount, PurchaseReceipt.purchased_at
                under ReceiptFromMerchant
+checks         NationalId under GovernmentIssued
 discloses      NationalId.country
 proves         birthdate <= now - 20 years
 issues         LoyaltyMember
@@ -829,6 +830,12 @@ VAL source can be assumed. Every check is a check on the bytes.
 **Cannot: reach anything the sheet does not name.** What a module can do is what
 it imports, and a name the host does not know is a refusal rather than a link.
 There is no memory it shares, no syscall and no dynamic linking.
+
+**Checking is not reading, and the sheet says which.** `verify` hands a module a
+credential checked against a policy; whether it reads anything off it is a
+separate fact, and the two are separate lines. An application that checks your
+national ID against the government's key, discloses your country and proves your
+age **reads nothing**, and the sheet says so.
 
 **Cannot: hold a claim the sheet does not name.** A credential is handed over
 carrying only the claims that were imported by name — however it arrives,

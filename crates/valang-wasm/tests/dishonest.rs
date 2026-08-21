@@ -89,14 +89,16 @@ fn reaching_outside_the_abi_is_refused() {
 fn a_credential_hands_over_only_the_claims_that_were_asked_for() {
     let bytes = forged(
         &[
-            ("cap", "read:NationalId under GovernmentIssued", 0),
+            ("cap", "check:NationalId under GovernmentIssued", 0),
             ("cap", "read:NationalId.country", 0),
         ],
         &[],
     );
     let wants = valang_wasm::wants_of(&bytes).expect("describable");
 
-    // What a person is shown.
+    // What a person is shown: the claim it read, under the policy it checked
+    // against. Not the credential — checking one is its own line, and a
+    // credential whose claims are read appears under what was read.
     let shown = wants.reads_as_lines();
     assert_eq!(shown.len(), 1, "{shown:?}");
     assert!(shown.iter().next().unwrap().contains("country"), "{shown:?}");

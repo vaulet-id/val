@@ -238,7 +238,17 @@ impl<'a> Eval<'a> {
                                 // answer and shipped it — which is a disclosure
                                 // wearing the word `prove`.
                                 ("prove", Some(a)) => {
-                                    m.insert("statement".into(), Value::Str(render(&a.value)));
+                                    // In the person's terms: the statement in a
+                                    // record has to be the one on the sheet
+                                    // they agreed to, and that names the
+                                    // credential rather than a local binding.
+                                    m.insert(
+                                        "statement".into(),
+                                        Value::Str(valang::report::in_credential_terms(
+                                            self.program,
+                                            &render(&a.value),
+                                        )),
+                                    );
                                 }
                                 _ => {}
                             }
@@ -411,27 +421,7 @@ impl<'a> Eval<'a> {
             }
         }
         let base = self.expr(obj, state)?;
-        Ok(match base {
-            Value::Credential { claims, verified, ty } => match name {
-                // The type checker refuses this at compile time; the runtime
-                // agrees rather than trusting that it ran.
-                "claims" if verified.is_some() => Value::Map(claims),
-                "claims" => return Err(Trap::Defect(format!("the claims of an unverified `{ty}` are out of reach"))),
-                _ => Value::Null,
-            },
-            Value::Map(m) => m.get(name).cloned().unwrap_or(Value::Null),
-            Value::Enum(e, _) => Value::Enum(e, name.to_string()),
-            // A path through nothing. Answering with nothing again is how a
-            // screen came to draw a blank where a name belonged and nobody was
-            // told: the author wrote `member.tier` believing there was a
-            // member. `?.` is how they say there might not be.
-            Value::Null => {
-                return Err(Trap::Defect(format!(
-                    "`{name}` was read from nothing. Write `?.` where the left side may be missing"
-                )))
-            }
-            _ => Value::Null,
-        })
+        field_of(&base, name)
     }
 
     fn call(&mut self, callee: &Expr, args: &[Arg], state: &BTreeMap<String, Value>) -> R<Value> {
@@ -611,6 +601,40 @@ impl<'a> Eval<'a> {
 /// A predicate as text, for a host that has to build a circuit out of it. Not
 /// pretty-printing for its own sake: the statement is what gets proved, so it
 /// is what the execution record has to carry.
+/// What a name means on a value.
+///
+/// **One answer.** The tree-walking evaluator reads a field this way and so
+/// does the module, through the `field` operation it imports — a second copy
+/// answered `null` where a screen read a claim off a row, and the screen drew
+/// a blank in every slot.
+pub fn field_of(base: &Value, name: &str) -> Result<Value, Trap> {
+    Ok(match base {
+        Value::Credential { claims, verified, ty } => match name {
+            // The type checker refuses this at compile time; the runtime
+            // agrees rather than trusting that it ran.
+            "claims" if verified.is_some() => Value::Map(claims.clone()),
+            "claims" => {
+                return Err(Trap::Defect(format!(
+                    "the claims of an unverified `{ty}` are out of reach"
+                )))
+            }
+            _ => Value::Null,
+        },
+        Value::Map(m) => m.get(name).cloned().unwrap_or(Value::Null),
+        Value::Enum(e, _) => Value::Enum(e.clone(), name.to_string()),
+        // A path through nothing. Answering with nothing again is how a screen
+        // came to draw a blank where a name belonged and nobody was told: the
+        // author wrote `member.tier` believing there was a member. `?.` is how
+        // they say there might not be.
+        Value::Null => {
+            return Err(Trap::Defect(format!(
+                "`{name}` was read from nothing. Write `?.` where the left side may be missing"
+            )))
+        }
+        _ => Value::Null,
+    })
+}
+
 /// The functions the language has and nobody declares.
 ///
 /// **One implementation.** The tree-walking evaluator called them, and a module

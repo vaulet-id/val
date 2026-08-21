@@ -202,9 +202,14 @@ screen Home {
     let (program, errors) = built(src);
     assert!(errors.is_empty(), "{errors:?}");
     let r = report(&program);
+    // Checked in a branch, and not read: nothing in this program reads a claim
+    // off it, and the sheet says so on its own line rather than calling it a
+    // read. Both lines matter to whoever is deciding.
     assert!(
-        r.reads.iter().any(|x| x.contains("Receipt")),
-        "a credential read in a branch is not in the report: {:?}",
-        r.reads
+        r.checks.iter().any(|x| x.contains("Receipt")),
+        "a credential verified in a branch is in neither line: reads {:?} checks {:?}",
+        r.reads,
+        r.checks
     );
+    assert!(r.reads.is_empty(), "and it reads nothing: {:?}", r.reads);
 }

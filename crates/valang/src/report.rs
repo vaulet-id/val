@@ -25,6 +25,11 @@ pub struct Report {
     pub app: String,
     pub version: String,
     pub reads: BTreeSet<String>,
+    /// Credentials checked against a policy and **not read**. A person is owed
+    /// the difference: an application that checks your national ID against the
+    /// government's key and reads nothing off it is not an application that
+    /// reads your national ID.
+    pub checks: BTreeSet<String>,
     pub discloses: BTreeSet<String>,
     pub proves: BTreeSet<String>,
     pub issues: BTreeSet<String>,
@@ -105,6 +110,47 @@ pub fn report(p: &Program) -> Report {
 /// `if`: an effect written in one branch never appeared, so the consent sheet —
 /// which is a rendering of this report — did not mention something the
 /// application does.
+/// `checked.claims.country` is what the author wrote; `NationalId.country` is
+/// what the person is asked about, and every sheet is read by the second one.
+///
+/// **One place.** The compiler names an import with it, the evaluator names a
+/// statement it hands to the host with it, and the report renders with it — and
+/// when there were two, a proof came out named after a local binding in one and
+/// after the credential in the other, which is two different statements in two
+/// records of the same run.
+pub fn in_credential_terms(p: &Program, said: &str) -> String {
+    let mut bound = Vec::new();
+    for a in &p.actions {
+        for block in &a.phases {
+            verified_in(&block.stmts, &mut bound);
+        }
+    }
+    let mut out = said.to_string();
+    for (name, policy) in bound {
+        let Some(t) = p.trusts.iter().find(|t| t.name == policy) else { continue };
+        out = out.replace(&format!("{name}.claims."), &format!("{}.", t.subject_type));
+    }
+    out
+}
+
+/// Every `x with Policy` in a body, including the ones inside a branch — a
+/// binding made in one names a credential the same way.
+fn verified_in(stmts: &[Stmt], out: &mut Vec<(String, String)>) {
+    for s in stmts {
+        match s {
+            Stmt::Let { name, value: Expr::With { policy, .. }, .. } => {
+                out.push((name.clone(), policy.clone()))
+            }
+            Stmt::If { then, other, .. } => {
+                verified_in(then, out);
+                verified_in(other, out);
+            }
+            Stmt::Effect { body, .. } => verified_in(body, out),
+            _ => {}
+        }
+    }
+}
+
 /// How a predicate or an argument is written down where a person reads it.
 ///
 /// Public because the back end names an import with it — `prove:` carries the
@@ -139,6 +185,7 @@ impl fmt::Display for Report {
         };
         writeln!(f, "{} v{}", self.app, self.version)?;
         row(f, "reads", &self.reads)?;
+        row(f, "checks", &self.checks)?;
         row(f, "discloses", &self.discloses)?;
         row(f, "proves", &self.proves)?;
         row(f, "issues", &self.issues)?;

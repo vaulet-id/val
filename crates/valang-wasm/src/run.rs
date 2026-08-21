@@ -118,12 +118,14 @@ pub(crate) fn define_ops<T: HasValues + 'static>(
     shared!("ne", "!=");
     shared!("and", "&&");
     shared!("or", "||");
+    // What a name means on a value is `valang_runtime::eval::field_of`, and a
+    // second answer here read `null` off every row a screen drew.
     binop!("field", |a: Value, b: Value| {
         let name = match b {
             Value::Str(s) => s,
             _ => String::new(),
         };
-        Ok(a.field(&name).cloned().unwrap_or(Value::Null))
+        valang_runtime::eval::field_of(&a, &name).map_err(|t| t.to_string())
     });
 
     binop!("push", |a: Value, b: Value| match a {

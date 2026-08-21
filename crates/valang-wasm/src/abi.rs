@@ -42,8 +42,21 @@ pub const CAPS: &str = "cap";
 /// understates.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Cap {
-    /// A claim of a credential: `PurchaseReceipt.amount`.
+    /// A claim of a credential: `PurchaseReceipt.amount`. Or, with a policy in
+    /// it, a credential whose rows are drawn: `Holding under FromLicensedBroker`
+    /// is a screen showing somebody their holdings, and every claim on them is
+    /// on the screen.
     Read(String),
+    /// A credential checked against a policy and **not read**:
+    /// `NationalId under GovernmentIssued`, which is what `verify` produces.
+    ///
+    /// The difference from a read is the whole of what `door.val` is about. It
+    /// checks an ID against the government's key, discloses one claim and
+    /// proves one statement — and reads nothing. Carried as its own capability
+    /// because a sheet saying "reads your national ID" about that application
+    /// would be false, and one saying nothing at all would leave out that the
+    /// ID was looked at.
+    Check(String),
     /// A claim handed to somebody else.
     Disclose(String),
     /// A statement proved without the value behind it.
@@ -76,6 +89,7 @@ impl Cap {
     fn parts(&self) -> (&'static str, &str) {
         match self {
             Cap::Read(x) => ("read", x),
+            Cap::Check(x) => ("check", x),
             Cap::Disclose(x) => ("disclose", x),
             Cap::Prove(x) => ("prove", x),
             Cap::Issue(x) => ("issue", x),
@@ -110,6 +124,7 @@ impl Cap {
         let what = what.to_string();
         Some(match kind {
             "read" => Cap::Read(what),
+            "check" => Cap::Check(what),
             "disclose" => Cap::Disclose(what),
             "prove" => Cap::Prove(what),
             "issue" => Cap::Issue(what),
@@ -126,7 +141,7 @@ impl Cap {
         match self {
             // `read` and `query` name what they want in the import itself, so
             // there is nothing left to pass.
-            Cap::Read(_) | Cap::Query(_) => 0,
+            Cap::Read(_) | Cap::Check(_) | Cap::Query(_) => 0,
             // **`prove` takes nothing either**, and that is the whole of what
             // makes it a proof: the host evaluates the statement and builds the
             // proof, because the host is the only one that can. Handing the
@@ -236,6 +251,8 @@ impl Op {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Wants {
     pub reads: BTreeSet<String>,
+    /// Credentials checked against a policy and not read.
+    pub checks: BTreeSet<String>,
     pub discloses: BTreeSet<String>,
     pub proves: BTreeSet<String>,
     pub issues: BTreeSet<String>,
@@ -282,23 +299,39 @@ impl Wants {
     /// claims" later.
     pub fn reads_as_lines(&self) -> BTreeSet<String> {
         let mut out = BTreeSet::new();
-        for entry in &self.reads {
-            // `Type under Policy` and `Type — unverified` carry a policy; a
-            // bare `Type.claim` is one of the claims under one of them.
-            let Some((ty, rest)) = entry.split_once(' ') else { continue };
+        // A credential whose rows are drawn is read whole, and says so.
+        for entry in self.reads.iter().filter(|e| e.contains(' ')) {
+            out.insert(entry.clone());
+        }
+        // A claim read through a check is named with the policy the check
+        // named, because "the amount on your receipts, checked against the
+        // merchant" is what a person is being asked about.
+        for check in &self.checks {
+            let Some((ty, rest)) = check.split_once(' ') else { continue };
             let touched: Vec<&str> = self
                 .reads
                 .iter()
                 .filter(|c| c.starts_with(&format!("{ty}.")))
                 .map(String::as_str)
                 .collect();
-            if touched.is_empty() {
-                out.insert(entry.clone());
-            } else {
+            if !touched.is_empty() {
                 out.insert(format!("{} {rest}", touched.join(", ")));
             }
         }
         out
+    }
+
+    /// What was checked and not read, as a person is shown it. A credential
+    /// whose claims are read appears under `reads` instead — it was both.
+    pub fn checks_as_lines(&self) -> BTreeSet<String> {
+        self.checks
+            .iter()
+            .filter(|check| {
+                let ty = check.split(' ').next().unwrap_or_default();
+                !self.reads.iter().any(|c| c.starts_with(&format!("{ty}.")))
+            })
+            .cloned()
+            .collect()
     }
 
     pub fn of(caps: impl IntoIterator<Item = Cap>) -> Wants {
@@ -306,6 +339,7 @@ impl Wants {
         for c in caps {
             match c {
                 Cap::Read(x) => w.reads.insert(x),
+                Cap::Check(x) => w.checks.insert(x),
                 Cap::Disclose(x) => w.discloses.insert(x),
                 Cap::Prove(x) => w.proves.insert(x),
                 Cap::Issue(x) => w.issues.insert(x),
@@ -375,6 +409,7 @@ pub fn report_of(program: &valang::ast::Program) -> Result<valang::report::Repor
     let wants = wants_of(&module.bytes).map_err(|e| vec![e])?;
     let mut r = valang::report::report(program);
     r.reads = wants.reads_as_lines();
+    r.checks = wants.checks_as_lines();
     r.discloses = wants.discloses;
     r.proves = wants.proves;
     r.issues = wants.issues;

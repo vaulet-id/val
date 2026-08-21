@@ -245,6 +245,7 @@ pub fn report_rows(r: &Report) -> BTreeMap<String, Vec<String>> {
         out.insert(k.to_string(), v.iter().cloned().collect());
     };
     put(&mut out, "reads", &r.reads);
+    put(&mut out, "checks", &r.checks);
     put(&mut out, "discloses", &r.discloses);
     put(&mut out, "proves", &r.proves);
     put(&mut out, "issues", &r.issues);

@@ -130,7 +130,29 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
         let name = import.name().to_string();
         match import.module() {
             CAPS => match Cap::parse(&name) {
-                Some(Cap::Read(line)) => {
+                // The rows a screen draws, or a `data` line works with. Whole,
+                // because every claim on them is on the screen — and the sheet
+                // says the credential rather than a list of claims.
+                Some(Cap::Read(line)) if line.contains(' ') => {
+                    let (ty, policy) = match line.split_once(" under ") {
+                        Some((ty, policy)) => (ty.to_string(), Some(policy.to_string())),
+                        None => (line.split(' ').next().unwrap_or(&line).to_string(), None),
+                    };
+                    let rows = host.credentials_of(&ty, policy.as_deref(), None, None);
+                    answers.insert(
+                        format!("{CAPS}/{name}"),
+                        Ok(Value::List(
+                            rows.into_iter()
+                                .map(|claims| Value::Credential {
+                                    ty: ty.clone(),
+                                    claims,
+                                    verified: policy.clone(),
+                                })
+                                .collect(),
+                        )),
+                    );
+                }
+                Some(Cap::Read(line)) | Some(Cap::Check(line)) => {
                     // `Type under Policy`, `Type — unverified`, or `Type.claim`.
                     let (ty, policy) = match line.split_once(" under ") {
                         Some((ty, policy)) => (ty.to_string(), Some(policy.to_string())),
@@ -301,6 +323,75 @@ fn credential_for(
     })
 }
 
+impl Wasm<'_> {
+    /// Resolve a screen: the tree a host draws, with nothing left in it to
+    /// decide. An `if` has chosen its branch, a `for` has drawn its rows, and
+    /// every slot holds a value.
+    ///
+    /// The same shape the tree-walking resolver produces, because the two are
+    /// compared: `{ kind, args, children }` all the way down.
+    pub fn screen(
+        &mut self,
+        screen: &str,
+        about: &valang_runtime::About,
+        state: &State,
+        host: &dyn Host,
+    ) -> Result<Value, String> {
+        let context = host.context();
+        // A screen declares its data and the host answers before anything is
+        // drawn, so the same up-front resolution an action gets applies here —
+        // with no action to take the declared inputs from.
+        let empty = ActionAbout::default();
+        let answers = resolve(&empty, &State::new(), &context, host, &self.module.bytes)?;
+
+        let shell: Shell = Rc::new(RefCell::new(Run {
+            values: Rc::new(RefCell::new(Values::default())),
+            answers,
+            state: state.clone(),
+            next: state.clone(),
+            effects: Vec::new(),
+            parts: Vec::new(),
+            stopped: None,
+        }));
+
+        let mut config = Config::default();
+        config.consume_fuel(self.fuel.is_some());
+        let engine = wasmi::Engine::new(&config);
+        let parsed =
+            wasmi::Module::new(&engine, &self.module.bytes[..]).map_err(|e| e.to_string())?;
+        let mut store = Store::new(&engine, shell.clone());
+        if let Some(f) = self.fuel {
+            store.set_fuel(f).map_err(|e| e.to_string())?;
+        }
+        let mut linker = <Linker<Shell>>::new(&engine);
+        let konsts: Vec<Value> = self.module.konsts.iter().map(konst_value).collect();
+        crate::run::define_ops(&mut store, &mut linker, konsts)?;
+        define_host(&mut store, &mut linker, &parsed)?;
+
+        let instance = linker
+            .instantiate(&mut store, &parsed)
+            .and_then(|i| i.start(&mut store))
+            .map_err(|e| e.to_string())?;
+        let _ = about;
+        let name = format!("screen:{screen}");
+        let Some(Extern::Func(f)) = instance.get_export(&store, &name) else {
+            return Err(format!("this module does not carry the screen `{screen}`"));
+        };
+
+        let mut out = [wasmi::Val::I32(0)];
+        f.call(&mut store, &[], &mut out).map_err(|e| {
+            let stopped = shell.borrow().stopped.clone();
+            stopped.map(|t| t.to_string()).unwrap_or_else(|| e.to_string())
+        })?;
+        let wasmi::Val::I32(h) = out[0] else {
+            return Err("a screen answered with something that is not a handle".into())
+        };
+        let values = shell.borrow().values.clone();
+        let tree = values.borrow().get(h);
+        Ok(tree)
+    }
+}
+
 impl Engine for Wasm<'_> {
     fn walk(
         &mut self,
@@ -428,7 +519,9 @@ fn define_host(
             return Err(format!("`{name}` is not a capability this host knows"));
         };
         match cap {
-            Cap::Read(_) | Cap::Query(_) => answers_with(store, linker, &ns, &name, key)?,
+            Cap::Read(_) | Cap::Check(_) | Cap::Query(_) => {
+                answers_with(store, linker, &ns, &name, key)?
+            }
             Cap::Write(path) => takes(store, linker, &ns, &name, move |run, v| {
                 put(&mut run.next, &path, v.clone());
                 v
