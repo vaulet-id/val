@@ -11,3 +11,7 @@ web/public/preview
 
 # Vercel keeps its build cache here — two toolchains, hundreds of megabytes.
 web/.vercel
+
+# Whatever `pub get` leaves behind.
+renderer/.dart_tool
+preview/.dart_tool

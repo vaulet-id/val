@@ -39,6 +39,21 @@ pub extern "C" fn val_free(ptr: *mut u8, len: usize) {
     }
 }
 
+/// Where this build gets random numbers: nowhere.
+///
+/// Verifying a signature needs none, and nothing here generates a key. A
+/// browser has `crypto.getRandomValues`, but reaching it means the JavaScript
+/// glue `wasm-bindgen` generates — and this module is loaded with two exported
+/// functions and a length-prefixed string, on purpose. If something ever does
+/// draw one, it stops here rather than quietly drawing a predictable number.
+#[cfg(target_arch = "wasm32")]
+getrandom::register_custom_getrandom!(no_randomness);
+
+#[cfg(target_arch = "wasm32")]
+fn no_randomness(_: &mut [u8]) -> Result<(), getrandom::Error> {
+    Err(getrandom::Error::UNSUPPORTED)
+}
+
 fn read(ptr: *const u8, len: usize) -> String {
     let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
     String::from_utf8_lossy(bytes).into_owned()

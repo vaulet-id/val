@@ -16,3 +16,12 @@ valang-verify = { path = "../valang-verify" }
 # The report the playground shows is the one a wallet derives: from the module.
 valang-wasm = { path = "../valang-wasm" }
 serde_json = "1"
+
+# P-256 verification drags a random number generator into the graph, and
+# `wasm32-unknown-unknown` has no default answer for one. This build never draws
+# a random number — key generation is the only thing that would, and nothing
+# here generates keys — so it registers one that says so rather than pulling in
+# the JavaScript glue, which the page would then have to load and this module is
+# deliberately loadable without.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }

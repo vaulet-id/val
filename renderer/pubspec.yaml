@@ -1,0 +1,12 @@
+name: val_renderer
+description: The catalogue a VAL screen is drawn from — one implementation, for every host that draws one.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter

@@ -28,6 +28,10 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  # The catalogue, which the wallet draws with too. One implementation of what
+  # a `button` is, or a screen drawn here is not the screen that ships.
+  val_renderer:
+    path: ../renderer
   flutter:
     sdk: flutter
 

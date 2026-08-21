@@ -218,6 +218,19 @@ mod secure_enclave {
         key: p256::ecdsa::SigningKey,
     }
 
+    /// A key written down rather than drawn.
+    ///
+    /// A test that generated one would need a random number generator in the
+    /// graph, and Cargo unifies features across it: asking for one here turned
+    /// it on for the playground's build, whose module then wanted a JavaScript
+    /// glue nobody loads. A fixed key is also a test that fails the same way
+    /// twice.
+    fn key(seed: u8) -> p256::ecdsa::SigningKey {
+        let mut scalar = [1u8; 32];
+        scalar[31] = seed;
+        p256::ecdsa::SigningKey::from_slice(&scalar).expect("a P-256 scalar")
+    }
+
     impl Host for Enclave {
         fn context(&self) -> Context {
             self.wallet.context()
@@ -255,7 +268,7 @@ mod secure_enclave {
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         let enclave = Enclave {
             wallet: host(),
-            key: p256::ecdsa::SigningKey::random(&mut rand_core::OsRng),
+            key: key(7),
         };
         let run = run_action(
             &program,
@@ -288,7 +301,7 @@ mod secure_enclave {
         let (program, _) = valang::analyse(LOYALTY);
         let enclave = Enclave {
             wallet: host(),
-            key: p256::ecdsa::SigningKey::random(&mut rand_core::OsRng),
+            key: key(9),
         };
         let run = run_action(
             &program,
@@ -298,7 +311,7 @@ mod secure_enclave {
             &BTreeMap::new(),
             &enclave,
         );
-        let stranger = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng)
+        let stranger = key(11)
             .verifying_key()
             .to_encoded_point(false)
             .as_bytes()
