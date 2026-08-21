@@ -181,6 +181,11 @@ pub struct CredentialDecl {
     /// nothing in the world could tell which of somebody's cards it meant — so
     /// it is required on a `credential` and absent on a `type`, which is a
     /// record nobody signed.
+    ///
+    /// **Whose URL it is, is the publisher's business.** The language checks
+    /// that it is absolute and `https` and nothing further: a credential type
+    /// belongs to whoever issues the credential, and an issuer running on their
+    /// own domain is the ordinary case rather than the exception.
     pub vct: String,
     pub fields: Vec<Field>,
     pub span: Span,

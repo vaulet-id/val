@@ -138,6 +138,11 @@ which is a record nobody signed. Two credentials cannot name one `vct`: one card
 being two things to one application is two halves of it disagreeing about what
 the person is holding.
 
+**The URL is the issuer's own, and this language has no registry.** It is
+checked for being absolute and `https` and for nothing else, so an issuer
+running on their own domain writes their own domain — which is the ordinary
+case, not an exception to work around.
+
 State fields use `default`, not `=`: state is changed by an `update` block, so
 that every change to it is a line in the record somebody can read. A local `let`
 is a different thing and may be written again.

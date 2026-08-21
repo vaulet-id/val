@@ -13,7 +13,9 @@ capabilities {
   credential.issue(RideReceipt)
 }
 
-credential TransitPass as "https://org.vaulet.id/bem/credential/transit-pass" {
+// The operator issues this one themselves, on their own domain — a credential
+// type belongs to whoever issues it, and this language has no registry.
+credential TransitPass as "https://id.bem.co.th/credential/transit-pass" {
   holder_name: string
   zone:        string
   expires_at:  date

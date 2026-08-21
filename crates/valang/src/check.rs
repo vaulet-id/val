@@ -34,12 +34,6 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     d
 }
 
-/// A credential names the type a wallet knows it by.
-///
-/// `EmployeeBadge` is a name this package chose and no wallet has ever heard.
-/// Without the `vct`, a package could declare a credential and nothing in the
-/// world could say which of somebody's cards it meant — so an application that
-/// reads, checks or issues one would be an application no host can answer.
 fn kebab(name: &str) -> String {
     let mut out = String::new();
     for (i, ch) in name.chars().enumerate() {
@@ -51,12 +45,24 @@ fn kebab(name: &str) -> String {
     out
 }
 
+/// A credential names the type a wallet knows it by.
+///
+/// `EmployeeBadge` is a name this package chose and no wallet has ever heard.
+/// Without the `vct`, a package could declare a credential and nothing in the
+/// world could say which of somebody's cards it meant — so an application that
+/// reads, checks or issues one would be an application no host can answer.
+///
+/// **The URL is the publisher's own and this language has no opinion about it.**
+/// It is checked for being absolute and `https` and for nothing else: a
+/// credential type belongs to whoever issues the credential, and a compiler
+/// that expected one registry's shape would be a compiler that cannot build a
+/// self-hosted issuer's package.
 fn credentials_say_what_they_are(p: &Program, d: &mut Vec<Diagnostic>) {
     for c in &p.credentials {
         if c.vct.is_empty() {
             d.push(Diagnostic::error(
                 c.span,
-                format!("`{}` does not say what it is. A wallet knows credentials by their `vct`, never by the name a package chose for one: `credential {} as \"https://org.vaulet.id/your-org/credential/{}\"`", c.name, c.name, kebab(&c.name)),
+                format!("`{}` does not say what it is. A wallet knows credentials by their `vct`, never by the name a package chose for one — write the type its issuer stamps, on whatever domain that issuer is: `credential {} as \"https://your-domain.example/credential/{}\"`", c.name, c.name, kebab(&c.name)),
             ));
             continue;
         }

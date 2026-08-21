@@ -14,7 +14,7 @@ capabilities {
   disclosure.present
 }
 
-credential NationalId as "https://vaulet.id/credential/national-id" {
+credential NationalId as "https://dopa.go.th/credential/national-id" {
   given_name:  string
   family_name: string
   birthdate:   date

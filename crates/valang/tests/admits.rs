@@ -133,3 +133,42 @@ admits { Badge with Ours else "no" }
     let e = errors(read_instead);
     assert!(e.iter().any(|m| m.contains("credential.check")), "{e:?}");
 }
+
+/// **The credential type is the publisher's own URL and nothing more.**
+///
+/// A self-hosted issuer is the ordinary case, not the exception: a compiler
+/// that expected one registry's shape would be a compiler that cannot build
+/// their package at all. Absolute and `https` is the whole of the rule.
+#[test]
+fn a_credential_type_may_be_on_any_domain_its_issuer_runs() {
+    let on = |vct: &str| format!(
+        r#"
+app "x"
+version 1
+capabilities {{ credential.check(Badge) }}
+credential Badge as "{vct}" {{ id: string }}
+trust Ours(b: Badge) {{
+  anchor: "x"
+  require {{ b.signature.valid }}
+}}
+admits {{ Badge with Ours else "no" }}
+"#
+    );
+
+    for vct in [
+        "https://id.acme.example/credential/badge",
+        "https://acme.example/vc/badge/v2",
+        "https://org.vaulet.id/acme/credential/employee-badge",
+        // A port and a deep path are somebody's deployment, not a mistake.
+        "https://staging.acme.example:8443/issuer/one/credential/badge",
+    ] {
+        let e = errors(&on(vct));
+        assert!(e.is_empty(), "{vct} was refused: {e:?}");
+    }
+
+    // What is refused is what cannot be resolved by whoever holds the card.
+    for bad in ["acme.example/credential/badge", "http://acme.example/credential/badge", "badge"] {
+        let e = errors(&on(bad));
+        assert!(e.iter().any(|m| m.contains("absolute `https` URL")), "{bad}: {e:?}");
+    }
+}

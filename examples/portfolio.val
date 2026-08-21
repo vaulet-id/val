@@ -27,7 +27,7 @@ capabilities {
   disclosure.present
 }
 
-credential Holding as "https://org.vaulet.id/broker/credential/holding" {
+credential Holding as "https://api.broker.co.th/credential/holding" {
   symbol:       string
   quantity:     int        // micro-shares: 1_000_000 is one share. Fractional
                            // shares are ordinary now, and the answer is a

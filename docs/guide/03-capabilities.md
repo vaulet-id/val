@@ -61,6 +61,10 @@ admits {
 }
 ```
 
+`EmployeeBadge` is declared with the credential type its issuer stamps —
+`credential EmployeeBadge as "https://…/credential/employee-badge"` — on
+whatever domain that issuer runs. There is no registry to be in.
+
 Without a credential that passes the policy, the application does not draw its
 first screen and does not run an action. The person is shown `notStaff` — a key
 in your text bundle, so the words are yours, reviewed and translated like every

@@ -515,7 +515,7 @@ impl Parser {
             } else {
                 self.diagnostics.push(Diagnostic::error(
                     at,
-                    "`as` names the credential type a wallet knows this by, in quotes — `as \"https://org.vaulet.id/acme/credential/employee-badge\"`",
+                    "`as` names the credential type a wallet knows this by, in quotes — `as \"https://your-domain.example/credential/employee-badge\"`, on whatever domain issues it",
                 ));
             }
             if !is_credential {
@@ -548,6 +548,19 @@ impl Parser {
                 continue;
             }
             let ty = self.type_ref();
+            if ty.name.is_empty() {
+                // `name:` and then nothing that is a type. **The field is not
+                // recorded**, for the same reason a nameless type argument is
+                // not: it prints as a name, a colon and nothing, and reading
+                // that back takes the next line's name as this one's type. A
+                // printer whose output does not parse to what it printed is a
+                // printer nothing else can be checked against.
+                self.diagnostics.push(Diagnostic::error(
+                    span,
+                    format!("`{name}` has no type. Every field of a credential, a record and of `state` says what it holds"),
+                ));
+                continue;
+            }
             // `default 0`, never `= 0` — `=` appears nowhere in this language.
             let default = if self.at("default") {
                 self.bump();

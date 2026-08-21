@@ -58,6 +58,10 @@ admits {
 }
 ```
 
+`EmployeeBadge` ประกาศพร้อมกับ credential type ที่ผู้ออกประทับไว้ —
+`credential EmployeeBadge as "https://…/credential/employee-badge"` — บนโดเมนไหน
+ก็ได้ที่ผู้ออกรันอยู่ ไม่มีทะเบียนที่ต้องไปลง
+
 ถ้าไม่มี credential ที่ผ่าน policy แอปจะไม่วาดหน้าจอแรกและไม่รัน action ผู้ใช้เห็น
 `notStaff` ซึ่งเป็น key ใน text bundle ของคุณ คำพูดจึงเป็นของคุณ ผ่านการทบทวนและ
 แปลเหมือนทุกประโยคที่คุณส่ง
