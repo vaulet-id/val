@@ -71,7 +71,7 @@ export const files: SourceFile[] = [
   { path: 'examples/storefront.val', pkg: 'storefront', name: 'storefront.val', source: storefront, note: 'draws the kit, and declares nothing about how it looks' },
 ]
 
-/// Not part of any package: a `.va` never carries somebody's wallet. It is the
+/// Not part of any package: a `.vapp` never carries somebody's wallet. It is the
 /// host's answers — what a screen's declaration resolves to — and it is here so
 /// that editing it changes what the preview shows and what a run computes.
 export const hostFiles: SourceFile[] = [

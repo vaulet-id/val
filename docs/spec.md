@@ -759,11 +759,11 @@ bounded combinators only.
 ```bash
 valc    file.val …             # diagnostics, then the capability report
 valrun  file.val ActionName    # run one action, print the execution record
-valpack build  ./dir -o app.va
-valpack verify app.va
+valpack build  ./dir -o app.vapp
+valpack verify app.vapp
 ```
 
-A `.va` is one signed document: **the compiled module**, the manifest, the text
+A `.vapp` is one signed document: **the compiled module**, the manifest, the text
 bundle, the derived capability report, the module's hash, and a signature over
 all of it. The same inputs produce the same bytes.
 
@@ -882,7 +882,7 @@ publisher.**
 
 **Can: ship a module that is not the source you published.** Nothing on the
 device can tell, because nothing on the device compiles. That is what
-reproducible builds are for — `valpack reproduce <dir> <app.va>` builds the
+reproducible builds are for — `valpack reproduce <dir> <app.vapp>` builds the
 source and compares the bytes, and the module names the compiler that made it so
 the comparison is between like and like. It is a check somebody does once,
 rather than one every phone does at every install.
@@ -918,7 +918,7 @@ server sign a credential for a run that does not verify.
 ```
                  the publisher's machine          │        the device
                                                   │
-.val sources                                      │   .va  (module + manifest
+.val sources                                      │   .vapp  (module + manifest
      │                                            │        + text + signature)
      ├─ lexer → parser → typed AST                │        │
      ├─ type checking      Verified<P>, T?, …     │        ├─ the bytes hash right

@@ -45,7 +45,7 @@ is that what ran can be checked.
   `valang-verify` compiled to Wasm, which is the same crate a Go or a Python SDK
   will bind to, so this is not a second implementation of the thing it teaches
 - **the wallet is a file** — `fixtures/wallet.json`, under `host` rather than
-  under the package, because a `.va` never carries somebody\'s wallet. Edit it
+  under the package, because a `.vapp` never carries somebody\'s wallet. Edit it
   and the screen changes without a line of the application changing, which is
   what "the data is the host\'s" means when it is shown instead of argued
 

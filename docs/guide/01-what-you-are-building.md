@@ -62,7 +62,7 @@ wallet.val       a screen, in the same package
 text.json        every sentence a person will read, in every language
 ```
 
-You compile it, sign it, and hand over a `.va`. The wallet checks all of it
+You compile it, sign it, and hand over a `.vapp`. The wallet checks all of it
 again from scratch — your build passing proves nothing about your package.
 
 Next: [your first application](02-your-first-application.md).

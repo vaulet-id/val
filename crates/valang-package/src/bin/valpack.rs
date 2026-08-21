@@ -1,4 +1,4 @@
-//! `valpack` — build a `.va`, or verify one the way a host would.
+//! `valpack` — build a `.vapp`, or verify one the way a host would.
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
@@ -10,9 +10,9 @@ use valang_package::{
 fn usage() -> ExitCode {
     eprintln!(
         "usage:\n  \
-         valpack build      <dir> [-o out.va]\n  \
-         valpack verify     <file.va>            what a wallet checks\n  \
-         valpack reproduce  <dir> <file.va>      what a wallet cannot: rebuild and compare"
+         valpack build      <dir> [-o out.vapp]\n  \
+         valpack verify     <file.vapp>            what a wallet checks\n  \
+         valpack reproduce  <dir> <file.vapp>      what a wallet cannot: rebuild and compare"
     );
     ExitCode::from(2)
 }
@@ -28,7 +28,7 @@ fn show(pkg: &Package) {
     }
 }
 
-/// `valpack reproduce <dir> <app.va>` — build that source and compare the bytes.
+/// `valpack reproduce <dir> <app.vapp>` — build that source and compare the bytes.
 ///
 /// **The check a wallet cannot make.** It has no compiler, which is the whole
 /// reason a package carries a module and not a source; so this is where the
@@ -199,7 +199,7 @@ fn main() -> ExitCode {
                 .iter()
                 .position(|a| a == "-o")
                 .and_then(|i| args.get(i + 1).cloned())
-                .unwrap_or_else(|| format!("{}.va", pkg.manifest.app));
+                .unwrap_or_else(|| format!("{}.vapp", pkg.manifest.app));
             if let Err(e) = std::fs::write(&out, &bytes) {
                 eprintln!("{out}: {e}");
                 return ExitCode::FAILURE;

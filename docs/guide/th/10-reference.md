@@ -156,6 +156,6 @@ context.time.now      context.random.uuid
 valc    file.val …             # diagnostics แล้วตามด้วยรายงาน capability
                                # อ่าน text.json ที่วางอยู่ข้าง source
 valrun  file.val ActionName    # รันหนึ่ง action แล้วพิมพ์ execution record
-valpack build  ./dir -o app.va
-valpack verify app.va
+valpack build  ./dir -o app.vapp
+valpack verify app.vapp
 ```

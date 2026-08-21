@@ -1,4 +1,4 @@
-//! The `.va` package: a compiled Micro App, signed by whoever published it.
+//! The `.vapp` package: a compiled Micro App, signed by whoever published it.
 //!
 //! **It carries the module and no source.** A wallet has no compiler and is
 //! never going to have one — compiling on a phone is not a thing anybody
@@ -588,7 +588,7 @@ pub fn sign(pkg: &mut Package, key: &SigningKey) {
     pkg.public_key = Some(key.verifying_key().to_bytes().to_vec());
 }
 
-/// Read a `.va` back.
+/// Read a `.vapp` back.
 ///
 /// `verify` re-encodes what this parsed and checks the signature over that,
 /// which is only sound because the decoder is strict: a package encoded any way

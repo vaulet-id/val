@@ -719,11 +719,11 @@ context.time.now      context.random.uuid
 ```bash
 valc    file.val …             # diagnostics แล้วตามด้วยรายงาน capability
 valrun  file.val ActionName    # รันหนึ่ง action แล้วพิมพ์ execution record
-valpack build  ./dir -o app.va
-valpack verify app.va
+valpack build  ./dir -o app.vapp
+valpack verify app.vapp
 ```
 
-`.va` คือเอกสารที่ถูกเซ็นหนึ่งฉบับ: **module ที่คอมไพล์แล้ว** manifest text bundle
+`.vapp` คือเอกสารที่ถูกเซ็นหนึ่งฉบับ: **module ที่คอมไพล์แล้ว** manifest text bundle
 รายงาน capability ที่อนุมานมา แฮชของ module และลายเซ็นครอบทั้งหมด input ชุดเดิม
 ผลิตไบต์ชุดเดิมเสมอ
 
@@ -801,7 +801,7 @@ credential ให้กับการรันที่ตรวจไม่ผ
 ```
              เครื่องของผู้เผยแพร่                  │            เครื่องของผู้ใช้
                                                   │
-.val sources                                      │   .va  (module + manifest
+.val sources                                      │   .vapp  (module + manifest
      │                                            │        + text + ลายเซ็น)
      ├─ lexer → parser → typed AST                │        │
      ├─ การตรวจ type        Verified<P>, T?, …    │        ├─ bytes แฮชตรงกับที่ระบุ

@@ -157,7 +157,7 @@ Against the pipeline in [§7](docs/spec.md), today:
 | state Merkle root | **done** — `(path, value)` leaves, one per list element, with inclusion proofs |
 | execution record | **done** — code, input, roots, effects, context, outcome, **signed by the host** |
 | manifest, text bundle | **done** — a locale missing a key refuses the package |
-| integrity, signature, `.va` | **done** — written and read back; a strict decoder refuses any non-canonical encoding; `kind` and the catalogue version go to a host policy the crate does not hold |
+| integrity, signature, `.vapp` | **done** — written and read back; a strict decoder refuses any non-canonical encoding; `kind` and the catalogue version go to a host policy the crate does not hold |
 | Wasm back end | **done for the pure fragment** — functions compile and run under `wasmi`, with fuel, and the module carries its own constants; actions stay with the host, since `execute` describes effects rather than performing them |
 
 ```
@@ -166,7 +166,7 @@ cargo run --bin valrun -- examples/loyalty.val ScanToEarn
 ```
 
 ```
-cargo run --bin valpack -- build  <dir> -o app.va
+cargo run --bin valpack -- build  <dir> -o app.vapp
 cargo run --bin valpack -- verify <dir>
 ```
 
@@ -174,7 +174,7 @@ cargo run --bin valpack -- verify <dir>
 a host runs over a package it received. `valrun` walks one action and prints the
 execution record: roots before and after, the batch the host was offered, and
 the state's leaves with their hashes; its wallet is a stub and says so.
-`valpack` builds a `.va` and verifies one the way a wallet would. **The package
+`valpack` builds a `.vapp` and verifies one the way a wallet would. **The package
 carries the compiled module and no source**, because a wallet has no compiler:
 the module hashes to what integrity says, the publisher signed those bytes, what
 it imports is what this host provides, and the report it ships is derived again

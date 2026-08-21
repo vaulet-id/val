@@ -158,6 +158,6 @@ The only sources of nondeterminism, and both are recorded. `Date.now()` and
 valc    file.val …             # diagnostics, then the capability report
                                # reads text.json beside the sources
 valrun  file.val ActionName    # run one action, print the execution record
-valpack build  ./dir -o app.va
-valpack verify app.va
+valpack build  ./dir -o app.vapp
+valpack verify app.vapp
 ```

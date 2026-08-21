@@ -70,7 +70,7 @@ export function FileTree({
       </div>
 
       <Group label="package" files={files} active={active} onSelect={onSelect} onAdd={onAddFile} onRemove={onRemoveFile} canRemove={canRemove} />
-      {/* The host's own data, in its own group. A `.va` never carries somebody's
+      {/* The host's own data, in its own group. A `.vapp` never carries somebody's
           wallet, and putting it under the same heading as the package would be
           the one line of this interface that lied. */}
       {/* The same wallet in every project, because a person has one and every

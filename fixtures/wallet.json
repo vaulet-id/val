@@ -2,7 +2,7 @@
   "_comment": [
     "A host's answers, and nothing an application is allowed to carry.",
     "",
-    "This is not part of any package: a `.va` never contains somebody's wallet.",
+    "This is not part of any package: a `.vapp` never contains somebody's wallet.",
     "It is what a host would hand back when a program declares what it needs —",
     "state, the credentials it holds, what a query answers — and it is one file",
     "because three places used to invent this separately: the runtime's tests,",
