@@ -185,6 +185,12 @@ pub fn hex_of(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
+/// And as an execution record names it. The same bytes hashed the same way, so
+/// somebody holding a package and a record can say they are one thing.
+pub fn hash_of(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
+
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
