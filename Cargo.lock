@@ -1106,6 +1106,7 @@ version = "0.1.0"
 dependencies = [
  "bs58",
  "ed25519-dalek",
+ "p256",
  "rand",
  "serde_json",
  "sha2",
