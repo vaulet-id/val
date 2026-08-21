@@ -324,4 +324,44 @@ mod secure_enclave {
         };
         assert!(matches!(verify(&jwt(&run.record), &expect), Err(Refusal::Unsigned(_))));
     }
+
+    /// **A publisher who has never met this wallet reads its key off the
+    /// record**, because there is nothing else to read it off. What that
+    /// establishes is only that the record signed itself; what pins the device
+    /// afterwards is the chain, and this is the first link of it.
+    #[test]
+    fn the_key_a_record_carries_is_the_key_that_signed_it() {
+        let (program, diagnostics) = valang::analyse(LOYALTY);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let enclave = Enclave { wallet: host(), key: key(9) };
+        let run = run_action(
+            &program,
+            LOYALTY,
+            "ScanToEarn",
+            &enclave.wallet.state(),
+            &BTreeMap::new(),
+            &enclave,
+        );
+        let token = jwt(&run.record);
+
+        let read = valang_verify::device_key_in(&token).expect("a record names its key");
+        assert_eq!(read, run.record.device_key, "P-256, as the header carries it");
+
+        // And it is the key the record verifies under, which is the only thing
+        // reading it off is good for.
+        let expect = Expectation {
+            code_hash: &run.record.code_hash,
+            device_key: &read,
+            last_root: None,
+            spent: &never_spent,
+        };
+        assert!(verify(&token, &expect).is_ok());
+    }
+
+    #[test]
+    fn a_record_that_is_not_one_names_no_key() {
+        assert!(valang_verify::device_key_in("").is_none());
+        assert!(valang_verify::device_key_in("not.a.jwt").is_none());
+        assert!(valang_verify::device_key_in("eyJhbGciOiJFUzI1NiJ9.x.y").is_none());
+    }
 }

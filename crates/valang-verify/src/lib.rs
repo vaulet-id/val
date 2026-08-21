@@ -123,6 +123,48 @@ fn alg_of(header: &str) -> Result<Alg, Refusal> {
     }
 }
 
+/// The device key a record carries in its own header.
+///
+/// **This establishes nothing on its own.** A record is signed by the key its
+/// header names, so reading the key out of it and verifying with it says only
+/// that the record signed itself — which is what `Expectation::device_key`'s
+/// note already says about a server that does this.
+///
+/// It is here because a publisher who has never met a wallet has nothing else
+/// to go on: there is no prior relationship to recognise a device by until it
+/// signs something. First contact takes the key from the record and every
+/// record after it must be the same key, which is the chain rather than this
+/// function. Hand-rolling the header parse at each such server is how two of
+/// them come to disagree about what a record says.
+pub fn device_key_in(token: &str) -> Option<Vec<u8>> {
+    let header = token.split('.').next()?;
+    let raw = b64_decode(header)?;
+    let text = String::from_utf8(raw).ok()?;
+    // `{"alg":…,"typ":…,"jwk":…}` — a raw key for Ed25519, an EC point for
+    // P-256, written by `attestation::header` and read back the same way.
+    let jwk = text.split("\"jwk\"").nth(1)?;
+    let half = |name: &str| -> Option<Vec<u8>> {
+        b64_decode(jwk.split(name).nth(1)?.split('"').nth(1)?)
+    };
+    match alg_of(header).ok()? {
+        Alg::EdDSA => half("\"x\"").filter(|k| k.len() == 32),
+        Alg::ES256 => {
+            let mut halves = Vec::new();
+            for name in ["\"x\"", "\"y\""] {
+                let bytes = half(name)?;
+                if bytes.len() != 32 {
+                    return None;
+                }
+                halves.push(bytes);
+            }
+            let mut point = vec![0x04];
+            point.extend_from_slice(&halves[0]);
+            point.extend_from_slice(&halves[1]);
+            Some(point)
+        }
+    }
+}
+
 pub fn verify(token: &str, expect: &Expectation) -> Result<Verified, Refusal> {
     let mut parts = token.split('.');
     let (h, p, sig) = match (parts.next(), parts.next(), parts.next(), parts.next()) {
