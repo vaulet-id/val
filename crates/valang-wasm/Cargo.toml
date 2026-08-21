@@ -13,3 +13,4 @@ wasm-encoder = "0.221"
 # iOS forbids JIT, so the runtime has to interpret. One integration covers iOS,
 # Android and desktop; browsers come free.
 wasmi = "0.40"
+sha2 = "0.10"

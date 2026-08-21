@@ -20,7 +20,7 @@ pub mod value;
 use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
-use valang::ast::{ActionDecl, Phase, Program, Stmt};
+use valang::ast::{Phase, Program, Stmt};
 
 use canonical::{Canonical, DeterministicCbor};
 use eval::{Eval, Trap};
@@ -214,6 +214,102 @@ pub struct Run {
 /// A package of several files has one answer to what those bytes are, and it is
 /// `valang_verify::code_hash_of` — the wallet, the publisher's server and the
 /// signing tool have to agree, and a join written twice is how they stop.
+/// What a record says about the application, and nothing about what it does.
+///
+/// **A wallet has this and no compiler.** It runs a module and has to fill in a
+/// record — which application, which version, which capabilities were declared,
+/// which policies exist — and none of that can come from a typed AST it cannot
+/// produce. So it travels with the module, and a build with a compiler in it
+/// takes it from the program instead.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct About {
+    pub app: String,
+    pub version: String,
+    pub capabilities: Vec<String>,
+    pub policies: Vec<String>,
+    pub actions: Vec<ActionAbout>,
+    /// The state this application starts with: the values its fields default
+    /// to. A wallet has no program to read a `default` off, and a field that
+    /// arrived missing would be a null where the author wrote a zero.
+    pub state: State,
+    /// Every field it declared, in order — including the optional ones that
+    /// default to nothing and so are absent above. A wallet keeps what it holds
+    /// for those and nothing else: state this application never declared is not
+    /// its state.
+    pub fields: Vec<String>,
+}
+
+/// One action, and what the host is asked for before it starts.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ActionAbout {
+    pub name: String,
+    /// `receipt: Credential<PurchaseReceipt>` — the name the action calls it,
+    /// the credential it is, and the policy `verify` will check it against.
+    pub inputs: Vec<Declared>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Declared {
+    pub binding: String,
+    pub credential: String,
+    pub policy: Option<String>,
+}
+
+impl About {
+    pub fn of(p: &Program) -> About {
+        About {
+            app: p.app.clone().unwrap_or_default(),
+            version: p.version.clone().unwrap_or_default(),
+            capabilities: p.capabilities.iter().map(|c| c.name.clone()).collect(),
+            policies: p.trusts.iter().map(|t| t.name.clone()).collect(),
+            actions: p
+                .actions
+                .iter()
+                .map(|a| ActionAbout {
+                    name: a.name.clone(),
+                    inputs: a
+                        .phases
+                        .iter()
+                        .flat_map(|b| &b.stmts)
+                        .filter_map(|s| match s {
+                            Stmt::Binding { name, ty, .. } if ty.name == "Credential" => {
+                                let credential =
+                                    ty.args.first().map(|x| x.name.clone()).unwrap_or_default();
+                                let policy = p
+                                    .trusts
+                                    .iter()
+                                    .find(|t| t.subject_type == credential)
+                                    .map(|t| t.name.clone());
+                                Some(Declared { binding: name.clone(), credential, policy })
+                            }
+                            _ => None,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            state: initial_state(p, &State::new()),
+            fields: p.state.iter().map(|f| f.name.clone()).collect(),
+        }
+    }
+
+    /// The state an action starts from: what this wallet holds, over what the
+    /// application declared. The same merge `initial_state` does, for a caller
+    /// that has the module and not the program.
+    pub fn initial(&self, held: &State) -> State {
+        let mut out = State::new();
+        for name in &self.fields {
+            if let Some(v) = held.get(name).cloned().or_else(|| self.state.get(name).cloned()) {
+                out.insert(name.clone(), v);
+            }
+        }
+        out
+    }
+
+    pub fn action(&self, name: &str) -> Option<&ActionAbout> {
+        self.actions.iter().find(|a| a.name == name)
+    }
+}
+
 /// What walks an action, once the host has been asked for what it declared.
 ///
 /// **There are two, and everything around them is shared.** The tree-walking
@@ -228,8 +324,7 @@ pub trait Engine {
     /// unchanged is an action that wrote nothing, which is ordinary.
     fn walk(
         &mut self,
-        program: &Program,
-        action: &ActionDecl,
+        action: &ActionAbout,
         state: &State,
         input: &State,
         host: &dyn Host,
@@ -244,19 +339,28 @@ pub struct Stopped {
     pub effects: Vec<EffectRequest>,
 }
 
-/// The tree-walking one, which is what a build with a compiler in it uses.
-pub struct Walk;
+/// The tree-walking one, which is what a build with a compiler in it uses. It
+/// holds the program, because walking one is the whole of what it does.
+pub struct Walk<'a> {
+    pub program: &'a Program,
+}
 
-impl Engine for Walk {
+impl Engine for Walk<'_> {
     fn walk(
         &mut self,
-        program: &Program,
-        action: &ActionDecl,
+        about: &ActionAbout,
         state: &State,
         input: &State,
         host: &dyn Host,
         context: &Context,
     ) -> Result<(State, Vec<EffectRequest>), Stopped> {
+        let program = self.program;
+        let Some(action) = program.actions.iter().find(|a| a.name == about.name) else {
+            return Err(Stopped {
+                trap: Trap::Defect(format!("no action called `{}`", about.name)),
+                effects: Vec::new(),
+            });
+        };
         let mut ev = Eval::new(program, context.clone());
         for (k, v) in input {
             ev.bind(k, v.clone());
@@ -320,17 +424,30 @@ pub fn run_action(
     input: &State,
     host: &dyn Host,
 ) -> Run {
-    run_action_with(program, source, action_name, state, input, host, &mut Walk)
+    run_action_with(
+        &About::of(program),
+        Sha256::digest(source.as_bytes()).into(),
+        action_name,
+        state,
+        input,
+        host,
+        &mut Walk { program },
+    )
 }
 
-/// The same, with whichever engine evaluates it. Everything a record rests on —
-/// the roots, the hashes, the batch the host is offered, the moment the state
-/// commits — happens here and only here, so two engines cannot come to disagree
-/// about anything except arithmetic, which is what the parity test compares.
+/// The same, with whichever engine evaluates it.
+///
+/// Everything a record rests on — the roots, the hashes, the batch the host is
+/// offered, the moment the state commits — happens here and only here, so two
+/// engines cannot come to disagree about anything except arithmetic, which is
+/// what the parity test compares.
+///
+/// **The code hash is passed rather than computed**, because what ran is not
+/// always a text: a wallet runs a module and the record has to name the module.
 #[allow(clippy::too_many_arguments)]
 pub fn run_action_with(
-    program: &Program,
-    source: &str,
+    about: &About,
+    code_hash: Hash,
     action_name: &str,
     state: &State,
     input: &State,
@@ -340,20 +457,20 @@ pub fn run_action_with(
     let enc = DeterministicCbor;
     let context = host.context();
 
-    let action = program.actions.iter().find(|a| a.name == action_name);
+    let action = about.action(action_name);
     let previous = merkle::leaves(state, &enc);
     let previous_root = merkle::root(&previous);
 
     let mut record = ExecutionRecord {
-        app: program.app.clone().unwrap_or_default(),
-        version: program.version.clone().unwrap_or_default(),
+        app: about.app.clone(),
+        version: about.version.clone(),
         action: action_name.to_string(),
-        code_hash: Sha256::digest(source.as_bytes()).into(),
+        code_hash,
         input_hash: Sha256::digest(enc.encode(&Value::Map(input.clone()))).into(),
         previous_root,
         next_root: previous_root,
         policies: Vec::new(),
-        capabilities: program.capabilities.iter().map(|c| c.name.clone()).collect(),
+        capabilities: about.capabilities.clone(),
         effects_requested: Vec::new(),
         effects_executed: 0,
         context: context.clone(),
@@ -367,7 +484,7 @@ pub fn run_action_with(
         return Run { outcome: record.outcome.clone(), next_state: state.clone(), effects: Vec::new(), record, leaves: previous };
     };
 
-    let (next, requested) = match engine.walk(program, action, state, input, host, &context) {
+    let (next, requested) = match engine.walk(action, state, input, host, &context) {
         Ok(both) => both,
         Err(Stopped { trap, effects }) => {
             record.outcome = match trap {
@@ -388,7 +505,7 @@ pub fn run_action_with(
     let mut effects = requested;
     effects.sort_by_key(|e| !e.reversible);
 
-    record.policies = program.trusts.iter().map(|t| t.name.clone()).collect();
+    record.policies = about.policies.clone();
     record.effects_requested = effects.clone();
 
     match host.decide(&effects) {

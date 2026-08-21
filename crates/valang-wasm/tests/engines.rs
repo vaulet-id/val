@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use valang::capability::{Host as Registry, Hosts};
 use valang_runtime::fixture::Fixture;
-use valang_runtime::{run_action, run_action_with, Run};
+use valang_runtime::{run_action, run_action_with, About, Run};
 
 const WALLET: &str = include_str!("../../../fixtures/wallet.json");
 
@@ -36,8 +36,21 @@ fn both(src: &str, action: &str) -> (Run, Run) {
     let input = BTreeMap::new();
 
     let walked = run_action(&program, src, action, &state, &input, &host);
+
+    // The module's run is given the same code hash so the two records are
+    // comparable. A wallet passes the hash of the module, because that is what
+    // ran there — which is the point of the hash being an argument.
+    let code_hash: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(src.as_bytes()).into();
     let mut engine = valang_wasm::WasmEngine::new(&module);
-    let ran = run_action_with(&program, src, action, &state, &input, &host, &mut engine);
+    let ran = run_action_with(
+        &About::of(&program),
+        code_hash,
+        action,
+        &state,
+        &input,
+        &host,
+        &mut engine,
+    );
     (walked, ran)
 }
 

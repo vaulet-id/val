@@ -16,11 +16,10 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use valang::ast::{ActionDecl, Program, Stmt};
 use valang_runtime::eval::Trap;
 use valang_runtime::host::{Context, EffectRequest, Host};
 use valang_runtime::value::Value;
-use valang_runtime::{Engine, State, Stopped};
+use valang_runtime::{ActionAbout, Engine, State, Stopped};
 use wasmi::{Caller, Config, Extern, Func, Linker, Store};
 
 use crate::abi::{Cap, Op, CAPS, OPS};
@@ -99,7 +98,7 @@ fn put(map: &mut State, path: &str, value: Value) {
 /// `read:PurchaseReceipt.amount` is one of its claims. Both come from the same
 /// answer, so the host is asked once per credential however many claims are
 /// read off it.
-fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Context, host: &dyn Host, module: &[u8]) -> Result<BTreeMap<String, Result<Value, Trap>>, String> {
+fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Host, module: &[u8]) -> Result<BTreeMap<String, Result<Value, Trap>>, String> {
     let engine = wasmi::Engine::default();
     let parsed = wasmi::Module::new(&engine, module).map_err(|e| e.to_string())?;
 
@@ -123,7 +122,11 @@ fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Cont
                         Some(c) => c.clone(),
                         None => {
                             let asked = policy.clone().or_else(|| {
-                                program.trusts.iter().find(|t| t.subject_type == ty).map(|t| t.name.clone())
+                                action
+                                    .inputs
+                                    .iter()
+                                    .find(|d| d.credential == ty)
+                                    .and_then(|d| d.policy.clone())
                             });
                             let c = host.credential(&ty, asked.as_deref());
                             credentials.insert(ty.clone(), c.clone());
@@ -166,7 +169,7 @@ fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Cont
                     // credential the action declared and the host chose.
                     let value = match input.get(&binding) {
                         Some(v) => v.clone(),
-                        None => credential_for(program, action, &binding, host).unwrap_or(Value::Null),
+                        None => credential_for(action, &binding, host).unwrap_or(Value::Null),
                     };
                     answers.insert(format!("{OPS}/{name}"), Ok(value));
                 }
@@ -188,27 +191,16 @@ fn resolve(program: &Program, action: &ActionDecl, input: &State, context: &Cont
 
 /// The credential the action's `input` declared under this name, as the host
 /// chose it — already checked against the policy `verify` will name.
-fn credential_for(program: &Program, action: &ActionDecl, binding: &str, host: &dyn Host) -> Option<Value> {
-    for block in &action.phases {
-        for s in &block.stmts {
-            let Stmt::Binding { name, ty, .. } = s else { continue };
-            if name != binding || ty.name != "Credential" {
-                continue;
-            }
-            let cred_ty = ty.args.first().map(|a| a.name.clone()).unwrap_or_default();
-            let policy = program.trusts.iter().find(|t| t.subject_type == cred_ty).map(|t| t.name.clone());
-            let claims = host.credential(&cred_ty, policy.as_deref())?;
-            return Some(Value::Credential { ty: cred_ty, claims, verified: None });
-        }
-    }
-    None
+fn credential_for(action: &ActionAbout, binding: &str, host: &dyn Host) -> Option<Value> {
+    let declared = action.inputs.iter().find(|d| d.binding == binding)?;
+    let claims = host.credential(&declared.credential, declared.policy.as_deref())?;
+    Some(Value::Credential { ty: declared.credential.clone(), claims, verified: None })
 }
 
 impl Engine for Wasm<'_> {
     fn walk(
         &mut self,
-        program: &Program,
-        action: &ActionDecl,
+        action: &ActionAbout,
         state: &State,
         input: &State,
         host: &dyn Host,
@@ -216,7 +208,7 @@ impl Engine for Wasm<'_> {
     ) -> Result<(State, Vec<EffectRequest>), Stopped> {
         let stop = |why: String| Stopped { trap: Trap::Defect(why), effects: Vec::new() };
 
-        let answers = resolve(program, action, input, context, host, &self.module.bytes)
+        let answers = resolve(action, input, context, host, &self.module.bytes)
             .map_err(|e| stop(format!("this module cannot be read: {e}")))?;
 
         let shell: Shell = Rc::new(RefCell::new(Run {

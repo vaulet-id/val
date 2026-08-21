@@ -343,6 +343,9 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
     let pool = encode_konsts(&ctx.konsts);
     module.section(&CustomSection { name: KONST_SECTION.into(), data: pool.into() });
 
+    let about = encode_about(&valang_runtime::About::of(program));
+    module.section(&CustomSection { name: ABOUT_SECTION.into(), data: about.into() });
+
     if !ctx.unsupported.is_empty() {
         let mut said: Vec<String> = ctx.unsupported.clone();
         said.sort();
@@ -360,6 +363,133 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
 /// Wasm runtime that does not know it, which is the right shape: a host that
 /// cannot read the pool cannot run the module either, and will say so.
 pub const KONST_SECTION: &str = "val.konsts";
+
+/// What a record says about the application, carried by the module itself.
+///
+/// **A wallet has the bytes and no compiler.** It has to fill in an execution
+/// record — which application, which version, which capabilities were declared,
+/// which policies exist, and what the host is asked for before an action starts
+/// — and none of that can come from a typed AST it cannot produce. So it
+/// travels here, in a section beside the code, and what a wallet needs is one
+/// file.
+pub const ABOUT_SECTION: &str = "val.about";
+
+/// The metadata, in the same canonical encoding as everything else this project
+/// hashes — so two builds of one source are one module here as well.
+fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
+    use std::collections::BTreeMap;
+    use valang_runtime::canonical::{Canonical, DeterministicCbor};
+    use valang_runtime::value::Value;
+
+    let strings = |xs: &[String]| Value::List(xs.iter().cloned().map(Value::Str).collect());
+    let mut m = BTreeMap::new();
+    m.insert("app".to_string(), Value::Str(a.app.clone()));
+    m.insert("version".to_string(), Value::Str(a.version.clone()));
+    m.insert("capabilities".to_string(), strings(&a.capabilities));
+    m.insert("policies".to_string(), strings(&a.policies));
+    m.insert("state".to_string(), Value::Map(a.state.clone()));
+    m.insert("fields".to_string(), strings(&a.fields));
+    m.insert(
+        "actions".to_string(),
+        Value::List(
+            a.actions
+                .iter()
+                .map(|act| {
+                    let mut one = BTreeMap::new();
+                    one.insert("name".to_string(), Value::Str(act.name.clone()));
+                    one.insert(
+                        "inputs".to_string(),
+                        Value::List(
+                            act.inputs
+                                .iter()
+                                .map(|d| {
+                                    let mut i = BTreeMap::new();
+                                    i.insert("binding".to_string(), Value::Str(d.binding.clone()));
+                                    i.insert(
+                                        "credential".to_string(),
+                                        Value::Str(d.credential.clone()),
+                                    );
+                                    i.insert(
+                                        "policy".to_string(),
+                                        d.policy.clone().map_or(Value::Null, Value::Str),
+                                    );
+                                    Value::Map(i)
+                                })
+                                .collect(),
+                        ),
+                    );
+                    Value::Map(one)
+                })
+                .collect(),
+        ),
+    );
+    DeterministicCbor.encode(&Value::Map(m))
+}
+
+/// Read it back, from bytes and nothing else. This is the first thing a wallet
+/// does with a Micro App it has been handed.
+pub fn about_of(bytes: &[u8]) -> Option<valang_runtime::About> {
+    use valang_runtime::decode::decode;
+    use valang_runtime::value::Value;
+    use valang_runtime::{About, ActionAbout, Declared};
+
+    let data = custom_section(bytes, ABOUT_SECTION)?;
+    let Value::Map(m) = decode(data).ok()? else { return None };
+    let text = |v: Option<&Value>| match v {
+        Some(Value::Str(s)) => s.clone(),
+        _ => String::new(),
+    };
+    let strings = |v: Option<&Value>| match v {
+        Some(Value::List(xs)) => xs
+            .iter()
+            .map(|x| match x {
+                Value::Str(s) => s.clone(),
+                _ => String::new(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let actions = match m.get("actions") {
+        Some(Value::List(xs)) => xs
+            .iter()
+            .filter_map(|x| {
+                let Value::Map(one) = x else { return None };
+                let inputs = match one.get("inputs") {
+                    Some(Value::List(ds)) => ds
+                        .iter()
+                        .filter_map(|d| {
+                            let Value::Map(d) = d else { return None };
+                            Some(Declared {
+                                binding: text(d.get("binding")),
+                                credential: text(d.get("credential")),
+                                policy: match d.get("policy") {
+                                    Some(Value::Str(s)) => Some(s.clone()),
+                                    _ => None,
+                                },
+                            })
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                Some(ActionAbout { name: text(one.get("name")), inputs })
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let state = match m.get("state") {
+        Some(Value::Map(fields)) => fields.clone(),
+        _ => Default::default(),
+    };
+    Some(About {
+        state,
+        fields: strings(m.get("fields")),
+        app: text(m.get("app")),
+        version: text(m.get("version")),
+        capabilities: strings(m.get("capabilities")),
+        policies: strings(m.get("policies")),
+        actions,
+    })
+}
 
 fn encode_konsts(ks: &[Konst]) -> Vec<u8> {
     use valang_runtime::canonical::{Canonical, DeterministicCbor};
