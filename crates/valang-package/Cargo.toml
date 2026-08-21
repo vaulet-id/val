@@ -13,6 +13,9 @@ sha2 = "0.10"
 # Signing is a specification and a security boundary. Both are reasons not to
 # write one here.
 ed25519-dalek = { version = "2", features = ["rand_core"] }
+# A publisher whose key is in a KMS has a P-256 one, the same reason a wallet
+# does. The record already carried both; the package did not.
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 rand = "0.8"
 # `did:key` is base58btc over a multicodec prefix, and both are specifications.
 # A publisher's identity resting on a hand-rolled alphabet is the wrong place to
@@ -27,6 +30,8 @@ serde_json = "1"
 valang-wasm = { path = "../valang-wasm" }
 
 [dev-dependencies]
+# The signing half, for a test that plays the publisher with a KMS.
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 # The runtime, so one test can take a package from bytes all the way to a
 # signed record — which is the only place the steps are proved to compose.
 valang-runtime = { path = "../valang-runtime" }

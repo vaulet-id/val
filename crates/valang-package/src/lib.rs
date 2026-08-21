@@ -392,6 +392,45 @@ pub fn verify(p: &Package) -> Result<(), Refusal> {
     verify_with(p, &Permissive)
 }
 
+/// Whether these bytes were signed by this key.
+///
+/// **Which algorithm is the key's shape, not a field beside it.** A 32-byte key
+/// is Ed25519 and a 65-byte one beginning `0x04` is an uncompressed P-256
+/// point; the two cannot be mistaken for each other, so there is nothing here
+/// for a publisher to say and therefore nothing to say wrongly. An `alg` field
+/// would be a second fact that can disagree with the first.
+///
+/// Both, because a publisher whose key is in a KMS or on a device has a P-256
+/// one — the same reason the execution record carries `alg`, arrived at
+/// separately and later, which is how the package came to accept only half of
+/// what this project publishes.
+fn check_signature(pk: &[u8], sig: &[u8], over: &[u8]) -> Result<(), Refusal> {
+    match pk.len() {
+        32 => {
+            let key = VerifyingKey::from_bytes(
+                &pk.try_into().map_err(|_| Refusal::Unsigned("malformed key".into()))?,
+            )
+            .map_err(|_| Refusal::Unsigned("malformed key".into()))?;
+            let signature = Signature::from_slice(sig)
+                .map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
+            key.verify(over, &signature)
+                .map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))
+        }
+        65 if pk[0] == 0x04 => {
+            use p256::ecdsa::signature::Verifier as _;
+            let key = p256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
+                .map_err(|_| Refusal::Unsigned("this is not a P-256 point".into()))?;
+            let signature = p256::ecdsa::Signature::from_slice(sig)
+                .map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
+            key.verify(over, &signature)
+                .map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))
+        }
+        other => Err(Refusal::Unsigned(format!(
+            "a {other}-byte key is neither an Ed25519 key nor a P-256 point"
+        ))),
+    }
+}
+
 /// Everything `install_with` does, for a caller that wants the answer and not
 /// the program — a store listing packages, or a publisher's build.
 pub fn verify_with(p: &Package, policy: &dyn HostPolicy) -> Result<(), Refusal> {
@@ -428,10 +467,7 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
     let (Some(sig), Some(pk)) = (&p.signature, &p.public_key) else {
         return Err(Refusal::Unsigned("no signature".into()));
     };
-    let key = VerifyingKey::from_bytes(&pk.as_slice().try_into().map_err(|_| Refusal::Unsigned("malformed key".into()))?)
-        .map_err(|_| Refusal::Unsigned("malformed key".into()))?;
-    let signature = Signature::from_slice(sig).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
-    key.verify(&signable(p), &signature).map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
+    check_signature(pk, sig, &signable(p))?;
 
     // …and that the key is the publisher's, which the signature does not say.
     if !policy.owns_key(&p.manifest.publisher, pk) {
