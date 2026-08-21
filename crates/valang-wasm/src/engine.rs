@@ -63,6 +63,10 @@ struct Run {
     state: State,
     next: State,
     effects: Vec<EffectRequest>,
+    /// The lines of the `present` block being built. The host accumulates them
+    /// as they are called; a module that could hand over the list could hand
+    /// over one that says anything.
+    parts: Vec<Value>,
     /// Why it stopped, when it did. A Wasm trap carries a string; this carries
     /// the outcome the language means by it.
     stopped: Option<Trap>,
@@ -175,6 +179,31 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
                     };
                     answers.insert(format!("{CAPS}/{name}"), answer);
                 }
+                // The claim a `disclose` names. The host fetches it and hands
+                // it to whoever is being shown it — never to the module, which
+                // is why it is not a read.
+                Some(Cap::Disclose(claim)) => {
+                    // Written out rather than fetched: `disclose "yes"` hands
+                    // over the word, and the sheet says the word.
+                    if let Some(literal) = written_out(&claim) {
+                        answers.insert(format!("{CAPS}/{name}"), Ok(literal));
+                        continue;
+                    }
+                    let Some((ty, which)) = claim.split_once('.') else { continue };
+                    let asked = action
+                        .inputs
+                        .iter()
+                        .find(|d| d.credential == ty)
+                        .and_then(|d| d.policy.clone());
+                    let answer = match host.credential(ty, asked.as_deref()) {
+                        Some(claims) => Ok(claims.get(which).cloned().unwrap_or(Value::Null)),
+                        None => Err(Trap::Failed(format!(
+                            "nothing satisfied `{}`",
+                            asked.unwrap_or_else(|| ty.to_string())
+                        ))),
+                    };
+                    answers.insert(format!("{CAPS}/{name}"), answer);
+                }
                 Some(Cap::Query(audience)) => {
                     answers.insert(
                         format!("{CAPS}/{name}"),
@@ -189,7 +218,8 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
                     // credential the action declared and the host chose.
                     let value = match input.get(&binding) {
                         Some(v) => v.clone(),
-                        None => credential_for(action, &binding, host).unwrap_or(Value::Null),
+                        None => credential_for(action, &binding, host, &named)
+                            .unwrap_or(Value::Null),
                     };
                     answers.insert(format!("{OPS}/{name}"), Ok(value));
                 }
@@ -252,10 +282,23 @@ pub fn claims_handed_over(module: &[u8], ty: &str, held: &[String]) -> Vec<Strin
 
 /// The credential the action's `input` declared under this name, as the host
 /// chose it — already checked against the policy `verify` will name.
-fn credential_for(action: &ActionAbout, binding: &str, host: &dyn Host) -> Option<Value> {
+fn credential_for(
+    action: &ActionAbout,
+    binding: &str,
+    host: &dyn Host,
+    named: &BTreeMap<String, Vec<String>>,
+) -> Option<Value> {
     let declared = action.inputs.iter().find(|d| d.binding == binding)?;
     let claims = host.credential(&declared.credential, declared.policy.as_deref())?;
-    Some(Value::Credential { ty: declared.credential.clone(), claims, verified: None })
+    // Narrowed like every other credential. `input:` is not a line in the
+    // report — it is the host handing over what somebody chose — so a whole
+    // credential arriving here would be every claim on it read with nothing
+    // said about it anywhere.
+    Some(Value::Credential {
+        ty: declared.credential.clone(),
+        claims: kept(&claims, named.get(&declared.credential)),
+        verified: None,
+    })
 }
 
 impl Engine for Wasm<'_> {
@@ -278,6 +321,7 @@ impl Engine for Wasm<'_> {
             state: state.clone(),
             next: state.clone(),
             effects: Vec::new(),
+            parts: Vec::new(),
             stopped: None,
         }));
 
@@ -391,30 +435,30 @@ fn define_host(
             })?,
             // A line of a `present`, which answers with the part it contributes
             // rather than sending anything: one block is one request.
-            Cap::Disclose(_) => takes(store, linker, &ns, &name, |_, v| {
-                let mut m = BTreeMap::new();
-                m.insert("kind".into(), Value::Str("disclose".into()));
-                m.insert("of".into(), v);
-                Value::Map(m)
-            })?,
-            Cap::Prove(said) => answer(store, linker, &ns, &name, move |_| {
+            // The claim the import names, fetched by the host. The module never
+            // sees it and never chose it.
+            Cap::Disclose(claim) => {
+                let key = format!("{CAPS}/{name}");
+                discloses(store, linker, &ns, &name, key, claim)?
+            }
+            Cap::Prove(said) => gathers(store, linker, &ns, &name, move || {
                 let mut m = BTreeMap::new();
                 m.insert("kind".into(), Value::Str("prove".into()));
                 m.insert("statement".into(), Value::Str(said.clone()));
-                Value::Map(m)
+                m
             })?,
-            Cap::Present => takes(store, linker, &ns, &name, |run, v| {
-                run.effects.push(EffectRequest {
-                    capability: "disclosure.present".into(),
-                    operation: "present".into(),
-                    payload: v.clone(),
-                    reversible: false,
-                });
-                v
-            })?,
+            // What its lines produced, in the order they were called. Nothing
+            // the module composed.
+            Cap::Present => present(store, linker, &ns, &name)?,
             // The record the module built becomes the credential it issues:
             // the type is in the import's own name, which is what a person is
             // being told is about to be signed for them.
+            // No design yet for what the report should say about an amount that
+            // is computed, so a module may not ask. Refusing beats a sheet that
+            // renders one number while the host is handed another.
+            Cap::Pay(_) => {
+                return Err(format!("`{name}`: this host does not carry payments yet"))
+            }
             Cap::Issue(ty) => takes(store, linker, &ns, &name, move |run, v| {
                 let claims = match &v {
                     Value::Map(m) => m.clone(),
@@ -575,6 +619,107 @@ fn builtin_import(
         }
         n => return Err(format!("`{name}` takes {n} arguments, and this host wires one or two")),
     }
+    Ok(())
+}
+
+/// A disclosure written out in the import's own name, rather than named as a
+/// claim to fetch. The same string a person is shown.
+fn written_out(said: &str) -> Option<Value> {
+    if let Some(text) = said.strip_prefix('"').and_then(|x| x.strip_suffix('"')) {
+        return Some(Value::Str(text.to_string()));
+    }
+    if let Ok(n) = said.parse::<i64>() {
+        return Some(Value::Int(n));
+    }
+    match said {
+        "true" => Some(Value::Bool(true)),
+        "false" => Some(Value::Bool(false)),
+        _ => None,
+    }
+}
+
+/// A line of a `present`: the host looks up what the import names, records the
+/// part, and hands the module nothing.
+fn discloses(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    key: String,
+    claim: String,
+) -> Result<(), String> {
+    let func =
+        Func::wrap(&mut *store, move |caller: Caller<'_, Shell>| -> Result<i32, wasmi::Error> {
+            let shell = caller.data().clone();
+            let answer = shell.borrow().answers.get(&key).cloned();
+            let of = match answer {
+                Some(Ok(v)) => v,
+                Some(Err(trap)) => {
+                    shell.borrow_mut().stopped = Some(trap);
+                    return Err(wasmi::Error::new("the action stopped"));
+                }
+                // Disclosing something it never asked to read. The host has
+                // nothing to hand over, and the sheet said the claim — so this
+                // is a module disagreeing with itself, not with the person.
+                None => {
+                    shell.borrow_mut().stopped =
+                        Some(Trap::Defect(format!("`{claim}` is disclosed and never read")));
+                    return Err(wasmi::Error::new("the action stopped"));
+                }
+            };
+            let mut m = BTreeMap::new();
+            m.insert("kind".to_string(), Value::Str("disclose".into()));
+            m.insert("of".to_string(), of);
+            shell.borrow_mut().parts.push(Value::Map(m));
+            let values = shell.borrow().values.clone();
+            let h = values.borrow_mut().put(Value::Null);
+            Ok(h)
+        });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// A line that contributes something the host already knows — the statement a
+/// `prove` proves, which is written in the import's own name.
+fn gathers(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+    part: impl Fn() -> BTreeMap<String, Value> + Send + Sync + 'static,
+) -> Result<(), String> {
+    let func = Func::wrap(&mut *store, move |caller: Caller<'_, Shell>| -> i32 {
+        let shell = caller.data().clone();
+        shell.borrow_mut().parts.push(Value::Map(part()));
+        let values = shell.borrow().values.clone();
+        let h = values.borrow_mut().put(Value::Null);
+        h
+    });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// One `present` is one request, carrying the lines the host gathered.
+fn present(
+    store: &mut Store<Shell>,
+    linker: &mut Linker<Shell>,
+    ns: &str,
+    name: &str,
+) -> Result<(), String> {
+    let func = Func::wrap(&mut *store, move |caller: Caller<'_, Shell>| -> i32 {
+        let shell = caller.data().clone();
+        let parts = std::mem::take(&mut shell.borrow_mut().parts);
+        shell.borrow_mut().effects.push(EffectRequest {
+            capability: "disclosure.present".into(),
+            operation: "present".into(),
+            payload: Value::List(parts),
+            reversible: false,
+        });
+        let values = shell.borrow().values.clone();
+        let h = values.borrow_mut().put(Value::Null);
+        h
+    });
+    linker.define(ns, name, func).map_err(|e| e.to_string())?;
     Ok(())
 }
 

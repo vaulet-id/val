@@ -61,7 +61,13 @@ fn proving_an_age_is_not_reading_a_birthdate() {
     let r = report(include_str!("../../../examples/door.val"));
 
     assert_eq!(r.discloses, set(&["NationalId.country"]));
-    assert_eq!(r.reads, set(&["NationalId.country under GovernmentIssued"]));
+
+    // It checks the ID against the policy, and reads no claim of it at all.
+    // Disclosing is not reading either: the host fetches the country and hands
+    // it to whoever is being shown it, and the module never holds it — so a
+    // module that discloses a claim cannot keep it, compute on it, or put it
+    // anywhere else.
+    assert_eq!(r.reads, set(&["NationalId under GovernmentIssued"]));
     assert!(!r.reads.iter().any(|s| s.contains("birthdate")), "{r}");
     assert_eq!(r.proves.len(), 1, "one statement is proved:\n{r}");
     assert!(r.irreversible, "a disclosure cannot be taken back:\n{r}");

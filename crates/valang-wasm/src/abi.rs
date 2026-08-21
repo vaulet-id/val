@@ -130,9 +130,17 @@ impl Cap {
             // claim to the module would be the same answer with the privacy
             // removed, which is the thing `prove` exists instead of.
             Cap::Prove(_) => 0,
-            // The rest are handed the value they act on — `present` the list
-            // of parts its lines produced.
-            Cap::Disclose(_) | Cap::Issue(_) | Cap::Pay(_) | Cap::Write(_) | Cap::Present => 1,
+            // **A module never supplies a value the report names.** `disclose`
+            // says which claim in its own name, so the host fetches that claim
+            // — handing one over would have let a module be shown as
+            // disclosing the country while disclosing the birthdate. `present`
+            // sends what its lines produced, which the host has been
+            // accumulating, so there is no list for a module to compose.
+            Cap::Disclose(_) | Cap::Present => 0,
+            // What is left is the application's own: the credential it issues
+            // and the field of its state it writes. Neither is a value of
+            // somebody else's that the report describes.
+            Cap::Issue(_) | Cap::Pay(_) | Cap::Write(_) => 1,
         }
     }
 }

@@ -831,9 +831,20 @@ it imports, and a name the host does not know is a refusal rather than a link.
 There is no memory it shares, no syscall and no dynamic linking.
 
 **Cannot: hold a claim the sheet does not name.** A credential is handed over
-carrying only the claims that were imported by name. Asking for the credential
-and one claim of it used to hand over all of them, and the sheet would have said
-one — true about the import list and false about what the module held.
+carrying only the claims that were imported by name — however it arrives,
+through `verify` or through a declared input. Asking for the credential and one
+claim of it used to hand over all of them, and the sheet would have said one:
+true about the import list and false about what the module held.
+
+**Cannot: disclose something other than what the sheet names.** `disclose` takes
+nothing. The host fetches the claim the import names and hands it to whoever is
+being shown it, so the module never holds it — it cannot substitute one, keep
+it, or compute on it. And a disclosure is not a read: an application that
+discloses your country has not read your country.
+
+**Cannot: compose the request a `present` sends.** Its lines are gathered by the
+host as they are called. A module that could hand over the list could hand over
+one that says anything.
 
 **Cannot: sign a record that understates.** The capability list in every record
 is measured from the import section, not read from the metadata beside the code.
@@ -855,6 +866,11 @@ publisher.**
 device can tell, because nothing on the device compiles. That is what
 reproducible builds are for, and it is a check somebody does once rather than
 one every phone does at every install.
+
+**Can: nothing with money, yet.** A payment's amount is computed, so a module
+passes it while the sheet renders what the author wrote — and the two can
+differ. A module that asks is refused rather than run against a sheet that
+describes a different number.
 
 **Can: say different things in different languages.** The bundle is signed and
 checked for missing keys and missing slots; whether the Thai and the English

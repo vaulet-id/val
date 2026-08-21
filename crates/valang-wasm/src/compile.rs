@@ -823,11 +823,10 @@ fn emit_body(ctx: &mut Ctx, body: &[Stmt], f: &mut Function, next_local: &mut u3
                 // host takes all of it or none. Its lines answer with the part
                 // they contribute, and the list is what goes out.
                 if name == "present" && args.is_empty() {
-                    ctx.push_konst(Konst::EmptyList, f);
                     for line in body {
                         if let Stmt::Effect { name, args, .. } = line {
                             emit_effect(ctx, name, args, f);
-                            ctx.call_op("push", f);
+                            f.instruction(&Instruction::Drop);
                         }
                     }
                     ctx.call_cap(&crate::abi::Cap::Present, f);
@@ -954,10 +953,29 @@ fn read_line(ty: &str, policy: Option<&str>) -> String {
 fn emit_effect(ctx: &mut Ctx, name: &str, args: &[Arg], f: &mut Function) {
     let first = args.first().map(|a| &a.value);
     match name {
+        // The claim is in the import's name and the host fetches it. Passing
+        // the value would mean the module chose what was disclosed while the
+        // sheet named something else.
         "disclose" => {
-            let path = first.and_then(|e| e.path()).unwrap_or_else(|| "—".into());
-            emit_first(ctx, first, f);
-            ctx.call_cap(&crate::abi::Cap::Disclose(ctx_claim(ctx, &path)), f);
+            // Either a claim of a credential, which the host fetches, or
+            // something written out where anybody can read it. Nothing else:
+            // a disclosure the module computed could not be named on the sheet
+            // before it ran, and a sheet that cannot name it is a sheet that
+            // does not describe it.
+            let said = match first {
+                Some(e) if e.path().is_some() => ctx_claim(ctx, &e.path().unwrap_or_default()),
+                Some(Expr::Str { .. } | Expr::Num { .. } | Expr::Bool { .. }) => {
+                    valang::report::render(first)
+                }
+                other => {
+                    ctx.unsupported.push(format!(
+                        "disclosing {}, which cannot be named before it runs",
+                        other.map(describe).unwrap_or_else(|| "nothing".into())
+                    ));
+                    "—".to_string()
+                }
+            };
+            ctx.call_cap(&crate::abi::Cap::Disclose(said), f);
         }
         "prove" => {
             let said = valang::report::render(first);

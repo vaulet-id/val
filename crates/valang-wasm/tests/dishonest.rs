@@ -223,3 +223,75 @@ fn the_capability_list_is_measured_and_not_believed() {
     assert!(about.capabilities.contains(&"credential.issue".to_string()), "{:?}", about.capabilities);
     assert!(about.capabilities.contains(&"credential.read".to_string()), "{:?}", about.capabilities);
 }
+
+/// **Disclosing something other than what the sheet names.** The sheet said the
+/// country; the module passed the birthdate. It could, because `disclose` used
+/// to take a value and the name it was imported under was decoration.
+///
+/// It takes nothing now. The host looks up the claim the import names and hands
+/// it to whoever is being shown it — the module never holds it, so it cannot
+/// substitute one, keep it, or compute on it.
+#[test]
+fn a_disclosure_is_the_claim_the_sheet_names() {
+    assert_eq!(
+        valang_wasm::Cap::Disclose("NationalId.country".into()).arity(),
+        0,
+        "a module that hands over the value is a module that chooses it"
+    );
+    assert_eq!(valang_wasm::Cap::Present.arity(), 0, "and it does not compose the list either");
+}
+
+/// **A credential arriving whole through the back door.** `val.input:receipt`
+/// is not a line in the report — it is the host handing over what somebody
+/// chose — and it used to carry every claim on the credential. A module could
+/// read a person's whole national ID with nothing said about it anywhere.
+#[test]
+fn an_input_credential_carries_only_what_was_named() {
+    let bytes = forged(&[("val", "input:id", 0), ("cap", "read:NationalId.country", 0)], &[]);
+    let held = valang_wasm::engine::claims_handed_over(
+        &bytes,
+        "NationalId",
+        &["country".into(), "birthdate".into(), "family_name".into()],
+    );
+    assert_eq!(held, vec!["country".to_string()], "a whole credential came in through `input:`");
+}
+
+/// **Payments.** A module passes the amount and the sheet renders the arguments
+/// the author wrote, so the two can differ. There is no design for that yet, so
+/// a module that asks is refused rather than run against a sheet that describes
+/// a different number.
+#[test]
+fn a_payment_is_refused_rather_than_described_wrongly() {
+    let bytes = forged(&[("cap", "pay:amount: total", 1)], &[]);
+    // The sheet can still describe it — it is the running that is refused.
+    let wants = valang_wasm::wants_of(&bytes).expect("describable");
+    assert!(!wants.payments.is_empty());
+
+    let module =
+        valang_wasm::compile::Module { bytes, konsts: Vec::new(), functions: Vec::new() };
+    let host = valang_runtime::fixture::Fixture::parse(include_str!(
+        "../../../fixtures/wallet.json"
+    ))
+    .expect("the wallet parses");
+    let about = valang_runtime::About {
+        app: "x.y".into(),
+        version: "1".into(),
+        actions: vec![valang_runtime::ActionAbout { name: "Go".into(), inputs: Vec::new() }],
+        ..Default::default()
+    };
+    let mut engine = valang_wasm::WasmEngine::new(&module);
+    let run = valang_runtime::run_action_with(
+        &about,
+        [0u8; 32],
+        "Go",
+        &Default::default(),
+        &Default::default(),
+        &host,
+        &mut engine,
+    );
+    assert!(
+        matches!(&run.outcome, valang_runtime::Outcome::Defect(why) if why.contains("payments")),
+        "{:?}",
+        run.outcome
+    );
+}
