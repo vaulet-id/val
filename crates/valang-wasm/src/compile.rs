@@ -467,7 +467,22 @@ pub fn report_of_module(bytes: &[u8]) -> Option<valang::report::Report> {
 
 /// Read it back, from bytes and nothing else. This is the first thing a wallet
 /// does with a Micro App it has been handed.
+/// What the module says about itself — with the one thing that can be measured
+/// measured instead.
+///
+/// **A module nobody compiled can carry any metadata its author likes.** The
+/// capability list goes into every execution record, so a publisher writing
+/// their own metadata could sign records that understate what their application
+/// could reach. What it reaches is its import section, so that is where the
+/// list comes from, and the section beside the code is believed only about the
+/// things nothing else can answer.
 pub fn about_of(bytes: &[u8]) -> Option<valang_runtime::About> {
+    let mut about = stated_about(bytes)?;
+    about.capabilities = crate::abi::wants_of(bytes).ok()?.capabilities().into_iter().collect();
+    Some(about)
+}
+
+fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
     use valang_runtime::decode::decode;
     use valang_runtime::value::Value;
     use valang_runtime::{About, ActionAbout, Declared};

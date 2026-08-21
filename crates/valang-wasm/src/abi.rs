@@ -234,6 +234,33 @@ pub struct Wants {
 }
 
 impl Wants {
+    /// The host capabilities these amount to, in the words a manifest declares
+    /// them in.
+    ///
+    /// **Derived from what the module reaches for, never from what it says
+    /// about itself.** A module nobody compiled can carry any metadata its
+    /// author likes; what it imports is what it can do, and this is that list
+    /// translated into the vocabulary a person consented to.
+    pub fn capabilities(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        if !self.reads.is_empty() {
+            out.insert("credential.read".to_string());
+        }
+        if !self.issues.is_empty() {
+            out.insert("credential.issue".to_string());
+        }
+        if !self.discloses.is_empty() || !self.proves.is_empty() {
+            out.insert("disclosure.present".to_string());
+        }
+        if !self.audiences.is_empty() {
+            out.insert("api.query".to_string());
+        }
+        if !self.payments.is_empty() {
+            out.insert("payment.request".to_string());
+        }
+        out
+    }
+
     /// What it reads, as a person is shown it: the claims of one credential on
     /// one line, under the policy they were checked against.
     ///

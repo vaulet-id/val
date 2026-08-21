@@ -165,3 +165,73 @@ fn a_package_signed_by_somebody_else_is_refused() {
 
     assert!(matches!(install_with(&pkg, &Wallet), Err(Refusal::Unsigned(_))));
 }
+
+/// **Any key, any name.** A signature says the bytes were not changed. It does
+/// not say who made them: anybody can generate a key, sign a package and write
+/// somebody else's name in the manifest. Binding a key to a name is the host's,
+/// and a host that does not is a host where any publisher can be any publisher.
+#[test]
+fn a_key_that_is_not_the_publishers_is_refused() {
+    struct Strict;
+    impl HostPolicy for Strict {
+        fn registries(&self) -> valang::capability::Hosts {
+            registries()
+        }
+        fn owns_key(&self, _publisher: &str, _key: &[u8]) -> bool {
+            false
+        }
+    }
+
+    let key = keygen();
+    let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
+    let pkg = build(manifest(), sources, text(), &registries(), Some(&key)).expect("builds");
+
+    // The bytes are untouched and the signature is good; only the name is a
+    // claim, and this host checks claims.
+    verify_with(&pkg, &Wallet).expect("a host that does not check the name admits it");
+    match install_with(&pkg, &Strict) {
+        Err(Refusal::Unsigned(why)) => assert!(why.contains("does not belong"), "{why}"),
+        other => panic!("a package signed by a stranger was admitted: {:?}", other.err()),
+    }
+}
+
+/// **A module too big to be worth reading.** Validating one costs time
+/// proportional to its size, and a package is something anybody can send.
+#[test]
+fn a_module_larger_than_this_host_reads_is_refused() {
+    struct Small;
+    impl HostPolicy for Small {
+        fn registries(&self) -> valang::capability::Hosts {
+            registries()
+        }
+        fn largest_module(&self) -> usize {
+            16
+        }
+    }
+
+    let key = keygen();
+    let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
+    let pkg = build(manifest(), sources, text(), &registries(), Some(&key)).expect("builds");
+    match install_with(&pkg, &Small) {
+        Err(Refusal::Refused { by }) => assert!(by.contains("reads at most"), "{by}"),
+        other => panic!("an oversized module was admitted: {:?}", other.err()),
+    }
+}
+
+/// **A report that understates.** The one lie a package could otherwise tell,
+/// and the check that has always been here: what it ships is compared with what
+/// its module produces.
+#[test]
+fn a_report_that_understates_is_refused() {
+    let key = keygen();
+    let sources = BTreeMap::from([("loyalty.val".to_string(), LOYALTY.to_string())]);
+    let mut pkg = build(manifest(), sources, text(), &registries(), Some(&key)).expect("builds");
+
+    pkg.report.insert("issues".into(), Vec::new());
+    sign(&mut pkg, &key);
+
+    match install_with(&pkg, &Wallet) {
+        Err(Refusal::ReportMismatch { line, .. }) => assert_eq!(line, "issues"),
+        other => panic!("a package that hid what it issues was admitted: {:?}", other.err()),
+    }
+}

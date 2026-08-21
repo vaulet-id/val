@@ -821,6 +821,45 @@ keeps it and refuses a changed surface at an unchanged version.
 Then its own policy: whether an app of your kind may hold those capabilities,
 and whether it provides the registry version you built against.
 
+### What a dishonest publisher cannot do, and what they can
+
+You compile your own module and sign it, so nothing about it having come from a
+VAL source can be assumed. Every check is a check on the bytes.
+
+**Cannot: reach anything the sheet does not name.** What a module can do is what
+it imports, and a name the host does not know is a refusal rather than a link.
+There is no memory it shares, no syscall and no dynamic linking.
+
+**Cannot: hold a claim the sheet does not name.** A credential is handed over
+carrying only the claims that were imported by name. Asking for the credential
+and one claim of it used to hand over all of them, and the sheet would have said
+one — true about the import list and false about what the module held.
+
+**Cannot: sign a record that understates.** The capability list in every record
+is measured from the import section, not read from the metadata beside the code.
+
+**Cannot: hang the phone.** Totality is a property of programs this compiler
+emits, and yours may not be one, so a fuel budget is always set.
+
+**Cannot: ship a report that says less than the module does.** It is derived
+again on the device and compared.
+
+**Can: be somebody else.** A signature says the bytes were not changed. It does
+not say who made them — anybody can generate a key, sign a package, and write
+`did:web:some.bank` in the manifest. Binding a key to a name is the host's job,
+through `owns_key`: resolving the DID document, or a registry it trusts. **A
+host that does not implement it is a host where any publisher can be any
+publisher.**
+
+**Can: ship a module that is not the source you published.** Nothing on the
+device can tell, because nothing on the device compiles. That is what
+reproducible builds are for, and it is a check somebody does once rather than
+one every phone does at every install.
+
+**Can: say different things in different languages.** The bundle is signed and
+checked for missing keys and missing slots; whether the Thai and the English
+mean the same thing is not something a compiler can answer.
+
 ### Who signs the credentials you issue
 
 Not your app. It has no issuer key and must not have one.

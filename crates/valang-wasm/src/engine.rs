@@ -32,12 +32,22 @@ pub struct Wasm<'a> {
     /// Totality says an action ends. Fuel says it ends in time, which is a
     /// different promise and the only one that can be made to somebody standing
     /// at a till.
+    ///
+    /// **Never `None` by default.** Totality is a property of programs this
+    /// compiler emitted, and a wallet runs modules nobody here compiled — a
+    /// loop in one of those would hang the phone, and the person would be
+    /// looking at a wallet that had stopped rather than at an application that
+    /// misbehaved.
     pub fuel: Option<u64>,
 }
 
+/// What one action may cost. Generous — the examples finish inside a few
+/// thousand — and finite, which is the only thing about it that matters.
+pub const FUEL: u64 = 50_000_000;
+
 impl<'a> Wasm<'a> {
     pub fn new(module: &'a Module) -> Wasm<'a> {
-        Wasm { module, fuel: None }
+        Wasm { module, fuel: Some(FUEL) }
     }
 }
 
@@ -102,6 +112,13 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
     let engine = wasmi::Engine::default();
     let parsed = wasmi::Module::new(&engine, module).map_err(|e| e.to_string())?;
 
+    // Which claims of each credential this module asked for by name. A
+    // credential handed over whole would carry every claim on it, and the sheet
+    // renders the named claims — so a module asking for `NationalId under
+    // GovernmentIssued` *and* `NationalId.country` would be shown as reading
+    // the country while holding the birthdate. It is handed what it named.
+    let named = claims_named(&parsed);
+
     let mut answers: BTreeMap<String, Result<Value, Trap>> = BTreeMap::new();
     let mut credentials: BTreeMap<String, Option<BTreeMap<String, Value>>> = BTreeMap::new();
 
@@ -146,9 +163,12 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
                             Some((_, claim)) if !line.contains(' ') => {
                                 claims.get(claim).cloned().unwrap_or(Value::Null)
                             }
+                            // The credential itself, carrying only the claims
+                            // this module asked for by name — which are the
+                            // claims the person was shown.
                             _ => Value::Credential {
                                 ty: ty.clone(),
-                                claims: claims.clone(),
+                                claims: kept(&claims, named.get(&ty)),
                                 verified: policy.clone(),
                             },
                         }),
@@ -187,6 +207,47 @@ fn resolve(action: &ActionAbout, input: &State, context: &Context, host: &dyn Ho
         }
     }
     Ok(answers)
+}
+
+/// The claims each credential was asked for by name, across the whole import
+/// section.
+fn claims_named(module: &wasmi::Module) -> BTreeMap<String, Vec<String>> {
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for import in module.imports() {
+        if import.module() != CAPS {
+            continue;
+        }
+        let Some(Cap::Read(line)) = Cap::parse(import.name()) else { continue };
+        if line.contains(' ') {
+            continue;
+        }
+        let Some((ty, claim)) = line.split_once('.') else { continue };
+        out.entry(ty.to_string()).or_default().push(claim.to_string());
+    }
+    out
+}
+
+/// A credential's claims, narrowed to the ones that were named. Nothing named
+/// means nothing carried: a module that asked for a credential and no claim of
+/// it can check the credential and read none of it, which is what `verify`
+/// does and the whole of what it needs.
+fn kept(claims: &BTreeMap<String, Value>, named: Option<&Vec<String>>) -> BTreeMap<String, Value> {
+    let Some(named) = named else { return BTreeMap::new() };
+    claims.iter().filter(|(k, _)| named.contains(k)).map(|(k, v)| (k.clone(), v.clone())).collect()
+}
+
+/// What a module would actually be handed, of a credential it asked for.
+///
+/// Here so that a test can attack it: the check that matters is not what the
+/// sheet renders but what the module ends up holding, and the two used to
+/// differ.
+pub fn claims_handed_over(module: &[u8], ty: &str, held: &[String]) -> Vec<String> {
+    let engine = wasmi::Engine::default();
+    let Ok(parsed) = wasmi::Module::new(&engine, module) else { return Vec::new() };
+    let named = claims_named(&parsed);
+    let all: BTreeMap<String, Value> =
+        held.iter().map(|k| (k.clone(), Value::Str(String::new()))).collect();
+    kept(&all, named.get(ty)).into_keys().collect()
 }
 
 /// The credential the action's `input` declared under this name, as the host

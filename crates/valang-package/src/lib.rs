@@ -58,10 +58,33 @@ pub trait HostPolicy {
         kind == "val"
     }
 
-    /// What this host draws with. A package is compiled against it before the
-    /// host admits it — there is no other copy, and a package checked against
-    /// somebody else's catalogue has been checked against nothing.
+    /// What this host draws with. A package is built against it, and a package
+    /// built against somebody else's catalogue has been checked against
+    /// nothing.
     fn registries(&self) -> valang::capability::Hosts;
+
+    /// Whether this key really belongs to the publisher the manifest names.
+    ///
+    /// **A signature proves the bytes were not changed. It does not prove who
+    /// made them.** Anybody can generate a key, sign a package and write
+    /// `did:web:some.bank` in the manifest, and every check in this crate would
+    /// pass — because every one of them is a check on the bytes. Binding a key
+    /// to a name is somebody else's job: resolving the DID document, or a
+    /// registry a host trusts, neither of which belongs in a crate that does no
+    /// I/O.
+    ///
+    /// The default says yes, which is right for a build tool and wrong for a
+    /// wallet. **A wallet that does not implement this is a wallet where any
+    /// publisher can be any publisher.**
+    fn owns_key(&self, _publisher: &str, _key: &[u8]) -> bool {
+        true
+    }
+
+    /// The largest module this host will read. Validating one costs time
+    /// proportional to its size, and a package is something anybody can send.
+    fn largest_module(&self) -> usize {
+        4 * 1024 * 1024
+    }
 }
 
 /// Admits everything, and publishes nothing. The default so that `verify` alone
@@ -357,6 +380,16 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
         return Err(Refusal::Modified("the module".into()));
     }
 
+    if p.module.len() > policy.largest_module() {
+        return Err(Refusal::Refused {
+            by: format!(
+                "this module is {} bytes and this host reads at most {}",
+                p.module.len(),
+                policy.largest_module()
+            ),
+        });
+    }
+
     // 2. The publisher is who the package says.
     let (Some(sig), Some(pk)) = (&p.signature, &p.public_key) else {
         return Err(Refusal::Unsigned("no signature".into()));
@@ -365,6 +398,14 @@ pub fn install_with(p: &Package, policy: &dyn HostPolicy) -> Result<Installed, R
         .map_err(|_| Refusal::Unsigned("malformed key".into()))?;
     let signature = Signature::from_slice(sig).map_err(|_| Refusal::Unsigned("malformed signature".into()))?;
     key.verify(&signable(p), &signature).map_err(|_| Refusal::Unsigned("the signature is not over these bytes".into()))?;
+
+    // …and that the key is the publisher's, which the signature does not say.
+    if !policy.owns_key(&p.manifest.publisher, pk) {
+        return Err(Refusal::Unsigned(format!(
+            "this key does not belong to `{}`",
+            p.manifest.publisher
+        )));
+    }
 
     // A package with no module is a tier where the next two checks cannot be
     // made — and that is the reason the tier has a lower ceiling, not a
