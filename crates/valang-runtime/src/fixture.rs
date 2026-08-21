@@ -133,6 +133,43 @@ impl Host for Fixture {
 /// JSON to a runtime value. Times are the interesting case: an ISO-8601 string
 /// in the file becomes an integer here, because that is what comparing it to
 /// `context.time.now` needs and a string would compare false and say nothing.
+/// What a host's JSON means, as a value.
+///
+/// **One conversion.** Every host that keeps its answers as JSON — this
+/// fixture, a wallet handing state across a bridge — has to read them the same
+/// way, or a state that went out as one thing comes back as another and the
+/// root moves without anybody having changed anything.
+pub fn value_of_json(j: &Json) -> Value {
+    convert(j)
+}
+
+/// And back, for a host that has to store it.
+pub fn json_of_value(v: &Value) -> Json {
+    match v {
+        Value::Null => Json::Null,
+        Value::Bool(b) => Json::Bool(*b),
+        Value::Int(i) => Json::Number((*i).into()),
+        Value::Str(s) => Json::String(s.clone()),
+        Value::Bytes(b) => Json::String(b.iter().map(|x| format!("{x:02x}")).collect()),
+        Value::List(items) => Json::Array(items.iter().map(json_of_value).collect()),
+        Value::Map(m) => {
+            Json::Object(m.iter().map(|(k, v)| (k.clone(), json_of_value(v))).collect())
+        }
+        // The same spelling `value_of_json` reads back as a member.
+        Value::Enum(ty, member) => Json::String(format!("{ty}.{member}")),
+        Value::Credential { ty, claims, verified } => {
+            let mut out = serde_json::Map::new();
+            out.insert("credential".into(), Json::String(ty.clone()));
+            out.insert(
+                "verified".into(),
+                verified.clone().map(Json::String).unwrap_or(Json::Null),
+            );
+            out.insert("claims".into(), json_of_value(&Value::Map(claims.clone())));
+            Json::Object(out)
+        }
+    }
+}
+
 fn convert(j: &Json) -> Value {
     match j {
         Json::Null => Value::Null,

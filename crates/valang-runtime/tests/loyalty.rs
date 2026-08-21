@@ -527,3 +527,33 @@ fn every_value_survives_the_round_trip() {
     bytes.dedup();
     assert_eq!(bytes.len(), before, "two different values encoded to the same bytes");
 }
+
+/// State goes out to a host and comes back the same thing.
+///
+/// A wallet keeps an application's state as JSON, so every run reads back what
+/// the last one wrote. If the two conversions disagree anywhere — an enum
+/// member that returns as a string, a date that returns as text — the root
+/// moves without anybody having changed anything, and the record chain says the
+/// state was edited between runs.
+#[test]
+fn state_survives_being_stored_as_json() {
+    use valang_runtime::fixture::{json_of_value, value_of_json};
+    use valang_runtime::value::Value;
+
+    let state: std::collections::BTreeMap<String, Value> = [
+        ("points".to_string(), Value::Int(1240)),
+        ("tier".to_string(), Value::Enum("Tier".into(), "bronze".into())),
+        ("name".to_string(), Value::Str("Somchai".into())),
+        ("open".to_string(), Value::Bool(true)),
+        (
+            "member".to_string(),
+            Value::Map([("id".to_string(), Value::Str("M-2891".into()))].into_iter().collect()),
+        ),
+        ("visits".to_string(), Value::List(vec![Value::Int(1), Value::Int(2)])),
+    ]
+    .into_iter()
+    .collect();
+
+    let stored = json_of_value(&Value::Map(state.clone()));
+    assert_eq!(value_of_json(&stored), Value::Map(state), "state changed by being stored");
+}
