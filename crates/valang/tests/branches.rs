@@ -291,7 +291,7 @@ fn a_switch_arm_may_still_end_at_a_comma() {
 /// they belong to, which is a newline away from it.
 #[test]
 fn a_data_clause_continues_onto_the_next_line() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.read(Holding)\n}\n\ncredential Holding {\n  amount: int\n}\n\ntrust FromBroker(h: Holding) {\n  anchor: broker.co.th\n}\n\nstate {\n  n: int default 0\n}\n\naction Go {\n  verify {\n    const holdings = credentials of Holding verified with FromBroker\n      limit 200\n  }\n\n  update {\n    n: 1\n  }\n}\n";
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.read(Holding)\n}\n\ncredential Holding as \"https://org.vaulet.id/example/credential/holding\" {\n  amount: int\n}\n\ntrust FromBroker(h: Holding) {\n  anchor: broker.co.th\n}\n\nstate {\n  n: int default 0\n}\n\naction Go {\n  verify {\n    const holdings = credentials of Holding verified with FromBroker\n      limit 200\n  }\n\n  update {\n    n: 1\n  }\n}\n";
     let e = errors(src);
     assert!(!e.iter().any(|m| m.contains("is a condition")), "{e:?}");
 }

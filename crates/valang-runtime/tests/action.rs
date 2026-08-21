@@ -164,7 +164,7 @@ fn a_trap_partway_through_an_update_leaves_no_half_state() {
 /// refusal would leave behind exactly the change it refused.
 #[test]
 fn a_batch_the_person_refuses_commits_no_state() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.issue(Card)\n}\n\ncredential Card {\n  who: string\n}\n\nstate {\n  n: int default 1\n}\n\naction Go {\n  update {\n    n: 9\n  }\n\n  execute {\n    credential.issue(Card { who: \"me\" })\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.issue(Card)\n}\n\ncredential Card as \"https://org.vaulet.id/example/credential/card\" {\n  who: string\n}\n\nstate {\n  n: int default 1\n}\n\naction Go {\n  update {\n    n: 9\n  }\n\n  execute {\n    credential.issue(Card { who: \"me\" })\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
     let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
     let (compiled, d) = valang::analyse_fully(src, None, &hosts);
     assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");

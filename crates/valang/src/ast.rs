@@ -173,6 +173,15 @@ pub struct EnumDecl {
 #[derive(Debug, Clone)]
 pub struct CredentialDecl {
     pub name: String,
+    /// What this credential **is**, as the wallet holding one knows it: the
+    /// `vct` its issuer stamped into every card of the kind.
+    ///
+    /// `EmployeeBadge` is a name this package chose, and no wallet has ever
+    /// heard it. Without this line a package could declare a credential and
+    /// nothing in the world could tell which of somebody's cards it meant — so
+    /// it is required on a `credential` and absent on a `type`, which is a
+    /// record nobody signed.
+    pub vct: String,
     pub fields: Vec<Field>,
     pub span: Span,
 }

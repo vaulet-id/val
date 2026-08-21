@@ -108,7 +108,8 @@ screen … { … }                  // สิ่งที่ผู้ใช้�
 ```val
 enum Tier { bronze, silver, gold }
 
-credential PurchaseReceipt {      // คนอื่นเป็นคนเซ็น
+// คนอื่นเป็นคนเซ็น — และ `as` บอกว่านี่คือ credential ตัวไหน ในแบบที่ wallet ที่ถือมันอยู่รู้จัก
+credential PurchaseReceipt as "https://org.vaulet.id/codefin/credential/purchase-receipt" {
   merchant:     string
   amount:       int               // สตางค์
   purchased_at: datetime
@@ -124,6 +125,11 @@ state {
   lifetimePoints: int default 0
 }
 ```
+
+`PurchaseReceipt` เป็นชื่อที่แพ็กเกจนี้ตั้งเอง ไม่มี wallet ไหนเคยได้ยิน สิ่งที่ wallet ใช้
+เก็บบัตรคือ `vct` ที่ผู้ออกประทับไว้ในบัตร credential จึงบอก `vct` ของตัวเอง — บังคับสำหรับ
+`credential` และไม่มีใน `type` ซึ่งเป็น record ที่ไม่มีใครเซ็น สอง credential ใช้ `vct`
+เดียวกันไม่ได้: บัตรใบเดียวเป็นสองอย่างสำหรับแอปเดียวคือสองครึ่งของแอปนั้นเถียงกันว่าคนถืออะไรอยู่
 
 ฟิลด์ใน state ใช้ `default` ไม่ใช่ `=`: state เปลี่ยนผ่านบล็อก `update` เพื่อให้ทุกการ
 เปลี่ยนแปลงเป็นบรรทัดใน record ที่ใครก็อ่านได้ ส่วน `let` ในเครื่องเป็นคนละเรื่อง และเขียนซ้ำได้

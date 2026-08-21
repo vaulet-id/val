@@ -21,7 +21,7 @@ capabilities {
   credential.check(EmployeeBadge)
 }
 
-credential EmployeeBadge {
+credential EmployeeBadge as "https://org.vaulet.id/acme/credential/employee-badge" {
   employee_id: string
   department:  string
   valid_until: date

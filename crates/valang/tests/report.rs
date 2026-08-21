@@ -37,11 +37,11 @@ capabilities {
   credential.issue(Other)
 }
 
-credential Card {
+credential Card as "https://org.vaulet.id/example/credential/card" {
   who: string
 }
 
-credential Other {
+credential Other as "https://org.vaulet.id/example/credential/other" {
   who: string
 }
 
@@ -164,7 +164,7 @@ capabilities {
   credential.read(Receipt)
 }
 
-credential Receipt {
+credential Receipt as "https://org.vaulet.id/example/credential/receipt" {
   amount: int
 }
 

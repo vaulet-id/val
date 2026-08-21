@@ -58,7 +58,7 @@ fn a_line_with_thai_in_it_is_underlined_in_the_right_place() {
 /// points at nothing.
 #[test]
 fn a_diagnostic_with_nowhere_to_point_still_reads() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.read(R)\n}\n\ncredential R {\n  a: int\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.read(R)\n}\n\ncredential R as \"https://org.vaulet.id/example/credential/r\" {\n  a: int\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
     let (_, d) = valang::analyse(src);
     for x in &d {
         let rendered = x.render(src);

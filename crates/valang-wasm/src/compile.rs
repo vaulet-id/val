@@ -416,6 +416,20 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
     // rebuilt and compared by anybody.
     m.insert("compiler".to_string(), Value::Str(COMPILER.to_string()));
     m.insert(
+        "credentials".to_string(),
+        Value::List(
+            a.credentials
+                .iter()
+                .map(|k| {
+                    let mut one = BTreeMap::new();
+                    one.insert("name".to_string(), Value::Str(k.name.clone()));
+                    one.insert("vct".to_string(), Value::Str(k.vct.clone()));
+                    Value::Map(one)
+                })
+                .collect(),
+        ),
+    );
+    m.insert(
         "admits".to_string(),
         Value::List(
             a.admits
@@ -423,6 +437,7 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
                 .map(|g| {
                     let mut one = BTreeMap::new();
                     one.insert("credential".to_string(), Value::Str(g.credential.clone()));
+                    one.insert("vct".to_string(), Value::Str(g.vct.clone()));
                     one.insert("policy".to_string(), Value::Str(g.policy.clone()));
                     one.insert("phrase".to_string(), Value::Str(g.phrase.clone()));
                     Value::Map(one)
@@ -567,7 +582,7 @@ pub fn about_of(bytes: &[u8]) -> Option<valang_runtime::About> {
 fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
     use valang_runtime::decode::decode;
     use valang_runtime::value::Value;
-    use valang_runtime::{About, ActionAbout, Declared, Gate};
+    use valang_runtime::{About, ActionAbout, Declared, Gate, Kind};
 
     let data = custom_section(bytes, ABOUT_SECTION)?;
     let Value::Map(m) = decode(data).ok()? else { return None };
@@ -585,6 +600,16 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
             .collect(),
         _ => Vec::new(),
     };
+    let credentials: Vec<Kind> = match m.get("credentials") {
+        Some(Value::List(xs)) => xs
+            .iter()
+            .filter_map(|x| {
+                let Value::Map(k) = x else { return None };
+                Some(Kind { name: text(k.get("name")), vct: text(k.get("vct")) })
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     let admits: Vec<Gate> = match m.get("admits") {
         Some(Value::List(xs)) => xs
             .iter()
@@ -592,6 +617,7 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
                 let Value::Map(g) = x else { return None };
                 Some(Gate {
                     credential: text(g.get("credential")),
+                    vct: text(g.get("vct")),
                     policy: text(g.get("policy")),
                     phrase: text(g.get("phrase")),
                 })
@@ -645,6 +671,7 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
         capabilities: strings(m.get("capabilities")),
         policies: strings(m.get("policies")),
         actions,
+        credentials,
         admits,
     })
 }

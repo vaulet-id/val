@@ -261,7 +261,7 @@ capabilities {
   disclosure.present
 }
 
-credential Id {
+credential Id as "https://org.vaulet.id/example/credential/id" {
   country:   string
   birthdate: date
 }

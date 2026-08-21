@@ -32,13 +32,13 @@ capabilities in advance of needing them.
 ```val
 enum Tier { bronze, silver, gold }
 
-credential PurchaseReceipt {
+credential PurchaseReceipt as "https://org.vaulet.id/example/credential/purchase-receipt" {
   merchant:     string
   amount:       int        // satang
   purchased_at: datetime
 }
 
-credential LoyaltyMember {
+credential LoyaltyMember as "https://org.vaulet.id/example/credential/loyalty-member" {
   member_id: string
   tier:      Tier
   points:    int

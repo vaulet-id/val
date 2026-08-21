@@ -32,13 +32,13 @@ capability เผื่อไว้ก่อน
 ```val
 enum Tier { bronze, silver, gold }
 
-credential PurchaseReceipt {
+credential PurchaseReceipt as "https://org.vaulet.id/example/credential/purchase-receipt" {
   merchant:     string
   amount:       int        // สตางค์
   purchased_at: datetime
 }
 
-credential LoyaltyMember {
+credential LoyaltyMember as "https://org.vaulet.id/example/credential/loyalty-member" {
   member_id: string
   tier:      Tier
   points:    int

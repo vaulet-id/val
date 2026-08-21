@@ -30,7 +30,60 @@ pub fn check(p: &Program) -> Vec<Diagnostic> {
     navigation_goes_somewhere(p, &mut d);
     every_action_is_reachable(p, &mut d);
     admits_can_be_answered(p, &mut d);
+    credentials_say_what_they_are(p, &mut d);
     d
+}
+
+/// A credential names the type a wallet knows it by.
+///
+/// `EmployeeBadge` is a name this package chose and no wallet has ever heard.
+/// Without the `vct`, a package could declare a credential and nothing in the
+/// world could say which of somebody's cards it meant — so an application that
+/// reads, checks or issues one would be an application no host can answer.
+fn kebab(name: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            out.push('-');
+        }
+        out.extend(ch.to_lowercase());
+    }
+    out
+}
+
+fn credentials_say_what_they_are(p: &Program, d: &mut Vec<Diagnostic>) {
+    for c in &p.credentials {
+        if c.vct.is_empty() {
+            d.push(Diagnostic::error(
+                c.span,
+                format!("`{}` does not say what it is. A wallet knows credentials by their `vct`, never by the name a package chose for one: `credential {} as \"https://org.vaulet.id/your-org/credential/{}\"`", c.name, c.name, kebab(&c.name)),
+            ));
+            continue;
+        }
+        // `https` and absolute, for the same reason every other address in this
+        // language is: a type somebody can answer over the wire is a type
+        // somebody on the wire can answer.
+        if !c.vct.starts_with("https://") {
+            d.push(Diagnostic::error(
+                c.span,
+                format!("`{}` is a credential type, and one is an absolute `https` URL — `{}` is not", c.name, c.vct),
+            ));
+        }
+    }
+    // Two names for one card is two halves of an application disagreeing about
+    // what the person is holding.
+    let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for c in &p.credentials {
+        if c.vct.is_empty() {
+            continue;
+        }
+        if let Some(first) = seen.insert(&c.vct, &c.name) {
+            d.push(Diagnostic::error(
+                c.span,
+                format!("`{}` and `{}` are the same credential type. One card cannot be two things to one application", first, c.name),
+            ));
+        }
+    }
 }
 
 /// A gate names a credential this package declared and a policy over that same

@@ -27,7 +27,7 @@ app "reverse.dns.name"
 version 1
 capabilities { … }
 enum Name { a, b }
-credential Name { field: type }
+credential Name as "https://org.vaulet.id/example/credential/name" { field: type }
 type Name { field: type }        // a plain record; nobody signed one
 state { field: type default … }
 trust Name(subject: Type) [refines Other] { anchor: "…" require { … } }

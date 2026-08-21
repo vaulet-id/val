@@ -112,7 +112,9 @@ screen … { … }                  // what the person sees
 ```val
 enum Tier { bronze, silver, gold }
 
-credential PurchaseReceipt {      // signed by somebody else
+// Signed by somebody else — and `as` says which credential this *is*, as the
+// wallet holding one knows it.
+credential PurchaseReceipt as "https://org.vaulet.id/codefin/credential/purchase-receipt" {
   merchant:     string
   amount:       int               // satang
   purchased_at: datetime
@@ -128,6 +130,13 @@ state {
   lifetimePoints: int default 0
 }
 ```
+
+`PurchaseReceipt` is a name this package chose, and no wallet has ever heard
+it. What a wallet holds cards by is the `vct` their issuer stamped into them, so
+a credential says its own — required on a `credential`, absent on a `type`,
+which is a record nobody signed. Two credentials cannot name one `vct`: one card
+being two things to one application is two halves of it disagreeing about what
+the person is holding.
 
 State fields use `default`, not `=`: state is changed by an `update` block, so
 that every change to it is a line in the record somebody can read. A local `let`

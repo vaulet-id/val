@@ -135,7 +135,7 @@ capabilities {
   credential.read(PurchaseReceipt)
 }
 
-credential PurchaseReceipt {
+credential PurchaseReceipt as "https://org.vaulet.id/example/credential/purchase-receipt" {
   amount: int
 }
 
@@ -193,7 +193,7 @@ capabilities {
   payment.request(to: "shop.example.com")
 }
 
-credential TransitPass {
+credential TransitPass as "https://org.vaulet.id/example/credential/transit-pass" {
   zone: string
 }
 

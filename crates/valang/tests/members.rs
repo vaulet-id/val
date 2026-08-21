@@ -16,7 +16,7 @@ capabilities {
 
 enum Tier { bronze, silver, gold }
 
-credential Receipt {
+credential Receipt as "https://org.vaulet.id/example/credential/receipt" {
   merchant: string
   amount: int
 }

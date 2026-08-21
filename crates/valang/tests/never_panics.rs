@@ -34,6 +34,8 @@ const INPUTS: &[&str] = &[
     "`${}`",
     "\"unterminated",
     "credential C {",
+    "credential C as {",
+    "credential C as \"\" {",
     "trust T(",
     "import",
     "import \"",

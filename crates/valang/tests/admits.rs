@@ -38,8 +38,8 @@ fn a_policy_over_another_credential_is_refused() {
 app "x"
 version 1
 capabilities { credential.check(Badge) }
-credential Badge { id: string }
-credential Ticket { id: string }
+credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
+credential Ticket as "https://org.vaulet.id/example/credential/ticket" { id: string }
 trust IssuedByUs(t: Ticket) {
   anchor: "x"
   require { t.signature.valid }
@@ -72,7 +72,7 @@ fn a_gate_without_a_policy_or_without_words_is_refused() {
     let bare = r#"
 app "x"
 version 1
-credential Badge { id: string }
+credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 admits { Badge }
 "#;
     assert!(errors(bare).iter().any(|m| m.contains("checked against a policy")), "{:?}", errors(bare));
@@ -80,7 +80,7 @@ admits { Badge }
     let silent = r#"
 app "x"
 version 1
-credential Badge { id: string }
+credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
 admits { Badge with Ours }
 "#;
@@ -98,7 +98,7 @@ fn a_package_says_who_it_opens_for_once() {
     let src = r#"
 app "x"
 version 1
-credential Badge { id: string }
+credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
 admits { Badge with Ours else "no" }
 admits { Badge with Ours else "no" }
@@ -115,7 +115,7 @@ fn a_gate_uses_the_check_capability_rather_than_the_read_one() {
 app "x"
 version 1
 capabilities { }
-credential Badge { id: string }
+credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
 admits { Badge with Ours else "no" }
 "#;
@@ -126,7 +126,7 @@ admits { Badge with Ours else "no" }
 app "x"
 version 1
 capabilities { credential.read(Badge) }
-credential Badge { id: string }
+credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
 admits { Badge with Ours else "no" }
 "#;

@@ -60,7 +60,7 @@ action SilentDisclosure {
 // The two declarations cases 5 and 6 are about. Without a signature there is
 // nothing demanding `Verified<…>`, and without a second policy there is nothing
 // to be verified against the wrong one — the programs below are unchanged.
-credential PurchaseReceipt {
+credential PurchaseReceipt as "https://org.vaulet.id/example/credential/purchase-receipt" {
   merchant: string
   amount:   int
 }

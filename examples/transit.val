@@ -13,13 +13,13 @@ capabilities {
   credential.issue(RideReceipt)
 }
 
-credential TransitPass {
+credential TransitPass as "https://org.vaulet.id/bem/credential/transit-pass" {
   holder_name: string
   zone:        string
   expires_at:  date
 }
 
-credential RideReceipt {
+credential RideReceipt as "https://org.vaulet.id/bem/credential/ride-receipt" {
   zone:      string
   rode_at:   datetime
   ride_count: int

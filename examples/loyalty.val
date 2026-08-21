@@ -17,13 +17,13 @@ capabilities {
 
 enum Tier { bronze, silver, gold }
 
-credential PurchaseReceipt {
+credential PurchaseReceipt as "https://org.vaulet.id/codefin/credential/purchase-receipt" {
   merchant:     string
   amount:       int        // satang. There is no float in the language, and
   purchased_at: datetime   // money did not want one.
 }
 
-credential LoyaltyMember {
+credential LoyaltyMember as "https://org.vaulet.id/codefin/credential/loyalty-member" {
   member_id: string
   tier:      Tier
   points:    int

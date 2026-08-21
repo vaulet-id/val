@@ -30,7 +30,7 @@ capabilities {
   credential.issue(Card)
 }
 
-credential Card {
+credential Card as "https://org.vaulet.id/example/credential/card" {
   who: string
 }
 
@@ -285,11 +285,11 @@ capabilities {
   storage.write
 }
 
-credential Id {
+credential Id as "https://org.vaulet.id/example/credential/id" {
   country: string
 }
 
-credential Card {
+credential Card as "https://org.vaulet.id/example/credential/card" {
   who: string
 }
 
@@ -416,7 +416,7 @@ capabilities {
   disclosure.present
 }
 
-credential Id {
+credential Id as "https://org.vaulet.id/example/credential/id" {
   country:   string
   birthdate: date
 }
@@ -523,7 +523,7 @@ capabilities {
   credential.read(Receipt)
 }
 
-credential Receipt {
+credential Receipt as "https://org.vaulet.id/example/credential/receipt" {
   amount: int
 }
 
@@ -596,7 +596,7 @@ capabilities {
   disclosure.present
 }
 
-credential Holding {
+credential Holding as "https://org.vaulet.id/example/credential/holding" {
   value: int
 }
 

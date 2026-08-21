@@ -28,7 +28,7 @@ capabilities {
   credential.read(R)
 }
 
-credential R {
+credential R as "https://org.vaulet.id/example/credential/r" {
   amount: int
 }
 

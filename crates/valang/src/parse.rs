@@ -497,12 +497,36 @@ impl Parser {
         EnumDecl { name, members, span }
     }
 
+    /// `credential EmployeeBadge as "https://…/credential/employee-badge" { … }`
+    ///
+    /// A `type` takes the same shape without the `as`: it is a record nobody
+    /// signed, so there is no card in anybody's wallet for it to be.
     fn credential_decl(&mut self) -> CredentialDecl {
         let span = self.peek().span;
+        let is_credential = self.peek().text == "credential";
         self.bump();
         let name = self.ident();
+        let mut vct = String::new();
+        if self.at("as") {
+            let at = self.peek().span;
+            self.bump();
+            if self.peek().kind == Kind::Str {
+                vct = self.bump().text;
+            } else {
+                self.diagnostics.push(Diagnostic::error(
+                    at,
+                    "`as` names the credential type a wallet knows this by, in quotes — `as \"https://org.vaulet.id/acme/credential/employee-badge\"`",
+                ));
+            }
+            if !is_credential {
+                self.diagnostics.push(Diagnostic::error(
+                    at,
+                    format!("`{name}` is a record and not a credential, so there is no card in anybody's wallet for it to be. Declare it as `credential` if that is what it is"),
+                ));
+            }
+        }
         let fields = self.fields();
-        CredentialDecl { name, fields, span }
+        CredentialDecl { name, vct, fields, span }
     }
 
     fn fields(&mut self) -> Vec<Field> {
@@ -562,10 +586,18 @@ impl Parser {
                 // — hung the compiler rather than reporting anything, and in
                 // the editor that is a tab that stops responding.
                 let before = self.i;
-                args.push(self.type_ref());
+                let arg = self.type_ref();
                 if self.i == before {
+                    // Nothing there to be a type. Skipping the token is the
+                    // recovery; **keeping the argument is not** — an argument
+                    // with no name prints as nothing between two commas, and
+                    // reading that back gives a shorter list than the one
+                    // printed. A printer whose output does not parse to what it
+                    // printed is a printer nothing else can be checked against.
                     self.bump();
+                    continue;
                 }
+                args.push(arg);
             }
         }
         let optional = self.eat("?");

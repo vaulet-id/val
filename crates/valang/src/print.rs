@@ -146,6 +146,9 @@ impl Printer<'_> {
         if p.capabilities_span != Span::default() {
             items.push((p.capabilities_span, Item::Capabilities));
         }
+        if !p.admits.is_empty() {
+            items.push((p.admits_span, Item::Admits));
+        }
         for (i, d) in p.enums.iter().enumerate() {
             items.push((d.span, Item::Enum(i)));
         }
@@ -223,13 +226,33 @@ impl Printer<'_> {
                 }
                 self.out.push_str("}\n");
             }
+            Item::Admits => {
+                self.out.push_str("admits {\n");
+                for a in &p.admits {
+                    self.before(a.span.line, 1);
+                    self.out.push_str(&format!(
+                        "{INDENT}{} with {} else {}\n",
+                        a.credential,
+                        a.policy,
+                        quoted(&a.phrase)
+                    ));
+                    self.trailing(a.span.line);
+                }
+                self.out.push_str("}\n");
+            }
             Item::Enum(i) => {
                 let d = &p.enums[i];
                 self.out.push_str(&format!("enum {} {{ {} }}\n", d.name, d.members.join(", ")));
             }
             Item::Credential(i) => {
                 let d = &p.credentials[i];
-                self.out.push_str(&format!("credential {} ", d.name));
+                // The `vct` is part of the declaration, and a printer that
+                // dropped it would print a program that no longer compiles.
+                if d.vct.is_empty() {
+                    self.out.push_str(&format!("credential {} ", d.name));
+                } else {
+                    self.out.push_str(&format!("credential {} as {:?} ", d.name, d.vct));
+                }
                 self.fields(&d.fields, 0);
             }
             Item::Type(i) => {
@@ -551,6 +574,7 @@ enum Item {
     Host(usize),
     Import(usize),
     Capabilities,
+    Admits,
     Enum(usize),
     Credential(usize),
     Type(usize),

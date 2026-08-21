@@ -14,7 +14,7 @@ capabilities {
   disclosure.present
 }
 
-credential NationalId {
+credential NationalId as "https://vaulet.id/credential/national-id" {
   given_name:  string
   family_name: string
   birthdate:   date
@@ -23,7 +23,7 @@ credential NationalId {
 
 // What the voter keeps: proof that a ballot of theirs was counted, with nothing
 // in it that says which way.
-credential BallotReceipt {
+credential BallotReceipt as "https://org.vaulet.id/ect/credential/ballot-receipt" {
   question: string
   cast_at:  datetime
 }

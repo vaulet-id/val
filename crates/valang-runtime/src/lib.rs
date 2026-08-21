@@ -251,6 +251,13 @@ pub struct About {
     /// Which compiler built the module this came from. A rebuild with another
     /// front end proves nothing about either.
     pub compiler: String,
+    /// Every credential this application declares, and what each one is.
+    ///
+    /// A host holds cards by `vct` and this application names them by whatever
+    /// its author called them, so the two need a table between them — one
+    /// table, because a gate, a `credential.read` and a screen's `data` line
+    /// are three questions with one answer.
+    pub credentials: Vec<Kind>,
     /// Who this application opens for at all, and what the person is told when
     /// they are not one of them.
     ///
@@ -270,10 +277,21 @@ pub struct About {
     pub opens: String,
 }
 
+/// A credential this application declares, and what a wallet knows it by.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Kind {
+    pub name: String,
+    pub vct: String,
+}
+
 /// A credential somebody must hold before this application opens.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Gate {
     pub credential: String,
+    /// What that credential **is**, as the wallet holding one knows it. The
+    /// name beside it is the package's own word and no wallet has heard it, so
+    /// this is the half a host can act on.
+    pub vct: String,
     pub policy: String,
     /// A key in the signed text bundle. The words are the publisher's, so a
     /// door that does not open still says what to do about it.
@@ -346,11 +364,22 @@ impl About {
             // Filled in by whatever emits the module. A program has no compiler
             // of its own to name.
             compiler: String::new(),
+            credentials: p
+                .credentials
+                .iter()
+                .map(|c| Kind { name: c.name.clone(), vct: c.vct.clone() })
+                .collect(),
             admits: p
                 .admits
                 .iter()
                 .map(|a| Gate {
                     credential: a.credential.clone(),
+                    vct: p
+                        .credentials
+                        .iter()
+                        .find(|c| c.name == a.credential)
+                        .map(|c| c.vct.clone())
+                        .unwrap_or_default(),
                     policy: a.policy.clone(),
                     phrase: a.phrase.clone(),
                 })

@@ -17,7 +17,7 @@ capabilities {
   disclosure.present
 }
 
-credential UnitOwnership {
+credential UnitOwnership as "https://org.vaulet.id/sathorn-heights/credential/unit-ownership" {
   building_id: string
   unit:        string
   ratio_bp:    int
@@ -25,7 +25,7 @@ credential UnitOwnership {
 
 // What the meeting records, and what the owner keeps: which unit voted, with
 // how much weight, on which resolution.
-credential VoteCounted {
+credential VoteCounted as "https://org.vaulet.id/sathorn-heights/credential/vote-counted" {
   resolution: string
   unit:       string
   weight_bp:  int

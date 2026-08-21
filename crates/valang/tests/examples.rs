@@ -198,8 +198,8 @@ fn a_claim_may_demand_where_its_value_came_from() {
 app "example"
 version 1
 capabilities { credential.read(Receipt) credential.issue(Card) }
-credential Receipt { amount: int }
-credential Card { points: int }
+credential Receipt as "https://org.vaulet.id/example/credential/receipt" { amount: int }
+credential Card as "https://org.vaulet.id/example/credential/card" { points: int }
 trust FromShop(r: Receipt) { anchor: "shop" require { r.signature.valid } }
 action Earn {
   input { r: Credential<Receipt> }
@@ -226,8 +226,8 @@ fn declaring_one_credential_and_reading_another_is_refused() {
 app "example.mismatch"
 version 1
 capabilities { credential.read(LoyaltyMember) }
-credential LoyaltyMember { points: int }
-credential Passport { document_number: string }
+credential LoyaltyMember as "https://org.vaulet.id/example/credential/loyalty-member" { points: int }
+credential Passport as "https://org.vaulet.id/example/credential/passport" { document_number: string }
 trust Whoever(p: Passport) { anchor: "th.go.dopa" require { p.signature.valid } }
 action Peek {
   input  { passport: Credential<Passport> }
@@ -252,7 +252,7 @@ capabilities {
   api.query(audience: "broker.co.th", presenting: Holding)
   disclosure.present
 }
-credential Holding { market_value: int }
+credential Holding as "https://org.vaulet.id/example/credential/holding" { market_value: int }
 action Bad {
   verify  { const quotes = query broker.quotes() }
   compute { const total = quotes.fold(0) { sum, q -> sum + 1 } }
@@ -275,7 +275,7 @@ fn an_effect_cannot_read_another_effects_result() {
 app "example.chain"
 version 1
 capabilities { credential.issue(Card) }
-credential Card { points: int }
+credential Card as "https://org.vaulet.id/example/credential/card" { points: int }
 action Two {
   execute {
     const issued = credential.issue(Card { points: 1 })
@@ -354,7 +354,7 @@ fn an_application_may_decline_for_its_own_reasons() {
 app "example.decline"
 version 1
 capabilities { credential.read(Receipt) }
-credential Receipt { amount: int }
+credential Receipt as "https://org.vaulet.id/example/credential/receipt" { amount: int }
 trust FromShop(r: Receipt) { anchor: "shop" require { r.signature.valid } }
 action Earn {
   input   { r: Credential<Receipt> }

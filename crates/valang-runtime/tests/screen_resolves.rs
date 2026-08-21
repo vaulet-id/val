@@ -81,7 +81,7 @@ capabilities {
   credential.read(PurchaseReceipt)
 }
 
-credential PurchaseReceipt {
+credential PurchaseReceipt as "https://org.vaulet.id/example/credential/purchase-receipt" {
   merchant:     string
   amount:       int
   purchased_at: datetime

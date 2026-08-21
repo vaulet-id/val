@@ -13,7 +13,7 @@ version 1
 capabilities {
 }
 
-credential R {
+credential R as "https://org.vaulet.id/example/credential/r" {
   amount: int
 }
 
