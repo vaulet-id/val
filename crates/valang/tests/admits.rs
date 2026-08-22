@@ -158,7 +158,7 @@ admits {{ Badge with Ours else "no" }}
     for vct in [
         "https://id.acme.example/credential/badge",
         "https://acme.example/vc/badge/v2",
-        "https://org.vaulet.id/acme/credential/employee-badge",
+        "https://org.vaulet.id/acme/credential/staff-badge",
         // A port and a deep path are somebody's deployment, not a mistake.
         "https://staging.acme.example:8443/issuer/one/credential/badge",
     ] {

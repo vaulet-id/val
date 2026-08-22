@@ -45,7 +45,7 @@ fn what_the_deployment_serves_is_what_this_wallet_admits() {
     let installed = install_with(&pkg, &Wallet).expect("this wallet admits it");
     let code = installed.code.expect("it carries a module");
     assert_eq!(code.about.admits.len(), 1, "the door this example is about");
-    assert_eq!(code.about.admits[0].vct, "https://org.vaulet.id/acme/credential/employee-badge");
+    assert_eq!(code.about.admits[0].vct, "https://org.vaulet.id/acme/credential/staff-badge");
 }
 
 /// And a wallet that resolved somebody else's key refuses it, which is what
