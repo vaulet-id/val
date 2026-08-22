@@ -33,6 +33,17 @@ fn errors(src: &str, keys: valang::TextBundle, locales: &[&str]) -> Vec<String> 
         .collect()
 }
 
+/// The warnings, which is what the unread-key rule produces.
+fn warnings(src: &str, keys: &valang::TextBundle, locales: &[String]) -> Vec<String> {
+    let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
+    valang::analyse_fully(src, Some((keys, locales)), &hosts)
+        .1
+        .into_iter()
+        .filter(|d| d.severity == valang::diag::Severity::Warning)
+        .map(|d| d.message)
+        .collect()
+}
+
 fn app(tree: &str) -> String {
     format!(
         "app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\nstate {{\n  points: int default 0\n}}\n\n@main\nscreen Home {{\n  column {{\n{tree}\n  }}\n}}\n"
@@ -113,5 +124,43 @@ fn every_text_prop_is_checked_against_the_bundle() {
     assert!(
         e.iter().any(|m| m.contains("Words in place")),
         "a sentence in `detail:` was never checked: {e:?}"
+    );
+}
+
+/// **A key the host reads is not a key nobody reads.**
+///
+/// A wallet listing applications has to call one something, and every other
+/// sentence a person sees is already a key in this bundle — so the name is one
+/// more rather than a field in the package format. The compiler cannot see that
+/// reader, so it is told; without that it warned about the one key every
+/// package is meant to carry.
+#[test]
+fn a_key_the_host_reads_is_not_reported_as_unread() {
+    let src = r#"
+app "x.y"
+version 1
+capabilities { }
+state { n: int default 0 }
+@main
+screen Home {
+  title: phrase("homeTitle")
+  column {
+    card(text: phrase("homeTitle"))
+  }
+}
+"#;
+    let bundle = bundle(&[
+        ("homeTitle", &[("en", "Home"), ("th", "หน้าหลัก")]),
+        ("appName", &[("en", "Something"), ("th", "อะไรสักอย่าง")]),
+        ("nobodyReads", &[("en", "Waste"), ("th", "เปล่าประโยชน์")]),
+    ]);
+    let said = warnings(src, &bundle, &["en".to_string(), "th".to_string()]);
+    assert!(
+        said.iter().any(|w| w.contains("nobodyReads")),
+        "an unread key is still reported: {said:?}"
+    );
+    assert!(
+        !said.iter().any(|w| w.contains("appName")),
+        "the host reads this one: {said:?}"
     );
 }

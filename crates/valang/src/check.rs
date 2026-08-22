@@ -456,6 +456,17 @@ fn nothing_is_declared_twice(p: &Program, d: &mut Vec<Diagnostic>) {
 /// A missing key is a screen that says `missing key "balance"` to somebody, and
 /// a missing locale is a market where the application is unusable — both are
 /// failed builds rather than bug reports, because both are knowable now.
+/// Keys the **host** reads, which no program ever will.
+///
+/// A wallet listing applications has to call one something, and every other
+/// sentence a person reads is already a key in this bundle — so the name is one
+/// more, rather than a field in the package format with its own rules about
+/// being translated. The compiler cannot see the reader, so it is told.
+///
+/// Small on purpose. A growing list here is a host quietly inventing a
+/// vocabulary inside somebody else's file.
+pub const HOST_READS: &[&str] = &["appName"];
+
 pub fn check_bundle(
     p: &Program,
     bundle: &crate::TextBundle,
@@ -595,6 +606,9 @@ pub fn check_bundle(
     // on the screen are the words and the bundle is optional.
     if translated {
         for key in bundle.keys() {
+            if HOST_READS.contains(&key.as_str()) {
+                continue;
+            }
             if !read.contains(key) {
                 d.push(Diagnostic::warning(
                     crate::diag::Span { line: 0, col: 0, len: 0 },

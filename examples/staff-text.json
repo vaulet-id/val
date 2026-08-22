@@ -1,10 +1,14 @@
 {
-  "_comment": "The staff package's own bundle. `notStaff` is the one sentence somebody may read before they have read anything else about this application, so it says what to do rather than what went wrong.",
+  "_comment": "The staff package's own bundle. `appName` is what a wallet calls it on a tile — a convention on this bundle rather than a field in the package format, because every other sentence a person reads is already a key here. `notStaff` is the one sentence somebody may read before they have read anything else about this application, so it says what to do rather than what went wrong.",
   "locales": [
     "en",
     "th"
   ],
   "keys": {
+    "appName": {
+      "en": "Acme Rota",
+      "th": "ตารางเวร Acme"
+    },
     "rotaTitle": {
       "en": "Rota",
       "th": "ตารางเวร"
