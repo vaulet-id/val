@@ -29,10 +29,24 @@ impl HostPolicy for Wallet {
     }
 }
 
+/// What the program calls its own version, which is the only thing `build`
+/// will accept in the manifest beside it.
+fn version_of(src: &str) -> String {
+    src.lines()
+        .find_map(|l| l.strip_prefix("version "))
+        .expect("the example says its version")
+        .trim()
+        .to_string()
+}
+
 fn manifest() -> Manifest {
     Manifest {
         app: "th.co.acme.staff".into(),
-        version: "1".into(),
+        // **Read off the source rather than written down twice.** `build`
+        // refuses a manifest that disagrees with the code, so a version typed
+        // here is a second place the example's own version lives — and the day
+        // the example gained a screen, four tests failed for saying `1`.
+        version: version_of(STAFF).into(),
         kind: "val".into(),
         publisher: "did:web:acme.co.th".into(),
         catalogue: "1".into(),

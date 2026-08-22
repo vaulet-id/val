@@ -28,10 +28,21 @@ impl HostPolicy for Wallet {
     }
 }
 
+fn version_of(src: &str) -> String {
+    src.lines()
+        .find_map(|l| l.strip_prefix("version "))
+        .expect("the example says its version")
+        .trim()
+        .to_string()
+}
+
 fn manifest() -> Manifest {
     Manifest {
         app: "th.co.acme.staff".into(),
-        version: "1".into(),
+        // Off the source: `build` refuses a manifest that disagrees with the
+        // code, and a version typed here is the example's version written down
+        // in a second place.
+        version: version_of(STAFF).into(),
         kind: "val".into(),
         publisher: "did:web:acme.co.th".into(),
         catalogue: "1".into(),

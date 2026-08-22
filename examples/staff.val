@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version 1
+version 2
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -73,6 +73,27 @@ screen Rota {
   title: phrase("rotaTitle")
 
   column {
+    // **The badge, as the door left it.** Every word on this card is one this
+    // application is entitled to: it holds `credential.check`, so it was told
+    // the door opened and nothing else — not the number, not the department,
+    // not the date. A card printing those would be an application reading a
+    // badge it only ever checked, and the sheet a person agreed to says it
+    // does not.
+    //
+    // So what it shows is the company it opens for and the fact that it
+    // opened, which is exactly what it knows.
+    card {
+      row(gap: md, align: center) {
+        avatar(of: phrase("companyInitial"), size: lg)
+        column(gap: xs) {
+          text(phrase("companyName"))
+          badge(text: phrase("admitted"))
+        }
+      }
+      divider
+      keyValue(text: phrase("roleLabel"), value: phrase("roleValue"))
+      keyValue(text: phrase("shiftLabel"), value: state.shift)
+    }
     card(text: phrase("onShift", shift: state.shift))
     field(text: phrase("pickShift"), icon: document, into: which)
     button(text: phrase("claim"), emphasis: primary, onTap: ClaimShift)

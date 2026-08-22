@@ -28,6 +28,30 @@
     "notStaff": {
       "en": "This application opens for Acme staff. Ask HR for a badge, then open it again.",
       "th": "แอปนี้เปิดให้พนักงาน Acme เท่านั้น ขอบัตรพนักงานจากฝ่ายบุคคลแล้วเปิดอีกครั้ง"
+    },
+    "companyInitial": {
+      "en": "A",
+      "th": "A"
+    },
+    "companyName": {
+      "en": "Acme (Thailand) Co., Ltd.",
+      "th": "บริษัท แอคมี (ประเทศไทย) จำกัด"
+    },
+    "admitted": {
+      "en": "Staff · admitted",
+      "th": "พนักงาน · ผ่านประตูแล้ว"
+    },
+    "roleLabel": {
+      "en": "What this opens for",
+      "th": "เปิดให้ใคร"
+    },
+    "roleValue": {
+      "en": "Acme staff",
+      "th": "พนักงาน Acme"
+    },
+    "shiftLabel": {
+      "en": "Your shift",
+      "th": "เวรของคุณ"
     }
   }
 }
