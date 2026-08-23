@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version 6
+version 7
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -114,9 +114,10 @@ screen Rota {
       }
 
       // Out of the flow, and half off the card: a ring drawn with nothing but
-      // a shape, a border and a transform. This is the tier below the tokens —
+      // a shape, a border and an opacity. This is the tier below the tokens —
       // slower to write, and there is nothing between the publisher and what
-      // they meant.
+      // they meant. `position: absolute` is placed by whoever holds the flow,
+      // which here is the stack and at the top of a screen is the screen.
       column(
         position: absolute,
         top: -18,

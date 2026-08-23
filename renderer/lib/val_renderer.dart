@@ -16,6 +16,7 @@
 // it was written is a screen nobody can be shown before it ships.
 
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -709,10 +710,30 @@ class _ScreenState extends State<_Screen> {
                 incoming: widget.incoming,
               ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, Vaulet.lg),
+      // **The screen is a stack too.** A node at the top level saying
+      // `position: absolute` is placed against the screen — a floating button,
+      // a banner over the content, a watermark — rather than needing a `stack`
+      // wrapped around everything to say so. Where a thing sits is read by
+      // whoever holds the flow, and at the top level that is the screen.
+      body: Stack(
         children: [
-          for (final n in _prune(nodes)) _Node(node: n, incoming: widget.incoming),
+          ListView(
+            padding:
+                const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, Vaulet.lg),
+            children: [
+              for (final n in _prune(nodes))
+                if (!_floats(n)) _Node(node: n, incoming: widget.incoming),
+            ],
+          ),
+          for (final n in _prune(nodes))
+            if (_floats(n))
+              Positioned(
+                top: _sizeOf(_argsOf(n)['top']),
+                right: _sizeOf(_argsOf(n)['right']),
+                bottom: _sizeOf(_argsOf(n)['bottom']),
+                left: _sizeOf(_argsOf(n)['left']),
+                child: _Node(node: n, incoming: widget.incoming),
+              ),
         ],
       ),
       bottomNavigationBar: docked.isEmpty
@@ -733,6 +754,12 @@ class _ScreenState extends State<_Screen> {
   }
 }
 
+
+Map<String, dynamic> _argsOf(Map<String, dynamic> n) =>
+    ((n['args'] as Map?) ?? const {}).cast<String, dynamic>();
+
+/// Whether a node asked to be placed rather than laid out in the flow.
+bool _floats(Map<String, dynamic> n) => _argsOf(n)['position'] == 'absolute';
 
 /// The wallet's standard horizontal gutter.
 const double kScreenPadH = 16;
@@ -1046,8 +1073,42 @@ class _NodeState extends State<_Node> {
     );
   }
 
+  /// Nodes that already wire their own press, so wrapping them again would
+  /// give a card two ripples and a button two runs of one action.
+  static const _tapsItself = {'button', 'tile', 'card', 'link', 'banner', 'checkbox', 'toggle', 'pick', 'select', 'field', 'slider', 'radioGroup', 'datePicker', 'filePicker'};
+
+  bool get _kindHandlesItsOwnTap => _tapsItself.contains(n['kind'] as String? ?? '');
+
+  void _run(String action) {
+    final nav = _Nav.of(context);
+    if (nav == null) return;
+    if (nav.go(action, const {})) return;
+    nav.run(action, _Form.of(context));
+  }
+
   @override
-  Widget build(BuildContext context) => _common(_draw(context));
+  Widget build(BuildContext context) {
+    // Below a width, or above one: a screen that reads differently on a phone
+    // and on a tablet says so per node rather than being drawn twice.
+    final width = MediaQuery.sizeOf(context).width;
+    final from = _sizeOf(args['visibleFrom']);
+    final until = _sizeOf(args['visibleUntil']);
+    if (from != null && width < from) return const SizedBox.shrink();
+    if (until != null && width >= until) return const SizedBox.shrink();
+
+    final drawn = _common(_draw(context));
+    // A change of style, animated rather than jumped, when the package asks
+    // for it in milliseconds. The default is no animation: a screen that moves
+    // when nobody asked it to is a screen fighting the person reading it.
+    if (args['animate'] case final int ms when ms > 0) {
+      return AnimatedSize(
+        duration: Duration(milliseconds: ms),
+        curve: Curves.easeOutCubic,
+        child: AnimatedSwitcher(duration: Duration(milliseconds: ms), child: drawn),
+      );
+    }
+    return drawn;
+  }
 
   /// Layout, accessibility and style, applied to whatever the node drew.
   ///
@@ -1130,6 +1191,36 @@ class _NodeState extends State<_Node> {
     }
     if (args['opacity'] case final int o) out = Opacity(opacity: o / 100, child: out);
 
+    // Frosted: what is behind this node, blurred. Nothing leaves the phone and
+    // nothing is fetched — it is the pixels already there.
+    if (_sizeOf(args['blur']) case final double sigma when sigma > 0) {
+      out = ClipRRect(
+        borderRadius: _radiusOf(args['borderRadius']) ?? BorderRadius.zero,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+          child: out,
+        ),
+      );
+    }
+
+    // **A press, on anything.** `onTap` was a prop of the handful of nodes that
+    // happened to take one; a node a publisher designed themselves could not be
+    // pressed at all. The ripple is the platform's, so a custom component still
+    // feels like this phone.
+    final tap = args['onTap'];
+    final longPress = args['onLongPress'];
+    final doubleTap = args['onDoubleTap'];
+    if ((tap is String || longPress is String || doubleTap is String) &&
+        !_kindHandlesItsOwnTap) {
+      out = InkWell(
+        borderRadius: _radiusOf(args['borderRadius']),
+        onTap: tap is String ? () => _run(tap) : null,
+        onLongPress: longPress is String ? () => _run(longPress) : null,
+        onDoubleTap: doubleTap is String ? () => _run(doubleTap) : null,
+        child: out,
+      );
+    }
+
     if (args['flex'] case final int flex) out = Expanded(flex: flex, child: out);
 
     // What a screen reader is told. The words are the application's; the
@@ -1188,6 +1279,20 @@ class _NodeState extends State<_Node> {
 
       case 'column':
         final runs = _group(children);
+        // A column that scrolls on its own, when the package says so. Declared
+        // as `overflow` since the first registry and never read, so a screen
+        // with a long list inside a fixed height simply overflowed.
+        if (args['overflow'] == 'scroll') {
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: _crossOf(args['align'], CrossAxisAlignment.stretch),
+              children: [
+                for (final c in children) _Node(node: c, incoming: widget.incoming),
+              ],
+            ),
+          );
+        }
         return Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: _mainOf(args['justify'], MainAxisAlignment.start),

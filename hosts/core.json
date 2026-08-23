@@ -726,7 +726,9 @@
       "zIndex": "int?",
       "overflow": "Overflow?",
       "clip": "bool?",
-      "visible": "bool?"
+      "visible": "bool?",
+      "visibleFrom": "Size?",
+      "visibleUntil": "Size?"
     },
     "accessibility": {
       "role": "Role?",
@@ -760,7 +762,15 @@
       "italic": "bool?",
       "underline": "bool?",
       "maxLines": "int?",
-      "ellipsis": "bool?"
+      "ellipsis": "bool?",
+      "blur": "Size?",
+      "animate": "int?"
+    },
+    "gestures": {
+      "_comment": "A press on anything, not only on the nodes that happened to take one. The ripple is the platform's, so a component a publisher designed still feels like this phone.",
+      "onTap": "Action?",
+      "onLongPress": "Action?",
+      "onDoubleTap": "Action?"
     }
   }
 }

@@ -140,7 +140,11 @@ impl Host {
         }
 
         let mut common = BTreeMap::new();
-        for group in ["layout", "accessibility", "style"] {
+        // **Every group the registry writes, not the three that existed.** A
+        // group added to `common` and not to this list is a prop the host
+        // provides and the compiler refuses — which is how `onTap` on a node
+        // somebody designed themselves would have been rejected as unknown.
+        for group in ["layout", "accessibility", "style", "gestures"] {
             common.extend(props(&json["common"][group]));
         }
 
