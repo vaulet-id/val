@@ -1264,17 +1264,21 @@ class _NodeState extends State<_Node> {
       // absolute` is placed by its own `top`/`right`/`bottom`/`left`; anything
       // else is laid in the middle, which is what a background and a label on
       // top of it are.
-      case 'stack':
-        return Stack(
+      case 'stack': {
+        final clipped = args['clip'] == true;
+        final stack = Stack(
           alignment: switch (args['align']) {
             'start' => Alignment.topLeft,
             'end' => Alignment.bottomRight,
             _ => Alignment.center,
           },
           // **Nothing is clipped unless somebody asks.** Half of what a stack
-          // is for hangs off the edge — a ring, a badge, a corner mark — and
-          // clipping by default cut every one of them.
-          clipBehavior: args['clip'] == true ? Clip.hardEdge : Clip.none,
+          // is for hangs off the edge — a badge, a corner mark — and clipping
+          // by default cut every one of them. Asking is `clip: true`, and it
+          // clips to this node's own corners: a square cut around a rounded
+          // card leaves the decoration poking out of the corners, which is the
+          // thing it was asked to stop.
+          clipBehavior: Clip.none,
           children: [
             // **The stack places its own children and nobody else's.** A node
             // saying `position: absolute` three levels down, inside a column,
@@ -1296,6 +1300,12 @@ class _NodeState extends State<_Node> {
               }(),
           ],
         );
+        if (!clipped) return stack;
+        return ClipRRect(
+          borderRadius: _radiusOf(args['borderRadius']) ?? BorderRadius.zero,
+          child: stack,
+        );
+      }
 
       case 'column':
         final runs = _group(children);

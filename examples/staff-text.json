@@ -52,6 +52,10 @@
     "shiftLabel": {
       "en": "Your shift",
       "th": "เวรของคุณ"
+    },
+    "noShift": {
+      "en": "Not picked yet",
+      "th": "ยังไม่ได้เลือก"
     }
   }
 }
