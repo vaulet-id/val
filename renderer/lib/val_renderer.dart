@@ -1280,8 +1280,11 @@ class _NodeState extends State<_Node> {
     final doubleTap = args['onDoubleTap'];
     if ((tap is String || longPress is String || doubleTap is String) &&
         !_kindHandlesItsOwnTap) {
-      out = InkWell(
-        borderRadius: _radiusOf(args['borderRadius']),
+      // **No ripple.** A splash spreading under a card with its own corners
+      // paints a grey rectangle through them, and a press somewhere in a
+      // designed screen is not always a button.
+      out = GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: tap is String ? () => _run(tap) : null,
         onLongPress: longPress is String ? () => _run(longPress) : null,
         onDoubleTap: doubleTap is String ? () => _run(doubleTap) : null,
@@ -2022,13 +2025,22 @@ class _NodeState extends State<_Node> {
           // the rows inside it as text on a tint.
           final corner = _radiusOf(args['borderRadius']) ??
               BorderRadius.circular(Vaulet.radiusCard);
+          // One line, drawn twice: around the group and between its rows. Two
+          // weights on one object read as two objects.
+          final line = scheme.outlineVariant.withValues(alpha: 0.6);
           return _Grouped(
-            child: Container(
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                splashFactory: NoSplash.splashFactory,
+                highlightColor: Colors.transparent,
+                splashColor: Colors.transparent,
+              ),
+              child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: _colorOf(args['background'], scheme) ?? scheme.surface,
                 borderRadius: corner,
-                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+                border: Border.all(color: line),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2039,21 +2051,15 @@ class _NodeState extends State<_Node> {
                       child: _text(style: Vaulet.cardTitle),
                     ),
                   for (var i = 0; i < children.length; i++) ...[
-                    // **Edge to edge, and thick enough to be a line.** An
+                    // **Edge to edge, and the same line as the frame.** An
                     // inset rule leaves a gap at both ends that reads as the
-                    // group coming apart, and a hairline on a bright surface
-                    // is a smudge rather than a separation.
-                    if (i > 0)
-                      Divider(
-                        height: 1.5,
-                        thickness: 1.5,
-                        indent: 0,
-                        endIndent: 0,
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
+                    // group coming apart; a heavier one reads as a border
+                    // inside a border.
+                    if (i > 0) Divider(height: 1, thickness: 1, indent: 0, endIndent: 0, color: line),
                     _Node(node: children[i], incoming: widget.incoming),
                   ],
                 ],
+              ),
               ),
             ),
           );
@@ -2373,8 +2379,8 @@ class _Chooser extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chosen = value != null && value!.isNotEmpty;
-    return InkWell(
-      borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onPicked == null ? null : () => _open(context),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
