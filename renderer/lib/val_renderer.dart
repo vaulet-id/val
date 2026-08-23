@@ -736,11 +736,22 @@ class _ScreenState extends State<_Screen> {
       body: Stack(
         children: [
           ListView(
-            padding:
-                const EdgeInsets.fromLTRB(kScreenPadH, Vaulet.sm, kScreenPadH, Vaulet.lg),
+            // **The gutter is per node, not on the list.** A chat list runs to
+            // both edges and everything else is held in from them; with the
+            // padding on the list there was no way for one child to decline
+            // it, and taking the width back with a negative margin is what
+            // broke layout. A node that sets its own `margin` has said where
+            // it sits, so the screen does not put it anywhere.
+            padding: const EdgeInsets.symmetric(vertical: Vaulet.sm),
             children: [
               for (final n in _prune(nodes))
-                if (!_floats(n)) _Node(node: n, incoming: widget.incoming),
+                if (!_floats(n))
+                  Padding(
+                    padding: _argsOf(n).containsKey('margin')
+                        ? EdgeInsets.zero
+                        : const EdgeInsets.symmetric(horizontal: kScreenPadH),
+                    child: _Node(node: n, incoming: widget.incoming),
+                  ),
             ],
           ),
           for (final n in _prune(nodes))
@@ -1234,25 +1245,13 @@ class _NodeState extends State<_Node> {
       );
     }
     if (args['margin'] != null) {
+      // **Never negative.** A margin that took width back by measuring what
+      // it was given and asking for more of it recursed through layout until
+      // the stack ran out — and a screen that will not lay out is a screen
+      // that draws nothing at all. Reaching the edge is the screen's gutter
+      // not being applied, which is below.
       final inset = _edgeOf(args['margin']);
-      out = inset.isNonNegative
-          ? Padding(padding: inset, child: out)
-          // **A negative inset is how a list reaches both edges.** A screen is
-          // drawn on the wallet's gutter and a chat list is the one thing that
-          // ignores it, so `margin: [0, -16]` gives the width back. `Padding`
-          // refuses a negative side — it asserts — so the room is taken by
-          // measuring what there is and asking for more of it.
-          : LayoutBuilder(
-              builder: (context, box) => Transform.translate(
-                offset: Offset(inset.left, inset.top),
-                child: SizedBox(
-                  width: box.maxWidth.isFinite
-                      ? box.maxWidth - inset.horizontal
-                      : null,
-                  child: out,
-                ),
-              ),
-            );
+      if (inset.isNonNegative) out = Padding(padding: inset, child: out);
     }
     if (_transformOf(args['transform']) case final Matrix4 m) {
       out = Transform(transform: m, alignment: Alignment.center, child: out);
@@ -2035,14 +2034,19 @@ class _NodeState extends State<_Node> {
                 highlightColor: Colors.transparent,
                 splashColor: Colors.transparent,
               ),
-              child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
+              // **`Material`, not a painted box.** A row paints its own
+              // background and its own press on the nearest `Material`
+              // ancestor, so a coloured box around it hides both — Flutter
+              // says so out loud, and says it on the screen that stopped
+              // drawing.
+              child: Material(
                 color: _colorOf(args['background'], scheme) ?? scheme.surface,
-                borderRadius: corner,
-                border: Border.all(color: line),
-              ),
-              child: Column(
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: corner,
+                  side: BorderSide(color: line),
+                ),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (args['text'] != null)
