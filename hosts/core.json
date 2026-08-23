@@ -439,6 +439,13 @@
       },
       "primary": "of",
       "requires": "web.content"
+    },
+    "stack": {
+      "draws": true,
+      "children": true,
+      "props": {
+        "align": "Align?"
+      }
     }
   },
   "vocabularies": {
@@ -682,6 +689,13 @@
         "any"
       ],
       "open": false
+    },
+    "shape": {
+      "words": [
+        "rectangle",
+        "circle"
+      ],
+      "open": false
     }
   },
   "common": {
@@ -738,7 +752,15 @@
       "fontWeight": "Weight?",
       "lineHeight": "Size?",
       "letterSpacing": "Size?",
-      "textAlign": "TextAlign?"
+      "textAlign": "TextAlign?",
+      "borderWidth": "Size?",
+      "shape": "Shape?",
+      "transform": "Transform?",
+      "fontFamily": "string?",
+      "italic": "bool?",
+      "underline": "bool?",
+      "maxLines": "int?",
+      "ellipsis": "bool?"
     }
   }
 }

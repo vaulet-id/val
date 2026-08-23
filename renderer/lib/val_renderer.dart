@@ -15,6 +15,8 @@
 // them by eye, and a screen that draws differently on a phone than it did where
 // it was written is a screen nobody can be shown before it ships.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Draw a package's screens.
@@ -756,6 +758,43 @@ double _spaceOf(Object? v, {double fallback = Vaulet.md}) => switch (v) {
       _ => fallback,
     };
 
+/// An inset: one value for every side, two for vertical and horizontal, or
+/// four written the way CSS writes them — top, right, bottom, left.
+///
+/// **A token first, a list when a token will not do.** A number or a word is
+/// the whole of what most screens need; a list is the publisher saying this
+/// side and not that one, which no token can express.
+EdgeInsets _edgeOf(Object? v) {
+  if (v is List) {
+    final n = [for (final e in v) _spaceOf(e, fallback: 0)];
+    return switch (n.length) {
+      0 => EdgeInsets.zero,
+      1 => EdgeInsets.all(n[0]),
+      2 => EdgeInsets.symmetric(vertical: n[0], horizontal: n[1]),
+      3 => EdgeInsets.only(top: n[0], right: n[1], bottom: n[2], left: n[1]),
+      _ => EdgeInsets.only(top: n[0], right: n[1], bottom: n[2], left: n[3]),
+    };
+  }
+  return EdgeInsets.all(_spaceOf(v, fallback: 0));
+}
+
+/// A corner radius: one for all four, or four of their own.
+BorderRadius? _radiusOf(Object? v) {
+  if (v is List) {
+    final n = [for (final e in v) _sizeOf(e) ?? 0];
+    if (n.isEmpty) return null;
+    final four = [for (var i = 0; i < 4; i++) n[i % n.length]];
+    return BorderRadius.only(
+      topLeft: Radius.circular(four[0]),
+      topRight: Radius.circular(four[1]),
+      bottomRight: Radius.circular(four[2]),
+      bottomLeft: Radius.circular(four[3]),
+    );
+  }
+  final one = _sizeOf(v);
+  return one == null ? null : BorderRadius.circular(one);
+}
+
 /// A colour the interface asked for: a token from the scale, or a value of its
 /// own.
 ///
@@ -817,11 +856,76 @@ MainAxisAlignment _mainOf(Object? v, MainAxisAlignment fallback) => switch (v) {
       _ => fallback,
     };
 
-List<BoxShadow> _shadowOf(Object? v, ColorScheme scheme) => switch (v) {
-      'raised' => [BoxShadow(color: scheme.shadow.withValues(alpha: 0.10), blurRadius: 8, offset: const Offset(0, 2))],
-      'floating' => [BoxShadow(color: scheme.shadow.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
-      _ => const [],
-    };
+List<BoxShadow> _shadowOf(Object? v, ColorScheme scheme) {
+  // Written out: a colour, a blur, an offset, a spread. The tokens above are
+  // two shadows somebody chose; a product with its own is not wrong for having
+  // one.
+  if (v is Map) {
+    return [
+      BoxShadow(
+        color: _colorOf(v['color'], scheme) ?? scheme.shadow.withValues(alpha: 0.2),
+        blurRadius: _sizeOf(v['blur']) ?? 12,
+        spreadRadius: _sizeOf(v['spread']) ?? 0,
+        offset: Offset(_sizeOf(v['x']) ?? 0, _sizeOf(v['y']) ?? 4),
+      ),
+    ];
+  }
+  return switch (v) {
+    'raised' => [BoxShadow(color: scheme.shadow.withValues(alpha: 0.10), blurRadius: 8, offset: const Offset(0, 2))],
+    'floating' => [BoxShadow(color: scheme.shadow.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
+    _ => const [],
+  };
+}
+
+/// A gradient: two colours and a diagonal, or one written out with its own
+/// angle and stops.
+Gradient? _gradientOf(Object? v, ColorScheme scheme) {
+  List<Color> colours(List raw) => [
+        for (final c in raw) _colorOf(c, scheme) ?? scheme.primary,
+      ];
+  if (v is List && v.length >= 2) {
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: colours(v),
+    );
+  }
+  if (v is Map && v['colors'] is List && (v['colors'] as List).length >= 2) {
+    final stops = v['stops'];
+    // Degrees, clockwise from the top, because that is how a designer says it.
+    final angle = ((_sizeOf(v['angle']) ?? 135) - 90) * math.pi / 180;
+    return v['shape'] == 'radial'
+        ? RadialGradient(
+            colors: colours(v['colors'] as List),
+            stops: stops is List ? [for (final s in stops) (_sizeOf(s) ?? 0) / 100] : null,
+            radius: (_sizeOf(v['radius']) ?? 100) / 100,
+          )
+        : LinearGradient(
+            begin: Alignment(-math.cos(angle), -math.sin(angle)),
+            end: Alignment(math.cos(angle), math.sin(angle)),
+            colors: colours(v['colors'] as List),
+            stops: stops is List ? [for (final s in stops) (_sizeOf(s) ?? 0) / 100] : null,
+          );
+  }
+  return null;
+}
+
+/// Turned, scaled or moved. Degrees and hundredths, because a screen
+/// description has no decimals.
+Matrix4? _transformOf(Object? v) {
+  if (v is! Map) return null;
+  final m = Matrix4.identity();
+  if (_sizeOf(v['translateX']) != null || _sizeOf(v['translateY']) != null) {
+    m.translateByDouble(_sizeOf(v['translateX']) ?? 0, _sizeOf(v['translateY']) ?? 0, 0, 1);
+  }
+  if (_sizeOf(v['rotate']) case final double d) {
+    m.rotateZ(d * math.pi / 180);
+  }
+  if (_sizeOf(v['scale']) case final double sc) {
+    m.scaleByDouble(sc / 100, sc / 100, 1, 1);
+  }
+  return m;
+}
 
 /// The type scale, for `style: title` and the rest of the tokens.
 TextStyle? _typeOf(Object? v) => switch (v) {
@@ -923,6 +1027,9 @@ class _NodeState extends State<_Node> {
       color: _colorOf(args['color'], scheme) ?? out.color,
       fontSize: _sizeOf(args['fontSize']) ?? out.fontSize,
       fontWeight: _weightOf(args['fontWeight']) ?? out.fontWeight,
+      fontFamily: args['fontFamily'] as String? ?? out.fontFamily,
+      fontStyle: args['italic'] == true ? FontStyle.italic : out.fontStyle,
+      decoration: args['underline'] == true ? TextDecoration.underline : out.decoration,
       height: _sizeOf(args['lineHeight']) == null
           ? out.height
           : _sizeOf(args['lineHeight'])! / 100,
@@ -932,6 +1039,10 @@ class _NodeState extends State<_Node> {
       TextSpan(children: spans),
       style: out,
       textAlign: _textAlignOf(args['textAlign']),
+      maxLines: args['maxLines'] as int?,
+      overflow: args['ellipsis'] == true || args['maxLines'] != null
+          ? TextOverflow.ellipsis
+          : null,
     );
   }
 
@@ -956,40 +1067,31 @@ class _NodeState extends State<_Node> {
     // aspect ratio, be told it was provided, and see none of it.
 
     if (args['padding'] != null) {
-      out = Padding(padding: EdgeInsets.all(_spaceOf(args['padding'])), child: out);
+      out = Padding(padding: _edgeOf(args['padding']), child: out);
     }
 
     // The painted box: background, border, radius and shadow together, because
     // a radius without the thing it clips is a prop that does nothing.
     final background = _colorOf(args['background'], scheme);
     final border = _colorOf(args['border'], scheme);
-    final radius = _sizeOf(args['borderRadius']);
+    final radius = _radiusOf(args['borderRadius']);
+    final borderWidth = _sizeOf(args['borderWidth']) ?? 1;
     final shadow = _shadowOf(args['shadow'], scheme);
-    final gradient = args['gradient'];
+    final gradient = _gradientOf(args['gradient'], scheme);
     if (background != null ||
         border != null ||
         radius != null ||
         shadow.isNotEmpty ||
-        gradient is List) {
+        gradient != null) {
       out = Container(
-        clipBehavior: radius == null ? Clip.none : Clip.antiAlias,
+        clipBehavior: radius == null || args['clip'] == false ? Clip.none : Clip.antiAlias,
         decoration: BoxDecoration(
-          color: gradient is List ? null : background,
-          // Two colours and a diagonal, which is what a card front is. More
-          // than that is a design tool, and this is a screen description.
-          gradient: gradient is List && gradient.length >= 2
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _colorOf(gradient[0], scheme) ?? scheme.primary,
-                    _colorOf(gradient[1], scheme) ?? scheme.primaryContainer,
-                  ],
-                )
-              : null,
-          border: border == null ? null : Border.all(color: border),
-          borderRadius: radius == null ? null : BorderRadius.circular(radius),
+          color: gradient != null ? null : background,
+          gradient: gradient,
+          border: border == null ? null : Border.all(color: border, width: borderWidth),
+          borderRadius: radius,
           boxShadow: shadow,
+          shape: args['shape'] == 'circle' ? BoxShape.circle : BoxShape.rectangle,
         ),
         child: out,
       );
@@ -1021,9 +1123,13 @@ class _NodeState extends State<_Node> {
       );
     }
     if (args['margin'] != null) {
-      out = Padding(padding: EdgeInsets.all(_spaceOf(args['margin'])), child: out);
+      out = Padding(padding: _edgeOf(args['margin']), child: out);
+    }
+    if (_transformOf(args['transform']) case final Matrix4 m) {
+      out = Transform(transform: m, alignment: Alignment.center, child: out);
     }
     if (args['opacity'] case final int o) out = Opacity(opacity: o / 100, child: out);
+
     if (args['flex'] case final int flex) out = Expanded(flex: flex, child: out);
 
     // What a screen reader is told. The words are the application's; the
@@ -1046,6 +1152,40 @@ class _NodeState extends State<_Node> {
 
   Widget _draw(BuildContext context) {
     switch (n['kind'] as String? ?? '') {
+      // Things drawn on top of each other. A child that says `position:
+      // absolute` is placed by its own `top`/`right`/`bottom`/`left`; anything
+      // else is laid in the middle, which is what a background and a label on
+      // top of it are.
+      case 'stack':
+        return Stack(
+          alignment: switch (args['align']) {
+            'start' => Alignment.topLeft,
+            'end' => Alignment.bottomRight,
+            _ => Alignment.center,
+          },
+          clipBehavior: args['clip'] == false ? Clip.none : Clip.hardEdge,
+          children: [
+            // **The stack places its own children and nobody else's.** A node
+            // saying `position: absolute` three levels down, inside a column,
+            // is not out of this stack's flow — it is in the column's — so the
+            // placing is done here where the parent is known rather than by a
+            // child asking what it happens to be inside.
+            for (final c in children)
+              () {
+                final a = ((c['args'] as Map?) ?? const {}).cast<String, dynamic>();
+                final node = _Node(node: c, incoming: widget.incoming);
+                if (a['position'] != 'absolute') return node;
+                return Positioned(
+                  top: _sizeOf(a['top']),
+                  right: _sizeOf(a['right']),
+                  bottom: _sizeOf(a['bottom']),
+                  left: _sizeOf(a['left']),
+                  child: node,
+                );
+              }(),
+          ],
+        );
+
       case 'column':
         final runs = _group(children);
         return Column(

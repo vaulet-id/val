@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version 5
+version 6
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -88,28 +88,48 @@ screen Rota {
     // a colour, a size, a weight. This is the answer to "is the vocabulary
     // enough to design with": a publisher's own product can look like their
     // own product.
-    column(
-      gradient: ["#0E7C66", "#0A5348"],
-      borderRadius: 20,
-      aspectRatio: 1586,
-      padding: loose,
-      justify: between
-    ) {
-      row(justify: between, align: start) {
-        column(gap: none) {
-          text(phrase("companyName"), color: "#FFFFFF", fontWeight: bold, fontSize: 17)
-          text(phrase("roleValue"), color: "#BFE3D8", fontSize: 12)
+    stack {
+      column(
+        gradient: { colors: ["#0E7C66", "#0A5348", "#062E29"], angle: 160, stops: [0, 55, 100] },
+        borderRadius: [24, 24, 24, 4],
+        aspectRatio: 1586,
+        padding: loose,
+        justify: between,
+        shadow: { color: "#0A5348", blur: 28, y: 10 }
+      ) {
+        row(justify: between, align: start) {
+          column(gap: none) {
+            text(phrase("companyName"), color: "#FFFFFF", fontWeight: bold, fontSize: 17)
+            text(phrase("roleValue"), color: "#BFE3D8", fontSize: 12)
+          }
+          avatar(of: phrase("companyInitial"), size: 40)
         }
-        avatar(of: phrase("companyInitial"), size: 40)
-      }
-      row(justify: between, align: end) {
-        column(gap: none) {
-          text(phrase("shiftLabel"), color: "#BFE3D8", fontSize: 11, letterSpacing: 80)
-          text(state.shift, color: "#FFFFFF", fontSize: 22, fontWeight: bold)
+        row(justify: between, align: end) {
+          column(gap: none) {
+            text(phrase("shiftLabel"), color: "#BFE3D8", fontSize: 11, letterSpacing: 80)
+            text(state.shift, color: "#FFFFFF", fontSize: 22, fontWeight: bold)
+          }
+          badge(text: phrase("admitted"))
         }
-        badge(text: phrase("admitted"))
       }
+
+      // Out of the flow, and half off the card: a ring drawn with nothing but
+      // a shape, a border and a transform. This is the tier below the tokens —
+      // slower to write, and there is nothing between the publisher and what
+      // they meant.
+      column(
+        position: absolute,
+        top: -18,
+        right: -18,
+        width: 96,
+        height: 96,
+        shape: circle,
+        border: "#3BAE93",
+        borderWidth: 6,
+        opacity: 35
+      ) { }
     }
+
     card(text: phrase("onShift", shift: state.shift))
     field(text: phrase("pickShift"), icon: document, into: which)
     button(text: phrase("claim"), emphasis: primary, onTap: ClaimShift)
