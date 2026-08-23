@@ -355,6 +355,7 @@ fn compile(program: &Program, actions: bool) -> Result<Module, Vec<String>> {
     about.hosts = paper.hosts.iter().cloned().collect();
     about.addresses = paper.addresses.iter().cloned().collect();
     about.exports = paper.exports.iter().cloned().collect();
+    about.shows = paper.shows.iter().cloned().collect();
     about.imports = paper.imports.iter().cloned().collect();
     let about = encode_about(&about);
     module.section(&CustomSection { name: ABOUT_SECTION.into(), data: about.into() });
@@ -408,6 +409,7 @@ fn encode_about(a: &valang_runtime::About) -> Vec<u8> {
     m.insert("state".to_string(), Value::Map(a.state.clone()));
     m.insert("fields".to_string(), strings(&a.fields));
     m.insert("hosts".to_string(), strings(&a.hosts));
+    m.insert("shows".to_string(), strings(&a.shows));
     m.insert("addresses".to_string(), strings(&a.addresses));
     m.insert("exports".to_string(), strings(&a.exports));
     m.insert("imports".to_string(), strings(&a.imports));
@@ -555,6 +557,7 @@ pub fn report_of_module(bytes: &[u8]) -> Option<valang::report::Report> {
         hosts: set(about.hosts),
         addresses: set(about.addresses),
         exports: set(about.exports),
+        shows: set(about.shows),
         imports: set(about.imports),
         irreversible: !wants.discloses.is_empty()
             || !wants.proves.is_empty()
@@ -663,6 +666,7 @@ fn stated_about(bytes: &[u8]) -> Option<valang_runtime::About> {
         state,
         fields: strings(m.get("fields")),
         hosts: strings(m.get("hosts")),
+        shows: strings(m.get("shows")),
         addresses: strings(m.get("addresses")),
         exports: strings(m.get("exports")),
         imports: strings(m.get("imports")),

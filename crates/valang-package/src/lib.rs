@@ -246,6 +246,11 @@ pub fn report_rows(r: &Report) -> BTreeMap<String, Vec<String>> {
     };
     put(&mut out, "reads", &r.reads);
     put(&mut out, "checks", &r.checks);
+    // **Showing is its own line.** A card the host draws inside somebody
+    // else's application is not a read — nothing about it reaches the module —
+    // but the person's badge is on that screen, and they decide about that
+    // before they install rather than the first time they see it.
+    put(&mut out, "shows", &r.shows);
     put(&mut out, "discloses", &r.discloses);
     put(&mut out, "proves", &r.proves);
     put(&mut out, "issues", &r.issues);

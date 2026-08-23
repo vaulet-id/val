@@ -54,6 +54,20 @@ pub struct Report {
     pub exports: BTreeSet<String>,
     /// What this package takes from others, as written.
     pub imports: BTreeSet<String>,
+    /// The credentials a screen asks the host to draw a card of.
+    ///
+    /// **Showing is not reading**, and the sheet has to say both. An
+    /// application holding `credential.check` learns that a door opened and
+    /// nothing else — but if one of its screens says `credentialCard(of:
+    /// EmployeeBadge)`, the person's badge appears inside somebody else's
+    /// application, and that is a sentence they are owed before they install
+    /// it. Nothing about the card reaches the application: the host draws it.
+    ///
+    /// Read off the screens rather than measured from the imports, because
+    /// drawing imports nothing. What makes the declaration honest is the other
+    /// end: the wallet draws a card only for a credential named here, so a
+    /// package that leaves one out loses the card rather than hiding it.
+    pub shows: BTreeSet<String>,
     pub irreversible: bool,
 }
 
@@ -80,6 +94,31 @@ pub fn report(p: &Program) -> Report {
             _ => None,
         })
         .collect();
+    // Every card any screen asks for, including the ones inside a row inside a
+    // column: a node three levels down draws just as well as one at the top.
+    fn cards(node: &crate::ast::UiNode, out: &mut BTreeSet<String>) {
+        if matches!(node.kind.as_str(), "credentialCard" | "idCard" | "wallet.idCard") {
+            let named = node
+                .args
+                .iter()
+                .find(|a| a.name.as_deref() == Some("of"))
+                .or_else(|| node.args.iter().find(|a| a.name.is_none()));
+            if let Some(arg) = named {
+                if let Some(path) = arg.value.path() {
+                    out.insert(path);
+                }
+            }
+        }
+        for child in &node.children {
+            cards(child, out);
+        }
+    }
+    for screen in &p.screens {
+        for node in &screen.tree {
+            cards(node, &mut r.shows);
+        }
+    }
+
     r.exports = p
         .components
         .iter()

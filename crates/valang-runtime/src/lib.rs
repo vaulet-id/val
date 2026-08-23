@@ -245,6 +245,12 @@ pub struct About {
     /// reach, and what it exports and imports. A wallet renders one sheet and
     /// has one place to render it from.
     pub hosts: Vec<String>,
+    /// The credentials a screen asks the host to draw a card of.
+    ///
+    /// Stated rather than measured — drawing imports nothing — and made honest
+    /// at the other end: a host draws a card only for a credential named here,
+    /// so leaving one out costs the card rather than hiding it.
+    pub shows: Vec<String>,
     pub addresses: Vec<String>,
     pub exports: Vec<String>,
     pub imports: Vec<String>,
@@ -358,6 +364,7 @@ impl About {
             state: initial_state(p, &State::new()),
             fields: p.state.iter().map(|f| f.name.clone()).collect(),
             hosts: Vec::new(),
+            shows: Vec::new(),
             addresses: Vec::new(),
             exports: Vec::new(),
             imports: Vec::new(),

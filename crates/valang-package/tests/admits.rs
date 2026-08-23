@@ -208,6 +208,13 @@ fn a_gate_the_module_does_not_back_is_refused() {
     // re-signs. Both are done here, because a check that only caught the lazy
     // version of this would catch nothing.
     pkg.integrity = hex_of(&pkg.module);
+    // **The report has to agree, or the wrong check catches this first.** The
+    // spliced `about` also says which card the screens draw, so the shipped
+    // report is brought up to it — a package refused for a mismatched `shows`
+    // line would pass this test while proving nothing about the gate.
+    pkg.report = valang_package::report_rows(
+        &valang_wasm::compile::report_of_module(&pkg.module).expect("it has a report"),
+    );
     sign(&mut pkg, &key);
 
     match install_with(&pkg, &Wallet) {
@@ -258,4 +265,25 @@ fn the_door_opens_for_whoever_holds_one_and_for_nobody_else() {
 fn an_application_with_no_gate_opens() {
     let about = valang_runtime::About { admits: Vec::new(), ..Default::default() };
     assert!(valang_runtime::admission(&about, &Holding(None)).is_none());
+}
+
+/// **A card on a screen is a line on the sheet.**
+///
+/// The staff example draws the badge it opens for. Nothing about that card
+/// reaches the module — the host draws it — so no import measures it and the
+/// report has to be told. What keeps the telling honest is the other end: a
+/// wallet draws a card only for a credential named here.
+#[test]
+fn a_card_a_screen_draws_is_named_in_the_report() {
+    let pkg = published(text());
+    let report = valang_wasm::compile::report_of_module(&pkg.module).expect("it has a report");
+    assert!(
+        report.shows.contains("EmployeeBadge"),
+        "the badge it draws is not in the report: {:?}",
+        report.shows
+    );
+    // And it is still a check rather than a read: drawing a card is not
+    // reading one, and the sheet says both.
+    assert!(report.reads.is_empty(), "{:?}", report.reads);
+    assert!(report.checks.iter().any(|c| c.contains("EmployeeBadge")));
 }
