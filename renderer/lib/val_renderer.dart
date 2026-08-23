@@ -1536,10 +1536,55 @@ class _NodeState extends State<_Node> {
           onTap: action == null ? null : () => _tap(action),
         );
 
+        // A row that is a setting rather than a way somewhere: the switch is
+        // the row's own, so a settings list is rows and not rows with widgets
+        // dropped between them.
+        final into = (args['into'] as String?)?.trim();
+        final switched = into == null
+            ? row
+            : ListTile(
+                contentPadding: _grouped(context)
+                    ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4)
+                    : null,
+                leading: args['icon'] == null
+                    ? null
+                    : Icon(_iconOf(args['icon']), size: 26, color: scheme.onSurfaceVariant),
+                title: _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                subtitle: args['detail'] == null
+                    ? null
+                    : Text(_detail(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+                trailing: Switch(
+                  value: _Form.of(context)[into] == true,
+                  onChanged: (v) => _Form.set(context, into, v),
+                ),
+              );
+
+        // Swiped away, where the screen said what that does. `Dismissible`
+        // needs a key that survives a rebuild, and the row's own words are the
+        // only thing here that does.
+        final remove = (args['onRemove'] as String?)?.trim();
+        final swipeable = remove == null
+            ? switched
+            : Dismissible(
+                key: ValueKey('${args['text']}-${args['detail']}'),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  color: scheme.errorContainer,
+                  child: Icon(Icons.delete_outline, color: scheme.onErrorContainer),
+                ),
+                onDismissed: (_) => _tap(remove),
+                child: switched,
+              );
+
         // **A row inside a card does not wear a card of its own.** A settings
         // group and a chat list are rows with a rule between them under one
         // rounded edge; a card each gave eight shadows down the screen.
-        return _grouped(context) ? row : Card(child: row);
+        return _grouped(context) ? swipeable : Card(child: swipeable);
       }
 
       case 'text':
@@ -2287,7 +2332,22 @@ class _NodeState extends State<_Node> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600));
-        final press = (state == 'disabled' || busy) ? null : () => _tap(action);
+        // **A button can wait for an answer.** A screen could not read what a
+        // form held, so a button whose action requires a field was pressable
+        // with the field empty and refused a moment later by the action's own
+        // `require` — a refusal a person reads as the application being
+        // broken. `needs` names the field, and the wallet knows whether it is
+        // filled because the wallet is holding it.
+        final needs = (args['needs'] as String?)?.trim();
+        final unanswered = needs != null &&
+            switch (_Form.of(context)[needs]) {
+              null => true,
+              final String v => v.trim().isEmpty,
+              final List<Object?> v => v.isEmpty,
+              _ => false,
+            };
+        final press =
+            (state == 'disabled' || busy || unanswered) ? null : () => _tap(action);
         return Tooltip(
           message: action == null
               ? ''

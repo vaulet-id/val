@@ -67,7 +67,8 @@
         "emphasis": "Emphasis?",
         "icon": "Icon?",
         "state": "State?",
-        "onTap": "Action"
+        "onTap": "Action",
+        "needs": "Name?"
       },
       "primary": "text"
     },
@@ -394,7 +395,9 @@
         "onTap": "Action?",
         "avatar": "Text?",
         "value": "Text?",
-        "count": "int?"
+        "count": "int?",
+        "into": "Name?",
+        "onRemove": "Action?"
       },
       "primary": "text"
     },

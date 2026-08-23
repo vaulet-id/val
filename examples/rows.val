@@ -34,7 +34,8 @@ screen Rows {
     card(margin: none, borderRadius: 0) {
       tile(text: "Somchai P.", detail: "See you at the counter", avatar: "Somchai", value: "09:12", count: 2, onTap: Open)
       tile(text: "Acme HR", detail: "Your badge is ready", avatar: "Acme", value: "Yesterday", onTap: Open)
-      tile(text: "Codefin", detail: "Receipt for 180 THB", avatar: "Codefin", value: "Mon")
+      // Swiped away, where the screen says what that does.
+      tile(text: "Codefin", detail: "Receipt for 180 THB", avatar: "Codefin", value: "Mon", onRemove: Open)
     }
 
     section("Settings")
@@ -43,8 +44,12 @@ screen Rows {
     // held in from both edges with the corners rounded.
     card {
       tile(text: "Language", icon: document, value: state.language, onTap: Open)
-      tile(text: "Notifications", icon: warning, trailing: chevron, onTap: Open)
+      // A setting rather than a way somewhere: the switch is the row's own.
+      tile(text: "Notifications", icon: warning, detail: "When a shift is offered", into: notify)
       tile(text: "Storage", icon: wallet, value: "1.2 GB")
     }
+
+    // A button that waits for an answer rather than refusing after the press.
+    button(text: "Save", emphasis: primary, needs: notify, onTap: Open)
   }
 }
