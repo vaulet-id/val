@@ -17,7 +17,7 @@ fn program(tree: &str) -> String {
     format!(
         r#"
 app "example.branches"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -111,7 +111,7 @@ fn a_parameter_is_substituted_in_both_branches() {
     let src = format!(
         r#"
 app "example.branches"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -164,7 +164,7 @@ screen Home {{
 fn a_phrase_in_the_other_branch_is_flattened() {
     let src = r#"
 app "example.branches"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -197,7 +197,7 @@ screen Home {
 fn a_cycle_through_the_other_branch_is_still_a_cycle() {
     let src = r#"
 app "example.branches"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -237,14 +237,14 @@ screen Home {
 /// The assertion is that it returns at all: what it says is a second question.
 #[test]
 fn a_type_written_with_the_wrong_bracket_reports_rather_than_spinning() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction f(rows: List(int)): int {\n  return 1\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nfunction f(rows: List(int)): int {\n  return 1\n}\n";
     let e = errors(src);
     assert!(!e.is_empty(), "a malformed type said nothing at all");
 }
 
 #[test]
 fn a_parameter_that_is_neither_a_name_nor_a_type_reports() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction f(: , 9): int {\n  return 1\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nfunction f(: , 9): int {\n  return 1\n}\n";
     let e = errors(src);
     assert!(!e.is_empty(), "a malformed parameter list said nothing at all");
 }
@@ -275,7 +275,7 @@ fn a_loop_says_what_it_reads_over() {
 /// the language's own rule says it should not.
 #[test]
 fn a_switch_arm_ends_at_the_line() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction label(p: int): string {\n  return switch (p) {\n    >= 1000 => \"gold\"\n    >= 100 => \"silver\"\n    default => \"bronze\"\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nfunction label(p: int): string {\n  return switch (p) {\n    >= 1000 => \"gold\"\n    >= 100 => \"silver\"\n    default => \"bronze\"\n  }\n}\n";
     assert!(errors(src).is_empty(), "{:?}", errors(src));
 }
 
@@ -283,7 +283,7 @@ fn a_switch_arm_ends_at_the_line() {
 /// readings are the same arm.
 #[test]
 fn a_switch_arm_may_still_end_at_a_comma() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction label(p: int): string {\n  return switch (p) {\n    >= 1000 => \"gold\",\n    default => \"bronze\",\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nfunction label(p: int): string {\n  return switch (p) {\n    >= 1000 => \"gold\",\n    default => \"bronze\",\n  }\n}\n";
     assert!(errors(src).is_empty(), "{:?}", errors(src));
 }
 
@@ -291,7 +291,7 @@ fn a_switch_arm_may_still_end_at_a_comma() {
 /// they belong to, which is a newline away from it.
 #[test]
 fn a_data_clause_continues_onto_the_next_line() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.read(Holding)\n}\n\ncredential Holding as \"https://org.vaulet.id/example/credential/holding\" {\n  amount: int\n}\n\ntrust FromBroker(h: Holding) {\n  anchor: broker.co.th\n}\n\nstate {\n  n: int default 0\n}\n\naction Go {\n  verify {\n    const holdings = credentials of Holding verified with FromBroker\n      limit 200\n  }\n\n  update {\n    n: 1\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n  credential.read(Holding)\n}\n\ncredential Holding as \"https://org.vaulet.id/example/credential/holding\" {\n  amount: int\n}\n\ntrust FromBroker(h: Holding) {\n  anchor: broker.co.th\n}\n\nstate {\n  n: int default 0\n}\n\naction Go {\n  verify {\n    const holdings = credentials of Holding verified with FromBroker\n      limit 200\n  }\n\n  update {\n    n: 1\n  }\n}\n";
     let e = errors(src);
     assert!(!e.iter().any(|m| m.contains("is a condition")), "{e:?}");
 }

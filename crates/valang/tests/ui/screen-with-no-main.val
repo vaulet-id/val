@@ -1,5 +1,5 @@
 app "ui.screen-with-no-main"
-version 1
+version "1.0.0"
 
 capabilities {
 }

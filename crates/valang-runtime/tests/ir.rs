@@ -27,7 +27,7 @@ fn analysed() -> valang::ast::Program {
 
 const SRC: &str = r#"
 app "example.ir"
-version 1
+version "1.0.0"
 
 capabilities {
 }

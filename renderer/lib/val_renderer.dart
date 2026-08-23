@@ -1072,7 +1072,12 @@ class _NodeState extends State<_Node> {
       height: _sizeOf(args['lineHeight']) == null
           ? out.height
           : _sizeOf(args['lineHeight'])! / 100,
-      letterSpacing: _sizeOf(args['letterSpacing']) ?? out.letterSpacing,
+      // **Hundredths, like the line height above it.** Read as points, `80`
+      // put a space of eighty between every letter and spread four characters
+      // across a card.
+      letterSpacing: _sizeOf(args['letterSpacing']) == null
+          ? out.letterSpacing
+          : _sizeOf(args['letterSpacing'])! / 100,
     );
     return Text.rich(
       TextSpan(children: spans),
@@ -1266,7 +1271,10 @@ class _NodeState extends State<_Node> {
             'end' => Alignment.bottomRight,
             _ => Alignment.center,
           },
-          clipBehavior: args['clip'] == false ? Clip.none : Clip.hardEdge,
+          // **Nothing is clipped unless somebody asks.** Half of what a stack
+          // is for hangs off the edge — a ring, a badge, a corner mark — and
+          // clipping by default cut every one of them.
+          clipBehavior: args['clip'] == true ? Clip.hardEdge : Clip.none,
           children: [
             // **The stack places its own children and nobody else's.** A node
             // saying `position: absolute` three levels down, inside a column,
@@ -1306,7 +1314,11 @@ class _NodeState extends State<_Node> {
           );
         }
         return Column(
-          mainAxisSize: MainAxisSize.min,
+          // **Not `min` when the column says where things go.** Shrink-wrapped,
+          // `justify: between` has no space to distribute, so a card's header
+          // and footer sat together in the middle of it.
+          mainAxisSize:
+              args['justify'] == null ? MainAxisSize.min : MainAxisSize.max,
           mainAxisAlignment: _mainOf(args['justify'], MainAxisAlignment.start),
           crossAxisAlignment: _crossOf(args['align'], CrossAxisAlignment.stretch),
           children: [

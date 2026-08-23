@@ -6,7 +6,7 @@
 // have.
 
 app "th.go.ect.referendum"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(NationalId)

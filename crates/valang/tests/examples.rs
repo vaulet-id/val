@@ -196,7 +196,7 @@ fn no_line_says_more_than_two_things() {
 fn a_claim_may_demand_where_its_value_came_from() {
     let src = r#"
 app "example"
-version 1
+version "1.0.0"
 capabilities { credential.read(Receipt) credential.issue(Card) }
 credential Receipt as "https://org.vaulet.id/example/credential/receipt" { amount: int }
 credential Card as "https://org.vaulet.id/example/credential/card" { points: int }
@@ -224,7 +224,7 @@ action Earn {
 fn declaring_one_credential_and_reading_another_is_refused() {
     let src = r#"
 app "example.mismatch"
-version 1
+version "1.0.0"
 capabilities { credential.read(LoyaltyMember) }
 credential LoyaltyMember as "https://org.vaulet.id/example/credential/loyalty-member" { points: int }
 credential Passport as "https://org.vaulet.id/example/credential/passport" { document_number: string }
@@ -247,7 +247,7 @@ action Peek {
 fn a_proof_over_an_apis_answer_is_refused() {
     let src = r#"
 app "example.oracle"
-version 1
+version "1.0.0"
 capabilities {
   api.query(audience: "broker.co.th", presenting: Holding)
   disclosure.present
@@ -273,7 +273,7 @@ action Bad {
 fn an_effect_cannot_read_another_effects_result() {
     let src = r#"
 app "example.chain"
-version 1
+version "1.0.0"
 capabilities { credential.issue(Card) }
 credential Card as "https://org.vaulet.id/example/credential/card" { points: int }
 action Two {
@@ -306,7 +306,7 @@ fn a_package_says_what_it_may_do_once() {
 fn an_action_no_screen_names_is_reported() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 capabilities { }
 action Reachable { compute { const a = 1 } }
 action Orphan    { compute { const b = 2 } }
@@ -352,7 +352,7 @@ fn a_screen_declares_what_it_sees() {
 fn an_application_may_decline_for_its_own_reasons() {
     let src = r#"
 app "example.decline"
-version 1
+version "1.0.0"
 capabilities { credential.read(Receipt) }
 credential Receipt as "https://org.vaulet.id/example/credential/receipt" { amount: int }
 trust FromShop(r: Receipt) { anchor: "shop" require { r.signature.valid } }
@@ -389,7 +389,7 @@ fn a_key_nothing_translates_is_a_failed_build() {
 
     let src = r#"
 app "example.decline"
-version 1
+version "1.0.0"
 capabilities { }
 action Earn { compute { refuse "tooSmall" } }
 "#;

@@ -12,7 +12,7 @@ const CORE: &str = include_str!("../../../hosts/core.json");
 /// A package that exports one component and keeps a helper to itself.
 const KIT: &str = r#"
 app "org.vaulet.ui"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -43,7 +43,7 @@ fn app(body: &str) -> String {
     format!(
         r#"
 app "org.vaulet.shop"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -62,7 +62,7 @@ fn an_exported_component_may_be_drawn_by_another_package() {
     let e = errors(
         &app(
             r#"
-import "org.vaulet.ui/1" { MoneyCard }
+import "org.vaulet.ui/1.0.0" { MoneyCard }
 
 @main
 screen Home {
@@ -84,7 +84,7 @@ fn a_private_helper_comes_along_without_its_name() {
     let e = errors(
         &app(
             r#"
-import "org.vaulet.ui/1" { MoneyCard }
+import "org.vaulet.ui/1.0.0" { MoneyCard }
 
 component Amount(text: string) {
   section(text)
@@ -107,7 +107,7 @@ screen Home {
 #[test]
 fn what_a_package_keeps_to_itself_cannot_be_taken() {
     let e = errors(
-        &app("import \"org.vaulet.ui/1\" { Amount }\n\n@main\nscreen Home {\n  column {\n    card(\"x\")\n  }\n}"),
+        &app("import \"org.vaulet.ui/1.0.0\" { Amount }\n\n@main\nscreen Home {\n  column {\n    card(\"x\")\n  }\n}"),
         &[KIT],
     );
     assert!(e.iter().any(|m| m.contains("declares `Amount` and does not export it")), "{e:?}");
@@ -119,7 +119,7 @@ fn a_package_the_build_cannot_reach_says_which_ones_it_has() {
         &app("import \"org.vaulet.ui/2\" { MoneyCard }\n\n@main\nscreen Home {\n  column {\n    card(\"x\")\n  }\n}"),
         &[KIT],
     );
-    assert!(e.iter().any(|m| m.contains("`org.vaulet.ui/1`")), "{e:?}");
+    assert!(e.iter().any(|m| m.contains("`org.vaulet.ui/1.0.0`")), "{e:?}");
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn a_name_that_is_both_imported_and_declared_is_refused() {
     let e = errors(
         &app(
             r#"
-import "org.vaulet.ui/1" { MoneyCard }
+import "org.vaulet.ui/1.0.0" { MoneyCard }
 
 component MoneyCard(label: string, amount: string) {
   card(label)
@@ -152,7 +152,7 @@ screen Home {
 fn an_exported_component_may_not_read_state() {
     let leaky = r#"
 app "org.vaulet.leaky"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -175,7 +175,7 @@ export component Balance() {
 fn the_importer_is_told_too() {
     let leaky = r#"
 app "org.vaulet.leaky"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -189,7 +189,7 @@ export component Balance() {
 }
 "#;
     let e = errors(
-        &app("import \"org.vaulet.leaky/1\" { Balance }\n\n@main\nscreen Home {\n  column {\n    Balance()\n  }\n}"),
+        &app("import \"org.vaulet.leaky/1.0.0\" { Balance }\n\n@main\nscreen Home {\n  column {\n    Balance()\n  }\n}"),
         &[leaky],
     );
     assert!(e.iter().any(|m| m.contains("is exported and reads `state`")), "{e:?}");
@@ -203,7 +203,7 @@ fn export_marks_a_component_and_nothing_else() {
 
 #[test]
 fn an_import_lists_what_it_takes() {
-    let e = errors(&app("import \"org.vaulet.ui/1\"\n"), &[KIT]);
+    let e = errors(&app("import \"org.vaulet.ui/1.0.0\"\n"), &[KIT]);
     assert!(e.iter().any(|m| m.contains("an import lists what it takes")), "{e:?}");
 }
 
@@ -214,7 +214,7 @@ fn an_import_lists_what_it_takes() {
 fn what_an_import_draws_is_declared_by_the_package_that_draws_it() {
     let media = r#"
 app "org.vaulet.media"
-version 1
+version "1.0.0"
 
 capabilities {
   media.video
@@ -225,7 +225,7 @@ export component Clip(src: string) {
 }
 "#;
     let without = errors(
-        &app("import \"org.vaulet.media/1\" { Clip }\n\n@main\nscreen Home {\n  column {\n    Clip(src: \"a.mp4\")\n  }\n}"),
+        &app("import \"org.vaulet.media/1.0.0\" { Clip }\n\n@main\nscreen Home {\n  column {\n    Clip(src: \"a.mp4\")\n  }\n}"),
         &[media],
     );
     assert!(
@@ -234,7 +234,7 @@ export component Clip(src: string) {
     );
 
     let with = errors(
-        &app("import \"org.vaulet.media/1\" { Clip }\n\n@main\nscreen Home {\n  column {\n    Clip(src: \"a.mp4\")\n  }\n}")
+        &app("import \"org.vaulet.media/1.0.0\" { Clip }\n\n@main\nscreen Home {\n  column {\n    Clip(src: \"a.mp4\")\n  }\n}")
             .replace("capabilities {\n}", "capabilities {\n  media.video\n}"),
         &[media],
     );
@@ -247,7 +247,7 @@ export component Clip(src: string) {
 #[test]
 fn a_failed_import_is_reported_once() {
     let e = errors(
-        &app("import \"org.vaulet.ui/1\" { Amount }\n\n@main\nscreen Home {\n  column {\n    Amount(amount: \"120\")\n  }\n}"),
+        &app("import \"org.vaulet.ui/1.0.0\" { Amount }\n\n@main\nscreen Home {\n  column {\n    Amount(amount: \"120\")\n  }\n}"),
         &[KIT],
     );
     assert_eq!(e.len(), 1, "{e:?}");
@@ -258,7 +258,7 @@ fn a_failed_import_is_reported_once() {
 #[test]
 fn a_package_with_no_screens_is_still_checked() {
     let e = errors(
-        "app \"org.vaulet.badkit\"\nversion 1\n\ncapabilities {\n}\n\nexport component Broken(x: string) {\n  tabs {\n    text(x)\n  }\n}\n",
+        "app \"org.vaulet.badkit\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nexport component Broken(x: string) {\n  tabs {\n    text(x)\n  }\n}\n",
         &[],
     );
     assert!(e.iter().any(|m| m.contains("`tabs` is not something this host provides")), "{e:?}");
@@ -282,7 +282,7 @@ fn a_component_a_screen_draws_is_reported_once() {
 #[test]
 fn a_component_may_use_another_component() {
     let e = errors(
-        "app \"org.vaulet.kit\"\nversion 1\n\ncapabilities {\n}\n\nexport component Outer(x: string) {\n  card {\n    text: x\n    Inner(x: x)\n  }\n}\n\ncomponent Inner(x: string) {\n  text(x)\n}\n",
+        "app \"org.vaulet.kit\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nexport component Outer(x: string) {\n  card {\n    text: x\n    Inner(x: x)\n  }\n}\n\ncomponent Inner(x: string) {\n  text(x)\n}\n",
         &[],
     );
     assert!(e.is_empty(), "{e:?}");
@@ -293,7 +293,7 @@ fn a_component_may_use_another_component() {
 fn an_export_may_be_built_from_an_import() {
     let base = r#"
 app "org.base"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -304,12 +304,12 @@ export component Chip(label: string) {
 "#;
     let middle = r#"
 app "org.middle"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.base/1" { Chip }
+import "org.base/1.0.0" { Chip }
 
 export component Row(label: string) {
   column {
@@ -319,12 +319,12 @@ export component Row(label: string) {
 "#;
     let app = r#"
 app "org.app"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.middle/1" { Row }
+import "org.middle/1.0.0" { Row }
 
 @main
 screen Home {
@@ -342,12 +342,12 @@ screen Home {
 fn a_package_that_imports_itself_says_so() {
     let me = r#"
 app "org.me"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.me/1" { Chip }
+import "org.me/1.0.0" { Chip }
 
 export component Chip(label: string) {
   section(label)
@@ -369,7 +369,7 @@ screen Home {
 fn a_default_may_not_reach_for_state_either() {
     let leaky = r#"
 app "org.leaky"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -397,7 +397,7 @@ export component Badge(label: string, n: int default state.points) {
 fn one_screen_still_says_where_it_opens() {
     let one = r#"
 app "org.one"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -417,12 +417,12 @@ screen Home {
 fn two_packages_that_import_each_other_terminate() {
     let a = r#"
 app "org.a"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.b/1" { FromB }
+import "org.b/1.0.0" { FromB }
 
 export component FromA(label: string) {
   column {
@@ -432,12 +432,12 @@ export component FromA(label: string) {
 "#;
     let b = r#"
 app "org.b"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.a/1" { FromA }
+import "org.a/1.0.0" { FromA }
 
 export component FromB(label: string) {
   column {
@@ -447,12 +447,12 @@ export component FromB(label: string) {
 "#;
     let app = r#"
 app "org.app"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.a/1" { FromA }
+import "org.a/1.0.0" { FromA }
 
 @main
 screen Home {

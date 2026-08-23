@@ -129,7 +129,7 @@ fn the_two_engines_agree_about_every_example() {
 #[test]
 fn the_two_engines_agree_about_a_refusal() {
     const REFUSING: &str = r#"app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)
@@ -186,7 +186,7 @@ action Earn {
 #[test]
 fn the_two_engines_agree_about_a_payment() {
     const PAYING: &str = r#"app "th.co.codefin.pay"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(TransitPass)
@@ -260,7 +260,7 @@ action Settle {
 fn both_engines_agree_that_a_disclosure_cannot_be_taken_back() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(NationalId)

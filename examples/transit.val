@@ -6,7 +6,7 @@
 // signed and then signs something of its own, or refuses.
 
 app "th.co.transit.pass"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(TransitPass)

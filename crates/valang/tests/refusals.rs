@@ -16,7 +16,7 @@ fn errors(src: &str) -> Vec<String> {
 
 fn program(body: &str) -> String {
     format!(
-        "app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\nstate {{\n  n: int default 0\n}}\n\n{body}\n\n@main\nscreen Home {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
+        "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {{\n}}\n\nstate {{\n  n: int default 0\n}}\n\n{body}\n\n@main\nscreen Home {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
     )
 }
 

@@ -1,5 +1,5 @@
 app "ui.number-that-is-not-decimal"
-version 1
+version "1.0.0"
 
 capabilities {
 }

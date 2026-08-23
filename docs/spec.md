@@ -5,7 +5,7 @@ wallet, beside their passport and their bank credentials.
 
 ```val
 app "th.co.codefin.loyalty"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)
@@ -52,7 +52,7 @@ screen in one file may call an action declared in another.
 
 ```val
 app "th.co.codefin.loyalty"     // reverse-DNS, in quotes
-version 1
+version "1.0.0"
 
 capabilities { … }              // what this app may do — declared once per package
 admits { … }                    // who it opens for at all — optional, declared once

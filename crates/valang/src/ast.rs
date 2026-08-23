@@ -390,7 +390,7 @@ pub struct UiNode {
     pub span: Span,
 }
 
-/// `import "org.vaulet.ui/1" { MoneyCard, Chip }`.
+/// `import "org.vaulet.ui/1.0.0" { MoneyCard, Chip }`.
 ///
 /// Named the way every other external thing is named in this language — a
 /// quoted identifier with a version, as `host "id.vaulet.wallet/1"` is. A
@@ -402,7 +402,7 @@ pub struct UiNode {
 /// crossed is signed as part of it.
 #[derive(Debug, Clone)]
 pub struct ImportDecl {
-    /// `org.vaulet.ui/1`, as written.
+    /// `org.vaulet.ui/1.0.0`, as written.
     pub package: String,
     pub names: Vec<String>,
     pub span: Span,

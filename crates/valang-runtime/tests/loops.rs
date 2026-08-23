@@ -17,7 +17,7 @@ fn drawn(body: &str) -> Vec<String> {
     let src = format!(
         r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -110,7 +110,7 @@ fn a_loop_inside_a_loop_keeps_its_own_row() {
 fn a_row_does_not_outlive_the_loop() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }

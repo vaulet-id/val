@@ -14,7 +14,7 @@ const WALLET: &str = include_str!("../../../fixtures/wallet.json");
 
 const SRC: &str = r#"
 app "example.branches"
-version 1
+version "1.0.0"
 
 capabilities {
 }

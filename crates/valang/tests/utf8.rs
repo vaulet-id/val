@@ -11,7 +11,7 @@ fn analyse(src: &str) -> Vec<String> {
 
 const WITH_UTF8: &str = r#"
 app "example.utf8"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -37,7 +37,7 @@ fn a_string_may_hold_any_character() {
 /// on one byte of it.
 #[test]
 fn an_unclosed_string_of_wide_characters_still_terminates() {
-    let msgs = analyse("app \"x\"\nversion 1\nstate { s: string default \"— ไทย");
+    let msgs = analyse("app \"x\"\nversion \"1.0.0\"\nstate { s: string default \"— ไทย");
     assert!(msgs.iter().any(|m| m.contains("never closed")), "{msgs:?}");
 }
 
@@ -49,7 +49,7 @@ fn a_list_may_be_written_out() {
     let msgs = analyse(
         r#"
 app "example.list"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -83,7 +83,7 @@ action Pick {
 #[test]
 fn a_list_still_has_no_index() {
     let msgs = analyse(
-        "app \"x\"\nversion 1\ncapabilities { }\nfunction f(xs: List<int>): int { return xs[0] }",
+        "app \"x\"\nversion \"1.0.0\"\ncapabilities { }\nfunction f(xs: List<int>): int { return xs[0] }",
     );
     assert!(msgs.iter().any(|m| m.contains("no index")), "{msgs:?}");
 }

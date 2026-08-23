@@ -36,7 +36,7 @@ fn a_wallet_runs_what_it_was_handed() {
     // 2. Which application it is, read off the module's own metadata.
     let about = valang_wasm::compile::about_of(&bytes).expect("it says what it is");
     assert_eq!(about.app, "th.co.codefin.loyalty");
-    assert_eq!(about.version, "1");
+    assert_eq!(about.version, "1.0.0");
     let action = about.action("ScanToEarn").expect("it carries the action");
     assert_eq!(action.inputs.len(), 1, "one credential is asked for");
     assert_eq!(action.inputs[0].credential, "PurchaseReceipt");

@@ -13,7 +13,7 @@ use valang_runtime::{run_action, Outcome};
 
 const SRC: &str = r#"
 app "example.builtins"
-version 1
+version "1.0.0"
 
 capabilities {
 }

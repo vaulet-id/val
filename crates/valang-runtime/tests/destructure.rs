@@ -17,7 +17,7 @@ fn drawn(compute: &str, draws: &str) -> Vec<String> {
     let src = format!(
         r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -87,7 +87,7 @@ fn a_field_the_record_does_not_have_is_nothing() {
 fn a_parameter_left_out_takes_its_default() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }

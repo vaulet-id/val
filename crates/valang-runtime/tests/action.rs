@@ -13,7 +13,7 @@ const WALLET: &str = include_str!("../../../fixtures/wallet.json");
 
 fn program(body: &str) -> String {
     format!(
-        "app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\nstate {{\n  n: int default 0\n}}\n\n{body}\n\n@main\nscreen Home {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
+        "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {{\n}}\n\nstate {{\n  n: int default 0\n}}\n\n{body}\n\n@main\nscreen Home {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
     )
 }
 
@@ -80,7 +80,7 @@ fn a_binding_that_shares_a_name_with_state_is_still_the_binding() {
 /// read as assignments, both fields end up holding the same value.
 #[test]
 fn an_update_is_one_patch_and_not_a_sequence() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  a: int default 1\n  b: int default 2\n}\n\naction Swap {\n  update {\n    a: state.b\n    b: state.a\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Swap }\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nstate {\n  a: int default 1\n  b: int default 2\n}\n\naction Swap {\n  update {\n    a: state.b\n    b: state.a\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Swap }\n  }\n}\n";
     let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
     let (compiled, d) = valang::analyse_fully(src, None, &hosts);
     assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
@@ -120,7 +120,7 @@ fn the_state_root_is_of_the_state_and_nothing_else() {
 /// would put more in state than it carries does not commit.
 #[test]
 fn a_state_larger_than_the_host_carries_does_not_commit() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  rows: List<int> default []\n}\n\naction Fill {\n  compute {\n    const many = (1...9000).map { r -> r }\n  }\n\n  update {\n    rows: many\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Fill }\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nstate {\n  rows: List<int> default []\n}\n\naction Fill {\n  compute {\n    const many = (1...9000).map { r -> r }\n  }\n\n  update {\n    rows: many\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Fill }\n  }\n}\n";
     let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
     let (compiled, d) = valang::analyse_fully(src, None, &hosts);
     assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
@@ -140,7 +140,7 @@ fn a_state_larger_than_the_host_carries_does_not_commit() {
 /// leave the lines before it applied.
 #[test]
 fn a_trap_partway_through_an_update_leaves_no_half_state() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  a: int default 1\n  b: int default 1\n}\n\naction Go {\n  update {\n    a: 7\n    b: state.b * 9223372036854775807 * 2\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nstate {\n  a: int default 1\n  b: int default 1\n}\n\naction Go {\n  update {\n    a: 7\n    b: state.b * 9223372036854775807 * 2\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
     let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
     let (compiled, d) = valang::analyse_fully(src, None, &hosts);
     assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");
@@ -164,7 +164,7 @@ fn a_trap_partway_through_an_update_leaves_no_half_state() {
 /// refusal would leave behind exactly the change it refused.
 #[test]
 fn a_batch_the_person_refuses_commits_no_state() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.issue(Card)\n}\n\ncredential Card as \"https://org.vaulet.id/example/credential/card\" {\n  who: string\n}\n\nstate {\n  n: int default 1\n}\n\naction Go {\n  update {\n    n: 9\n  }\n\n  execute {\n    credential.issue(Card { who: \"me\" })\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n  credential.issue(Card)\n}\n\ncredential Card as \"https://org.vaulet.id/example/credential/card\" {\n  who: string\n}\n\nstate {\n  n: int default 1\n}\n\naction Go {\n  update {\n    n: 9\n  }\n\n  execute {\n    credential.issue(Card { who: \"me\" })\n  }\n}\n\n@main\nscreen Home {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
     let hosts = Hosts::of(vec![Host::parse(CORE).unwrap()]);
     let (compiled, d) = valang::analyse_fully(src, None, &hosts);
     assert!(d.iter().all(|x| x.severity != valang::diag::Severity::Error), "{d:?}");

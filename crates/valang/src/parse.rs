@@ -247,7 +247,24 @@ impl Parser {
                 "version" => {
                     p.version_span = self.peek().span;
                     self.bump();
-                    p.version = Some(self.bump().text);
+                    // **A version is a version, not a counter.** `7` on an
+                    // install sheet is a number a person cannot place: the
+                    // seventh what, and is the one they hold older or newer? A
+                    // quoted `"1.2.0"` reads as a release, sorts the way every
+                    // other piece of software sorts, and leaves room to say a
+                    // change was small.
+                    let token = self.bump();
+                    p.version = Some(token.text.clone());
+                    let looks_like_a_release = token.text.split('.').count() == 3
+                        && token.text.split('.').all(|part| {
+                            !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())
+                        });
+                    if !looks_like_a_release {
+                        self.diagnostics.push(Diagnostic::error(
+                            token.span,
+                            "a version is three numbers in quotes, as `version \"1.0.0\"` — a bare counter tells a person nothing about whether what they hold is older than what they are being offered",
+                        ));
+                    }
                 }
                 "capabilities" => {
                     let at = self.peek().span;
@@ -1174,7 +1191,7 @@ impl Parser {
     /// component that could declare data of its own would be a screen, and the
     /// rule that a screen resolves its data before anything is drawn would then
     /// hold for only some of what is on it.
-    /// `import "org.vaulet.ui/1" { MoneyCard, Chip }`
+    /// `import "org.vaulet.ui/1.0.0" { MoneyCard, Chip }`
     fn import_decl(&mut self) -> ImportDecl {
         let span = self.peek().span;
         self.bump();
@@ -1186,7 +1203,7 @@ impl Parser {
             let bad = self.peek().clone();
             self.diagnostics.push(Diagnostic::error(
                 bad.span,
-                "a package is imported by name and version: `import \"org.vaulet.ui/1\" { … }`. A reverse-DNS name and a field access are the same shape, so the name is quoted".to_string(),
+                "a package is imported by name and version: `import \"org.vaulet.ui/1.0.0\" { … }`. A reverse-DNS name and a field access are the same shape, so the name is quoted".to_string(),
             ));
             String::new()
         };
@@ -1214,7 +1231,7 @@ impl Parser {
         } else {
             self.diagnostics.push(Diagnostic::error(
                 span,
-                "an import lists what it takes: `import \"org.vaulet.ui/1\" { MoneyCard }`. A package that opened all of another one would carry names nobody wrote".to_string(),
+                "an import lists what it takes: `import \"org.vaulet.ui/1.0.0\" { MoneyCard }`. A package that opened all of another one would carry names nobody wrote".to_string(),
             ));
         }
 

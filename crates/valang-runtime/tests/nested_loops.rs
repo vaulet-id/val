@@ -50,7 +50,7 @@ fn drawn(src: &str) -> Vec<String> {
 fn a_loop_over_the_wallets_own_rows() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)
@@ -97,7 +97,7 @@ screen Home {
 fn a_loop_inside_a_row_and_a_branch_inside_a_loop() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }

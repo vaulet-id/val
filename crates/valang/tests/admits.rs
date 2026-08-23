@@ -36,7 +36,7 @@ fn a_gate_is_a_credential_a_policy_and_what_the_person_is_told() {
 fn a_policy_over_another_credential_is_refused() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 capabilities { credential.check(Badge) }
 credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 credential Ticket as "https://org.vaulet.id/example/credential/ticket" { id: string }
@@ -57,7 +57,7 @@ admits { Badge with IssuedByUs else "no" }
 fn a_gate_over_a_credential_nothing_declares_is_refused() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 capabilities { credential.check(Badge) }
 admits { Badge with Whatever else "no" }
 "#;
@@ -71,7 +71,7 @@ admits { Badge with Whatever else "no" }
 fn a_gate_without_a_policy_or_without_words_is_refused() {
     let bare = r#"
 app "x"
-version 1
+version "1.0.0"
 credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 admits { Badge }
 "#;
@@ -79,7 +79,7 @@ admits { Badge }
 
     let silent = r#"
 app "x"
-version 1
+version "1.0.0"
 credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
 admits { Badge with Ours }
@@ -97,7 +97,7 @@ admits { Badge with Ours }
 fn a_package_says_who_it_opens_for_once() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
 admits { Badge with Ours else "no" }
@@ -113,7 +113,7 @@ admits { Badge with Ours else "no" }
 fn a_gate_uses_the_check_capability_rather_than_the_read_one() {
     let undeclared = r#"
 app "x"
-version 1
+version "1.0.0"
 capabilities { }
 credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
@@ -124,7 +124,7 @@ admits { Badge with Ours else "no" }
 
     let read_instead = r#"
 app "x"
-version 1
+version "1.0.0"
 capabilities { credential.read(Badge) }
 credential Badge as "https://org.vaulet.id/example/credential/badge" { id: string }
 trust Ours(b: Badge) { anchor: "x" require { b.signature.valid } }
@@ -144,7 +144,7 @@ fn a_credential_type_may_be_on_any_domain_its_issuer_runs() {
     let on = |vct: &str| format!(
         r#"
 app "x"
-version 1
+version "1.0.0"
 capabilities {{ credential.check(Badge) }}
 credential Badge as "{vct}" {{ id: string }}
 trust Ours(b: Badge) {{

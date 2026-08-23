@@ -103,7 +103,7 @@ fn fuel_is_the_second_belt() {
 fn overflow_traps_in_the_module_as_it_does_in_the_evaluator() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 function double(n: int): int { return n * n }
 "#;
     let err = emitted(src, "double", &[Value::Int(i64::MAX)]).unwrap_err();
@@ -144,7 +144,7 @@ fn the_constants_travel_inside_the_module() {
 fn an_early_return_from_a_branch_leaves_the_function() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 function sign(n: int): int {
   if (n < 0) { return 0 - 1 }
   if (n == 0) { return 0 }
@@ -169,7 +169,7 @@ function sign(n: int): int {
 fn what_this_back_end_cannot_emit_it_refuses() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -198,7 +198,7 @@ function held(n: int): int {
 fn the_shapes_added_since_agree_on_both_back_ends() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 
 type Row {
   a: int
@@ -241,7 +241,7 @@ function nested(n: int): int {
 fn a_variable_and_a_destructuring_agree_on_both_back_ends() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 
 function label(points: int): int {
   let out = 1
@@ -274,7 +274,7 @@ function fromRecord(n: int): int {
 fn the_list_operations_agree_on_both_back_ends() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 
 function double(x: int): int {
   return x * 2
@@ -353,7 +353,7 @@ function nested(n: int): int {
 fn a_list_operation_is_a_loop_the_fuel_meter_can_see() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 
 function summed(n: int): int {
   return [1, 2, 3, 4, 5, 6, 7, 8].fold(0) { sum, r -> sum + r }
@@ -379,7 +379,7 @@ function summed(n: int): int {
 fn many_operations_in_one_function_agree_on_both_back_ends() {
     let src = r#"
 app "x"
-version 1
+version "1.0.0"
 
 function rows(n: int): List<int> {
   return n <= 0 ? [] : [1, 2, 3]

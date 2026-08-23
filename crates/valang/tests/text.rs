@@ -46,7 +46,7 @@ fn warnings(src: &str, keys: &valang::TextBundle, locales: &[String]) -> Vec<Str
 
 fn app(tree: &str) -> String {
     format!(
-        "app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\nstate {{\n  points: int default 0\n}}\n\n@main\nscreen Home {{\n  column {{\n{tree}\n  }}\n}}\n"
+        "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {{\n}}\n\nstate {{\n  points: int default 0\n}}\n\n@main\nscreen Home {{\n  column {{\n{tree}\n  }}\n}}\n"
     )
 }
 
@@ -138,7 +138,7 @@ fn every_text_prop_is_checked_against_the_bundle() {
 fn a_key_the_host_reads_is_not_reported_as_unread() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 capabilities { }
 state { n: int default 0 }
 @main

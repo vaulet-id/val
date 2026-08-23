@@ -6,12 +6,12 @@
 // name.
 
 app "org.vaulet.storefront"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.vaulet.kit/1" { MoneyCard, StatRow }
+import "org.vaulet.kit/1.0.0" { MoneyCard, StatRow }
 
 state {
   balance: int default 1240

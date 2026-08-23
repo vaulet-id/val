@@ -30,7 +30,7 @@ fn built(src: &str) -> (valang::ast::Program, Vec<String>) {
 
 const BRANCHED: &str = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.issue(Card)
@@ -117,7 +117,7 @@ fn an_effect_not_in_a_branch_is_in_the_report() {
 fn a_field_written_in_a_branch_is_in_the_report() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -158,7 +158,7 @@ screen Home {
 fn a_credential_verified_in_a_branch_is_in_the_report() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(Receipt)

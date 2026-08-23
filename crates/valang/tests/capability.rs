@@ -27,7 +27,7 @@ fn errors(src: &str, extra: bool) -> Vec<String> {
 
 const BASE: &str = r#"
 app "example.capability"
-version 1
+version "1.0.0"
 
 capabilities {
 }

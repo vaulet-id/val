@@ -39,7 +39,7 @@ all of them.
 
 ```val
 app "th.co.codefin.loyalty"     // reverse-DNS, quoted
-version 1
+version "1.0.0"
 
 host "id.vaulet.wallet/1"       // optional: which registries this needs
 import "org.vaulet.ui/1" { MoneyCard }   // components from another package

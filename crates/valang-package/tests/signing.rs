@@ -33,6 +33,7 @@ fn version_of(src: &str) -> String {
         .find_map(|l| l.strip_prefix("version "))
         .expect("the example says its version")
         .trim()
+        .trim_matches('"')
         .to_string()
 }
 

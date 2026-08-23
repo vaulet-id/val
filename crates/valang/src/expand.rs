@@ -25,7 +25,7 @@ pub struct Packages {
 }
 
 impl Packages {
-    /// Keyed by what an import writes — `org.vaulet.ui/1`, the package's own
+    /// Keyed by what an import writes — `org.vaulet.ui/1.0.0`, the package's own
     /// name and version.
     pub fn of(programs: Vec<Program>) -> Self {
         let by_id = programs

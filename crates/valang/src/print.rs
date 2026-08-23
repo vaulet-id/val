@@ -201,8 +201,10 @@ impl Printer<'_> {
                 self.out.push_str(&format!("app {}\n", quoted(&app)));
             }
             Item::Version => {
+                // Quoted, because that is what the parser takes now. Printing
+                // it bare meant a program printed from itself no longer built.
                 let v = p.version.clone().unwrap_or_default();
-                self.out.push_str(&format!("version {v}\n"));
+                self.out.push_str(&format!("version \"{v}\"\n"));
             }
             Item::Host(i) => self.out.push_str(&format!("host {}\n", quoted(&p.hosts[i]))),
             Item::Import(i) => {
@@ -507,6 +509,13 @@ impl Printer<'_> {
         if n.kind == "for" {
             let over = n.args.first().map(|a| expr(&a.value)).unwrap_or_default();
             let bind = n.lambda.clone().unwrap_or_default();
+            // **A loop with nothing to loop over prints as one.** `for ( in )`
+            // reparses as a loop over `?` bound to `in`, so printing a damaged
+            // program produced a different damaged program every time it was
+            // printed — the one thing a printer must never do. Names that
+            // cannot have come from a parse stand in for the holes.
+            let bind = if bind.is_empty() { "_".to_string() } else { bind };
+            let over = if over.trim().is_empty() { "_".to_string() } else { over };
             self.out.push_str(&format!("{pad}for ({bind} in {over}) "));
             self.tree(&n.children, depth);
             return;
@@ -764,7 +773,15 @@ fn params(f: &[Field]) -> String {
 fn ty(t: &TypeRef) -> String {
     let mut out = t.name.clone();
     if !t.args.is_empty() {
-        out.push_str(&format!("<{}>", t.args.iter().map(ty).collect::<Vec<_>>().join(", ")));
+        // **An argument with no name is not printed.** The parser drops one, so
+        // printing it put `, ,` into the text and the next parse gave a
+        // different program than the one just printed — the printer damaging
+        // what it was handed rather than writing it down.
+        let args: Vec<String> =
+            t.args.iter().filter(|a| !a.name.trim().is_empty()).map(ty).collect();
+        if !args.is_empty() {
+            out.push_str(&format!("<{}>", args.join(", ")));
+        }
     }
     if t.optional {
         out.push('?');

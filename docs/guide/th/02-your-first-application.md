@@ -13,7 +13,7 @@
 
 ```val
 app "th.co.codefin.loyalty"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)

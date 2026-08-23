@@ -7,7 +7,7 @@
 
 const SRC: &str = r#"
 app "example.components"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -209,7 +209,7 @@ fn a_parameter_is_substituted_in_every_kind_of_expression() {
         let src = format!(
             r#"
 app "example.substitute"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -262,7 +262,7 @@ screen Home {{
 fn a_condition_is_true_or_false() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -293,7 +293,7 @@ screen Home {
 fn a_component_is_handed_what_it_declared() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -331,7 +331,7 @@ screen Home {
 fn a_screen_is_moved_to_with_what_it_declared() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -367,7 +367,7 @@ screen Detail(id: string) {
 fn a_combinator_is_given_a_function() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -393,7 +393,7 @@ function f(xs: List<int>): List<int> {
 fn a_named_function_takes_what_the_combinator_hands_over() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -429,7 +429,7 @@ function f(xs: List<int>): List<int> {
 fn a_component_may_be_handed_a_phrase() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -466,7 +466,7 @@ screen Home {
 fn optional_access_is_how_an_optional_is_read_outside_require() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -508,7 +508,7 @@ screen Home {
 fn a_plain_read_of_an_optional_is_still_narrowed_first() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -552,7 +552,7 @@ screen Home {
 fn a_misspelt_name_in_a_tree_is_not_a_word() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -587,7 +587,7 @@ screen Home {
 fn the_names_a_tree_is_allowed_to_carry() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }

@@ -23,7 +23,7 @@ fn registries() -> valang::capability::Hosts {
 fn manifest(key: &SigningKey) -> Manifest {
     Manifest {
         app: "th.co.codefin.loyalty".into(),
-        version: "1".into(),
+        version: "1.0.0".into(),
         kind: "val".into(),
         publisher: did_for(key),
         catalogue: "1".into(),
@@ -109,7 +109,7 @@ fn a_missing_translation_is_a_failed_build() {
 #[test]
 fn a_program_that_does_not_compile_is_never_packaged() {
     let key = keygen();
-    let broken = BTreeMap::from([("bad.val".to_string(), "app \"x\"\nversion 1\ncapabilities { payment.request }\n".to_string())]);
+    let broken = BTreeMap::from([("bad.val".to_string(), "app \"x\"\nversion \"1.0.0\"\ncapabilities { payment.request }\n".to_string())]);
     match build(manifest(&key), broken, text(), &registries(), Some(&key)) {
         Err(Refusal::WouldNotBuild(errors)) => {
             assert!(errors.iter().any(|e| e.contains("never used")), "{errors:?}");
@@ -262,7 +262,7 @@ fn a_manifest_that_names_another_version_is_refused() {
 fn a_package_is_compiled_against_the_registry_that_will_run_it() {
     let src = r#"
 app "th.co.codefin.loyalty"
-version 1
+version "1.0.0"
 
 capabilities {
 }

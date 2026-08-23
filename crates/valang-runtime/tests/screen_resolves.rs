@@ -75,7 +75,7 @@ fn a_list_draws_a_row_for_each_item() {
 fn a_screen_gets_its_rows_in_the_order_it_asked_for() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)

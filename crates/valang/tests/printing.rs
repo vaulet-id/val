@@ -19,7 +19,7 @@ fn stable(name: &str, src: &str) {
 fn comments_in_the_awkward_places_survive() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   // nothing yet
@@ -81,7 +81,7 @@ fn a_file_with_nothing_in_it_prints() {
 fn a_combinator_inside_a_combinator() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -120,7 +120,7 @@ screen Home {
 fn an_exported_component_may_loop() {
     let kit = r#"
 app "org.kit"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -135,12 +135,12 @@ export component Rows(labels: List<string>) {
 "#;
     let app = r#"
 app "org.app"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.kit/1" { Rows }
+import "org.kit/1.0.0" { Rows }
 
 @main
 screen Home {
@@ -170,7 +170,7 @@ screen Home {
 fn importing_from_a_package_that_is_an_application() {
     let other = r#"
 app "org.other"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -192,12 +192,12 @@ screen Theirs {
 "#;
     let app = r#"
 app "org.app"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.other/1" { Chip }
+import "org.other/1.0.0" { Chip }
 
 @main
 screen Home {
@@ -254,7 +254,7 @@ fn formatting_twice_on_disk_converges() {
 fn a_present_block_round_trips() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(Id)

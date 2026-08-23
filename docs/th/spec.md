@@ -5,7 +5,7 @@
 
 ```val
 app "th.co.codefin.loyalty"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)
@@ -50,7 +50,7 @@ Micro App อ่าน credential ที่ผู้ใช้ถืออยู�
 
 ```val
 app "th.co.codefin.loyalty"     // reverse-DNS ในเครื่องหมายคำพูด
-version 1
+version "1.0.0"
 
 capabilities { … }              // สิ่งที่แอปนี้ทำได้ ประกาศครั้งเดียวต่อ package
 admits { … }                    // เปิดให้ใครบ้าง — ไม่บังคับ ประกาศครั้งเดียว

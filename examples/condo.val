@@ -9,7 +9,7 @@
 // 12.5% of the building.
 
 app "th.co.condo.meeting"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(UnitOwnership)

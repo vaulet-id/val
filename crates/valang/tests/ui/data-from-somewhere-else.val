@@ -1,5 +1,5 @@
 app "ui.data-from-somewhere-else"
-version 1
+version "1.0.0"
 
 capabilities {
 }

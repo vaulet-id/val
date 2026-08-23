@@ -5,7 +5,7 @@
 // `input` — so `state` stays the thing that is hashed, signed and replayed.
 
 app "id.vaulet.example.note"
-version 1
+version "1.0.0"
 
 capabilities {
 }

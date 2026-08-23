@@ -24,7 +24,7 @@ fn errors(src: &str) -> Vec<String> {
 fn a_screens_compute_may_not_act() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.issue(Card)
@@ -62,7 +62,7 @@ screen Home {
 fn a_query_answer_cannot_be_proved() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   api.query(broker.co.th)
@@ -112,17 +112,17 @@ screen Home {
 fn a_changed_export_breaks_the_call_that_used_it() {
     let kit = |param: &str| {
         format!(
-            "app \"org.kit\"\nversion 1\n\ncapabilities {{\n}}\n\nexport component Chip({param}: string) {{\n  section({param})\n}}\n"
+            "app \"org.kit\"\nversion \"1.0.0\"\n\ncapabilities {{\n}}\n\nexport component Chip({param}: string) {{\n  section({param})\n}}\n"
         )
     };
     let app = r#"
 app "org.app"
-version 1
+version "1.0.0"
 
 capabilities {
 }
 
-import "org.kit/1" { Chip }
+import "org.kit/1.0.0" { Chip }
 
 @main
 screen Home {
@@ -159,7 +159,7 @@ screen Home {
 fn a_screen_cannot_read_what_is_typed_but_not_submitted() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -203,7 +203,7 @@ screen Home {
 fn a_state_field_starts_where_its_default_says() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -233,7 +233,7 @@ screen Home {
 fn every_handler_names_something_that_exists() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -276,7 +276,7 @@ screen Home {
 fn irreversible_effects_run_last() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(Id)
@@ -372,7 +372,7 @@ screen Home {
 fn what_state_may_hold() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -410,7 +410,7 @@ screen Home {
 fn one_disclosure_to_an_action() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(Id)
@@ -481,7 +481,7 @@ fn numbers_are_decimal_and_whole() {
     ];
     for (what, block) in cases {
         let src = format!(
-            "app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\n{block}\n\n@main\nscreen H {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
+            "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {{\n}}\n\n{block}\n\n@main\nscreen H {{\n  column {{\n    section(\"x\")\n  }}\n}}\n"
         );
         assert!(!errors(&src).is_empty(), "{what} was accepted: {block}");
     }
@@ -490,7 +490,7 @@ fn numbers_are_decimal_and_whole() {
 /// "Identifiers are ASCII and camelCase for names you choose."
 #[test]
 fn an_identifier_is_ascii() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  แต้ม: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nstate {\n  แต้ม: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
     let e = errors(src);
     assert!(e.iter().any(|m| m.contains("ASCII")), "a Thai identifier was accepted: {e:?}");
 }
@@ -498,7 +498,7 @@ fn an_identifier_is_ascii() {
 /// "Arguments are named once there are two. One argument may be positional."
 #[test]
 fn two_arguments_are_named() {
-    let one = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nfunction f(a: int): int {\n  return a\n}\n\nfunction g(): int {\n  return f(1)\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    let one = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nfunction f(a: int): int {\n  return a\n}\n\nfunction g(): int {\n  return f(1)\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
     assert!(errors(one).is_empty(), "one positional argument was refused: {:?}", errors(one));
 
     let two = one
@@ -518,7 +518,7 @@ fn two_arguments_are_named() {
 fn a_policy_is_part_of_the_type() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(Receipt)
@@ -590,7 +590,7 @@ screen Home {
 fn a_list_a_proof_walks_has_a_bound() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(Holding)

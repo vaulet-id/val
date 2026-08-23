@@ -5,7 +5,7 @@
 // produces only "type error" has not been taught to anybody.
 
 app "id.vaulet.example.rejected"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(PurchaseReceipt)

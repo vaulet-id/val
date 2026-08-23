@@ -1,5 +1,5 @@
 app "ui.name-that-is-not-a-word"
-version 1
+version "1.0.0"
 
 capabilities {
 }

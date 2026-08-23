@@ -5,7 +5,7 @@
 // else's application can arrange it the same way.
 
 app "org.vaulet.kit"
-version 1
+version "1.0.0"
 
 capabilities {
 }

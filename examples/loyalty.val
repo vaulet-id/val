@@ -6,7 +6,7 @@
 // exactly one other.
 
 app "th.co.codefin.loyalty"
-version 1
+version "1.0.0"
 
 capabilities {
   // Type references, not strings. The types are declared below; a string here

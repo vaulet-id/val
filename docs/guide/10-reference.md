@@ -24,7 +24,7 @@ No floating point, anywhere. Money is minor units; a percentage is basis points.
 
 ```val
 app "reverse.dns.name"
-version 1
+version "1.0.0"
 capabilities { … }
 enum Name { a, b }
 credential Name as "https://org.vaulet.id/example/credential/name" { field: type }

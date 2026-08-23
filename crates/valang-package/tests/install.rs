@@ -36,7 +36,7 @@ impl HostPolicy for Wallet {
 fn manifest() -> Manifest {
     Manifest {
         app: "th.co.codefin.loyalty".into(),
-        version: "1".into(),
+        version: "1.0.0".into(),
         kind: "val".into(),
         publisher: "did:web:codefin.io".into(),
         catalogue: "1".into(),

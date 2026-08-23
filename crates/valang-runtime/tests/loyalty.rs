@@ -369,7 +369,7 @@ fn a_state_too_large_for_this_host_does_not_commit() {
 
     let src = r#"
 app "example.big"
-version 1
+version "1.0.0"
 capabilities { }
 state { note: string default "" }
 action Grow {

@@ -10,7 +10,7 @@ use valang_runtime::{initial_state, value::Value, State};
 
 const SRC: &str = r#"
 app "example.state"
-version 1
+version "1.0.0"
 
 capabilities {
 }

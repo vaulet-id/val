@@ -8,7 +8,7 @@
 fn an_anchor_is_quoted() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }
@@ -47,7 +47,7 @@ screen H {
 /// and the enum body is where it does not.
 #[test]
 fn an_enum_body_is_written_one_way() {
-    let with_commas = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nenum Tier { bronze, silver }\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    let with_commas = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nenum Tier { bronze, silver }\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
     let without = with_commas.replace("bronze, silver", "bronze silver");
 
     let said = |src: &str| {
@@ -70,7 +70,7 @@ fn an_enum_body_is_written_one_way() {
 #[test]
 fn both_bindings_take_a_record_apart() {
     let src = |word: &str| {
-        format!("app \"x.y\"\nversion 1\n\ncapabilities {{\n}}\n\nstate {{\n  n: int default 0\n}}\n\naction Go {{\n  compute {{\n    {word} {{ a }} = {{ a: 1 }}\n  }}\n\n  update {{\n    n: a\n  }}\n}}\n\n@main\nscreen H {{\n  column {{\n    button(\"g\") {{ onTap: Go }}\n  }}\n}}\n")
+        format!("app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {{\n}}\n\nstate {{\n  n: int default 0\n}}\n\naction Go {{\n  compute {{\n    {word} {{ a }} = {{ a: 1 }}\n  }}\n\n  update {{\n    n: a\n  }}\n}}\n\n@main\nscreen H {{\n  column {{\n    button(\"g\") {{ onTap: Go }}\n  }}\n}}\n")
     };
     let said = |s: String| {
         valang::analyse(&s)

@@ -22,7 +22,7 @@ fn at(src: &str, line: u32, col: u32) -> Vec<(ScopeKind, String)> {
 }
 
 const SRC: &str = r#"app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   credential.read(R)
@@ -91,7 +91,7 @@ fn the_blocks_around_a_position_are_in_order() {
 /// what every program looks like while somebody is typing it.
 #[test]
 fn a_block_left_open_still_says_where_the_cursor_is() {
-    let half = "app \"x.y\"\nversion 1\n\n@main\nscreen Home {\n  column {\n    ";
+    let half = "app \"x.y\"\nversion \"1.0.0\"\n\n@main\nscreen Home {\n  column {\n    ";
     let path: Vec<ScopeKind> = at(half, 7, 5).iter().map(|(k, _)| *k).collect();
     assert!(
         path.contains(&ScopeKind::Screen) && path.contains(&ScopeKind::Node),
@@ -102,7 +102,7 @@ fn a_block_left_open_still_says_where_the_cursor_is() {
 /// And a phase, which is the block an editor offers effects in.
 #[test]
 fn a_phase_names_itself() {
-    let half = "app \"x.y\"\nversion 1\n\naction Go {\n  execute {\n    ";
+    let half = "app \"x.y\"\nversion \"1.0.0\"\n\naction Go {\n  execute {\n    ";
     let names: Vec<String> = at(half, 6, 5).iter().map(|(_, n)| n.clone()).collect();
     assert!(names.contains(&"execute".to_string()), "{names:?}");
     assert!(names.contains(&"Go".to_string()), "{names:?}");
@@ -112,7 +112,7 @@ fn a_phase_names_itself() {
 /// inside a block is not a program, and it said so nowhere before.
 #[test]
 fn a_block_the_file_ends_inside_is_reported() {
-    let (_, d) = valang::parse::parse("app \"x.y\"\nversion 1\n\naction Go {\n  execute {\n");
+    let (_, d) = valang::parse::parse("app \"x.y\"\nversion \"1.0.0\"\n\naction Go {\n  execute {\n");
     let said: Vec<&str> = d.iter().map(|x| x.message.as_str()).collect();
     assert_eq!(
         said.iter().filter(|m| m.contains("never closed")).count(),

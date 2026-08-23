@@ -17,7 +17,7 @@ fn drawn(compute: &str) -> Vec<String> {
     let src = format!(
         r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}
@@ -84,7 +84,7 @@ fn a_path_that_stops_is_nothing_rather_than_a_failure() {
 fn a_plain_path_through_nothing_still_fails() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
 }

@@ -130,6 +130,6 @@ fn damaged_input_that_parses_still_round_trips() {
         }
         let once = valang::print::print(&program);
         let twice = valang::print::print(&valang::parse::parse(&once).0);
-        assert_eq!(once, twice, "round {round}: printing was not stable");
+        assert_eq!(once, twice, "round {round}: printing was not stable\n--- src ---\n{src}\n--- once ---\n{once}\n--- twice ---\n{twice}");
     }
 }

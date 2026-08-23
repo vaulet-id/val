@@ -3,7 +3,7 @@
 //! The message is part of the language, and so is where it points: a position
 //! on its own is a thing to go and look up.
 
-const SRC: &str = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  n: int default 0\n}\n\naction Go {\n  compute {\n    const fixed = 1\n    fixed = 2\n  }\n\n  update {\n    n: 1\n  }\n}\n\n@main\nscreen H {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
+const SRC: &str = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nstate {\n  n: int default 0\n}\n\naction Go {\n  compute {\n    const fixed = 1\n    fixed = 2\n  }\n\n  update {\n    n: 1\n  }\n}\n\n@main\nscreen H {\n  column {\n    button(\"go\") { onTap: Go }\n  }\n}\n";
 
 #[test]
 fn a_diagnostic_shows_the_line_and_underlines_the_word() {
@@ -29,7 +29,7 @@ fn a_diagnostic_shows_the_line_and_underlines_the_word() {
 /// Columns are characters, not bytes. Half of what these files say is Thai.
 #[test]
 fn a_line_with_thai_in_it_is_underlined_in_the_right_place() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"ประโยคภาษาไทยยาวๆ\", nope: 1)\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"ประโยคภาษาไทยยาวๆ\", nope: 1)\n  }\n}\n";
     let (_, d) = valang::analyse_fully(
         src,
         None,
@@ -58,7 +58,7 @@ fn a_line_with_thai_in_it_is_underlined_in_the_right_place() {
 /// points at nothing.
 #[test]
 fn a_diagnostic_with_nowhere_to_point_still_reads() {
-    let src = "app \"x.y\"\nversion 1\n\ncapabilities {\n  credential.read(R)\n}\n\ncredential R as \"https://org.vaulet.id/example/credential/r\" {\n  a: int\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
+    let src = "app \"x.y\"\nversion \"1.0.0\"\n\ncapabilities {\n  credential.read(R)\n}\n\ncredential R as \"https://org.vaulet.id/example/credential/r\" {\n  a: int\n}\n\nstate {\n  n: int default 0\n}\n\n@main\nscreen H {\n  column {\n    section(\"x\")\n  }\n}\n";
     let (_, d) = valang::analyse(src);
     for x in &d {
         let rendered = x.render(src);

@@ -96,7 +96,7 @@ fn the_two_draw_every_screen_of_every_example() {
 fn a_screen_whose_query_cannot_be_asked_is_not_drawn() {
     let src = r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {
   api.query(audience: "broker.co.th")

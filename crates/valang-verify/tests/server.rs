@@ -67,7 +67,7 @@ fn a_record_signed_by_another_device_is_refused() {
 #[test]
 fn a_record_from_code_this_publisher_did_not_publish_is_refused() {
     let (token, key, _) = a_run();
-    let other = code_hash("app \"somebody.else\"\nversion 1\n");
+    let other = code_hash("app \"somebody.else\"\nversion \"1.0.0\"\n");
     let expect = Expectation { code_hash: &other, device_key: &key, last_root: None, spent: &never_spent };
     match verify(&token, &expect) {
         Err(Refusal::UnknownCode { .. }) => {}

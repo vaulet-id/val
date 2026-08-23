@@ -8,7 +8,7 @@ fn errors(body: &str) -> Vec<String> {
     let src = format!(
         r#"
 app "x.y"
-version 1
+version "1.0.0"
 
 capabilities {{
 }}

@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version 7
+version "1.8.0"
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -107,7 +107,7 @@ screen Rota {
         row(justify: between, align: end) {
           column(gap: none) {
             text(phrase("shiftLabel"), color: "#BFE3D8", fontSize: 11, letterSpacing: 80)
-            text(state.shift, color: "#FFFFFF", fontSize: 22, fontWeight: bold)
+            text(phrase("onShift", shift: state.shift), color: "#FFFFFF", fontSize: 20, fontWeight: bold)
           }
           badge(text: phrase("admitted"))
         }
