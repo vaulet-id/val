@@ -1003,6 +1003,18 @@ class _NodeState extends State<_Node> {
     return entry?[widget.incoming.locale] as String? ?? key;
   }
 
+  /// A value as a person reads it: a sentence from the bundle when the package
+  /// wrote a key, and formatted by the host when it is a number, a date or a
+  /// word of its own.
+  String _say(Object? v) {
+    if (v is String) {
+      final entry = (widget.incoming.text[v] as Map?)?.cast<String, dynamic>();
+      final said = entry?[widget.incoming.locale] as String? ?? entry?['en'] as String?;
+      if (said != null) return said;
+    }
+    return v == null ? '' : Format.value(v, widget.incoming.locale);
+  }
+
   Widget _text({TextStyle? style, bool upper = false}) {
     final key = args['text'] as String?;
     if (key == null) return const SizedBox.shrink();
@@ -1424,14 +1436,14 @@ class _NodeState extends State<_Node> {
       case 'avatar': {
         final scheme = Theme.of(context).colorScheme;
         final size = _sizeOf(args['size']) ?? 44;
-        final initial = (args['of'] as String?)?.trim();
+        final initial = _say(args['of']).trim();
         return Align(
           alignment: Alignment.centerLeft,
           child: CircleAvatar(
             radius: size / 2,
             backgroundColor: scheme.secondaryContainer,
             child: Text(
-              initial == null || initial.isEmpty ? '?' : initial.characters.first.toUpperCase(),
+              initial.isEmpty ? '?' : initial.characters.first.toUpperCase(),
               style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
             ),
           ),
@@ -1445,13 +1457,23 @@ class _NodeState extends State<_Node> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${args['value'] ?? ''}',
+              _say(args['value']),
               style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
             ),
             _text(style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
           ],
         );
       }
+
+      // A rule between things. In the registry from the first version and
+      // never drawn, so every package that used one showed a red box saying it
+      // is not in this catalogue — which it is.
+      case 'divider':
+        return Divider(
+          height: args['style'] == 'row' ? 1 : Vaulet.lg,
+          thickness: 1,
+          color: Theme.of(context).colorScheme.outlineVariant,
+        );
 
       case 'keyValue': {
         final scheme = Theme.of(context).colorScheme;
@@ -1463,7 +1485,12 @@ class _NodeState extends State<_Node> {
               Expanded(
                 child: _text(style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant)),
               ),
-              Text('${args['value'] ?? ''}', style: const TextStyle(fontSize: 14)),
+              // **A value can be a sentence too.** `value: phrase("roleValue")`
+              // arrives as the key, and printing it raw put `roleValue` on the
+              // screen where the words belonged. Resolved the same way every
+              // other sentence is — and a value that is not a key formats as
+              // itself, which is what a number or a date is.
+              Text(_say(args['value']), style: const TextStyle(fontSize: 14)),
             ],
           ),
         );
