@@ -38,6 +38,7 @@ class ValApp extends StatefulWidget {
     required this.onTap,
     this.onScreen,
     this.cards,
+    this.chooser,
   });
 
   /// The screens as the compiler resolved them, the signed text bundle, the
@@ -66,6 +67,18 @@ class ValApp extends StatefulWidget {
   /// Null draws a plain stand-in, which is what a playground with no wallet
   /// behind it has to show.
   final Widget Function(BuildContext context, String credential)? cards;
+
+  /// How this host asks somebody to choose one of a few things.
+  ///
+  /// **A wallet has one drawer**, and a menu that drops out of a field is not
+  /// it: the same question asked in a Micro App and asked in the wallet's own
+  /// forms should be the same object on the screen. The host is handed the
+  /// title and the options and hands back what was picked, or null.
+  ///
+  /// Null draws a plain sheet of this renderer's own, which is what a
+  /// playground with no wallet behind it has to show.
+  final Future<String?> Function(BuildContext context, String title, List<String> options)?
+      chooser;
 
   @override
   State<ValApp> createState() => _ValAppState();
@@ -123,6 +136,7 @@ class _ValAppState extends State<ValApp> {
     if (screen == null) return const SizedBox.shrink();
     return _Cards(
       draw: widget.cards,
+      choose: widget.chooser,
       child: _Screen(
       screen: screen,
       incoming: _in,
@@ -138,15 +152,19 @@ class _ValAppState extends State<ValApp> {
 
 /// The host's own card renderer, reachable from wherever a node asks for one.
 class _Cards extends InheritedWidget {
-  const _Cards({required this.draw, required super.child});
+  const _Cards({required this.draw, required this.choose, required super.child});
 
   final Widget Function(BuildContext context, String credential)? draw;
+  final Future<String?> Function(BuildContext, String, List<String>)? choose;
 
   static Widget Function(BuildContext, String)? of(BuildContext c) =>
       c.dependOnInheritedWidgetOfExactType<_Cards>()?.draw;
 
+  static Future<String?> Function(BuildContext, String, List<String>)? chooser(BuildContext c) =>
+      c.dependOnInheritedWidgetOfExactType<_Cards>()?.choose;
+
   @override
-  bool updateShouldNotify(_Cards old) => draw != old.draw;
+  bool updateShouldNotify(_Cards old) => draw != old.draw || choose != old.choose;
 }
 
 /// Formatting, which is the half of "the host does it" that belongs to a
@@ -1610,35 +1628,19 @@ class _NodeState extends State<_Node> {
       }
 
       case 'select': {
-        final scheme = Theme.of(context).colorScheme;
         final into = (args['into'] as String?)?.trim();
         final options = ((args['of'] as List?) ?? const []).map((o) => '$o').toList();
         final held = into == null ? null : _Form.of(context)[into] as String?;
-        return Row(
-          children: [
-            SizedBox(
-              width: 40,
-              child: Icon(_iconOf(args['icon']), size: 22, color: scheme.onSurfaceVariant),
-            ),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: held,
-                isDense: true,
-                decoration: InputDecoration(
-                  labelText: _label(),
-                  labelStyle: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                ),
-                items: [
-                  for (final o in options) DropdownMenuItem(value: o, child: Text(o)),
-                ],
-                onChanged: into == null ? null : (v) => _Form.set(context, into, v),
-              ),
-            ),
-          ],
+        // **A drawer, not a menu dropping out of the field.** The wallet asks
+        // every other question of this shape in one, so a Micro App asking the
+        // same question with a different object on the screen is the
+        // application announcing that it is not part of the app around it.
+        return _Chooser(
+          label: _label(),
+          value: held,
+          options: options,
+          icon: _iconOf(args['icon']),
+          onPicked: into == null ? null : (v) => _Form.set(context, into, v),
         );
       }
 
@@ -2051,44 +2053,60 @@ class _NodeState extends State<_Node> {
 
       // What a person types, held by the host until they submit. `into` names
       // the input it becomes.
-      case 'field':
+      case 'field': {
         final into = (args['into'] as String?)?.trim();
         final kind = (args['kind'] as String?)?.trim();
         final scheme = Theme.of(context).colorScheme;
-        return Row(
-          // Top, not centre: a field that has grown to three lines is still one
-          // row about one thing, and an icon that slid to the middle points at
-          // the second line of it.
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 44,
-              width: 40,
-              child: Center(
-                child: Icon(_iconOf(args['icon']), size: 22, color: scheme.onSurfaceVariant),
-              ),
-            ),
-            Expanded(
-              child: TextField(
-                keyboardType: kind == 'number' ? TextInputType.number : TextInputType.text,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w400),
-                decoration: InputDecoration(
-                  labelText: _label(),
-                  labelStyle: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-                  floatingLabelStyle: TextStyle(fontSize: 13, color: scheme.primary),
-                  // Always floating: the label names the box whether or not
-                  // there is anything in it, and a label that moves on focus is
-                  // a label somebody has to have already read.
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 4),
+        // **A box somebody types in looks like a box.** It was a line of text
+        // with an icon beside it and no edge at all, which reads as something
+        // already filled in rather than something to fill in. The frame is the
+        // one the chooser next door wears, so the two questions on one screen
+        // are the same object.
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 6, 12, 6),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            border: Border.all(color: scheme.outlineVariant),
+            borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+          ),
+          child: Row(
+            // Top, not centre: a field that has grown to three lines is still
+            // one row about one thing, and an icon that slid to the middle
+            // points at the second line of it.
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (args['icon'] != null) ...[
+                SizedBox(
+                  height: 44,
+                  child: Center(
+                    child: Icon(_iconOf(args['icon']), size: 20, color: scheme.onSurfaceVariant),
+                  ),
                 ),
-                onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: TextField(
+                  keyboardType: kind == 'number' ? TextInputType.number : TextInputType.text,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w400),
+                  decoration: InputDecoration(
+                    labelText: _label(),
+                    labelStyle: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    floatingLabelStyle: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    // Always floating: the label names the box whether or not
+                    // there is anything in it, and a label that moves on focus
+                    // is a label somebody has to have already read.
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                  ),
+                  onChanged: into == null ? null : (v) => _Form.set(context, into, v),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
+      }
 
       case 'toggle': {
         final into = (args['into'] as String?)?.trim();
@@ -2176,4 +2194,139 @@ class _NodeState extends State<_Node> {
   }
 
 
+}
+
+/// One of a few things, chosen in a drawer.
+///
+/// **Framed like the wallet's own inputs**: a box with a border, the question
+/// small above the answer, and a chevron saying it opens. A row of text with no
+/// edge reads as something already filled in.
+class _Chooser extends StatelessWidget {
+  const _Chooser({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.icon,
+    required this.onPicked,
+  });
+
+  final String label;
+  final String? value;
+  final List<String> options;
+  final IconData? icon;
+  final void Function(String)? onPicked;
+
+  Future<void> _open(BuildContext context) async {
+    final host = _Cards.chooser(context);
+    final picked = host != null
+        ? await host(context, label, options)
+        : await showModalBottomSheet<String>(
+            context: context,
+            useSafeArea: true,
+            backgroundColor: Colors.transparent,
+            builder: (sheet) => _OptionSheet(title: label, options: options),
+          );
+    if (picked != null) onPicked?.call(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chosen = value != null && value!.isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+      onTap: onPicked == null ? null : () => _open(context),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+        ),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label,
+                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  Text(
+                    chosen ? value! : '—',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: chosen ? scheme.onSurface : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.expand_more, size: 20, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The renderer's own drawer, for a host that provides none — a playground, a
+/// preview. A wallet passes `chooser` and this is never seen.
+class _OptionSheet extends StatelessWidget {
+  const _OptionSheet({required this.title, required this.options});
+
+  final String title;
+  final List<String> options;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            if (title.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(title,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            for (final o in options)
+              ListTile(
+                title: Text(o),
+                onTap: () => Navigator.of(context).pop(o),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 }
