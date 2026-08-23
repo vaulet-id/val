@@ -756,6 +756,83 @@ double _spaceOf(Object? v, {double fallback = Vaulet.md}) => switch (v) {
       _ => fallback,
     };
 
+/// A colour the interface asked for: a token from the scale, or a value of its
+/// own.
+///
+/// **Both, on purpose.** The tokens are what make an application look like it
+/// belongs on this phone and follow the person's light or dark setting; a hex
+/// value is the publisher saying what their product looks like, which the
+/// registry's own note calls guidance rather than a fence. What no application
+/// gets is the wallet's chrome — that is drawn outside anything a package
+/// reaches.
+Color? _colorOf(Object? v, ColorScheme scheme) {
+  if (v is! String || v.isEmpty) return null;
+  if (v.startsWith('#')) {
+    final hex = v.substring(1);
+    final value = int.tryParse(hex.length == 6 ? 'ff$hex' : hex, radix: 16);
+    return value == null ? null : Color(value);
+  }
+  return switch (v) {
+    'foreground.primary' => scheme.onSurface,
+    'foreground.secondary' => scheme.onSurfaceVariant,
+    'foreground.muted' => scheme.outline,
+    'background.primary' => scheme.surface,
+    'background.raised' => scheme.surfaceContainerHighest,
+    'accent' => scheme.primary,
+    'danger' => scheme.error,
+    'warning' => scheme.tertiary,
+    'success' => scheme.secondary,
+    _ => null,
+  };
+}
+
+FontWeight? _weightOf(Object? v) => switch (v) {
+      'regular' => FontWeight.w400,
+      'medium' => FontWeight.w600,
+      'bold' => FontWeight.w700,
+      final int n => FontWeight.values[(n ~/ 100 - 1).clamp(0, 8)],
+      _ => null,
+    };
+
+TextAlign? _textAlignOf(Object? v) => switch (v) {
+      'start' => TextAlign.start,
+      'center' => TextAlign.center,
+      'end' => TextAlign.end,
+      _ => null,
+    };
+
+CrossAxisAlignment _crossOf(Object? v, CrossAxisAlignment fallback) => switch (v) {
+      'start' => CrossAxisAlignment.start,
+      'center' => CrossAxisAlignment.center,
+      'end' => CrossAxisAlignment.end,
+      'stretch' => CrossAxisAlignment.stretch,
+      _ => fallback,
+    };
+
+MainAxisAlignment _mainOf(Object? v, MainAxisAlignment fallback) => switch (v) {
+      'start' => MainAxisAlignment.start,
+      'center' => MainAxisAlignment.center,
+      'end' => MainAxisAlignment.end,
+      'between' => MainAxisAlignment.spaceBetween,
+      _ => fallback,
+    };
+
+List<BoxShadow> _shadowOf(Object? v, ColorScheme scheme) => switch (v) {
+      'raised' => [BoxShadow(color: scheme.shadow.withValues(alpha: 0.10), blurRadius: 8, offset: const Offset(0, 2))],
+      'floating' => [BoxShadow(color: scheme.shadow.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
+      _ => const [],
+    };
+
+/// The type scale, for `style: title` and the rest of the tokens.
+TextStyle? _typeOf(Object? v) => switch (v) {
+      'title' => const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+      'heading' => const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+      'body' => const TextStyle(fontSize: 15),
+      'caption' => const TextStyle(fontSize: 12),
+      'mono' => const TextStyle(fontFamily: 'Menlo', fontSize: 13),
+      _ => null,
+    };
+
 class _Node extends StatefulWidget {
   const _Node({required this.node, required this.incoming});
 
@@ -833,7 +910,29 @@ class _NodeState extends State<_Node> {
       at = m.end;
     }
     if (at < template.length) spans.add(TextSpan(text: template.substring(at)));
-    return Text.rich(TextSpan(children: spans), style: style ?? const TextStyle(fontSize: 13));
+
+    // **The node's own type props, over whatever this case chose.** Declared in
+    // `common.style` and ignored until now, so a package asking for a size, a
+    // weight or a colour got the catalogue's defaults and no word about it.
+    // The case's style is the floor rather than the ceiling: a package that
+    // says nothing still looks like it belongs here.
+    final scheme = Theme.of(context).colorScheme;
+    var out = style ?? const TextStyle(fontSize: 13);
+    if (_typeOf(args['style']) case final TextStyle t) out = out.merge(t);
+    out = out.copyWith(
+      color: _colorOf(args['color'], scheme) ?? out.color,
+      fontSize: _sizeOf(args['fontSize']) ?? out.fontSize,
+      fontWeight: _weightOf(args['fontWeight']) ?? out.fontWeight,
+      height: _sizeOf(args['lineHeight']) == null
+          ? out.height
+          : _sizeOf(args['lineHeight'])! / 100,
+      letterSpacing: _sizeOf(args['letterSpacing']) ?? out.letterSpacing,
+    );
+    return Text.rich(
+      TextSpan(children: spans),
+      style: out,
+      textAlign: _textAlignOf(args['textAlign']),
+    );
   }
 
   @override
@@ -846,19 +945,86 @@ class _NodeState extends State<_Node> {
   /// to look.
   Widget _common(Widget child) {
     var out = child;
+    if (args['visible'] == false) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
 
-    if (args['flex'] case final int flex) out = Expanded(flex: flex, child: out);
+    // **The whole of `common`, not the third of it that was implemented.**
+    // `hosts/core.json` has carried layout, accessibility and style on every
+    // drawing node since the catalogue was written; the renderer read `flex`,
+    // `width`, `height`, `padding` and `opacity` and dropped the rest on the
+    // floor — a package could ask for a background, a radius, a weight or an
+    // aspect ratio, be told it was provided, and see none of it.
+
+    if (args['padding'] != null) {
+      out = Padding(padding: EdgeInsets.all(_spaceOf(args['padding'])), child: out);
+    }
+
+    // The painted box: background, border, radius and shadow together, because
+    // a radius without the thing it clips is a prop that does nothing.
+    final background = _colorOf(args['background'], scheme);
+    final border = _colorOf(args['border'], scheme);
+    final radius = _sizeOf(args['borderRadius']);
+    final shadow = _shadowOf(args['shadow'], scheme);
+    final gradient = args['gradient'];
+    if (background != null ||
+        border != null ||
+        radius != null ||
+        shadow.isNotEmpty ||
+        gradient is List) {
+      out = Container(
+        clipBehavior: radius == null ? Clip.none : Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: gradient is List ? null : background,
+          // Two colours and a diagonal, which is what a card front is. More
+          // than that is a design tool, and this is a screen description.
+          gradient: gradient is List && gradient.length >= 2
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _colorOf(gradient[0], scheme) ?? scheme.primary,
+                    _colorOf(gradient[1], scheme) ?? scheme.primaryContainer,
+                  ],
+                )
+              : null,
+          border: border == null ? null : Border.all(color: border),
+          borderRadius: radius == null ? null : BorderRadius.circular(radius),
+          boxShadow: shadow,
+        ),
+        child: out,
+      );
+    }
+
+    if (args['aspectRatio'] case final int ratio when ratio > 0) {
+      // Written as hundredths, because a screen description has no decimals and
+      // an ID-1 card is 1.586 rather than 2.
+      out = AspectRatio(aspectRatio: ratio / 1000, child: out);
+    }
 
     final w = _sizeOf(args['width']);
     final h = _sizeOf(args['height']);
     if (w != null || h != null) {
       out = SizedBox(width: w, height: h, child: out);
     }
-    if (args['padding'] != null) {
-      out = Padding(padding: EdgeInsets.all(_spaceOf(args['padding'])), child: out);
+    if (_sizeOf(args['minWidth']) != null ||
+        _sizeOf(args['maxWidth']) != null ||
+        _sizeOf(args['minHeight']) != null ||
+        _sizeOf(args['maxHeight']) != null) {
+      out = ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: _sizeOf(args['minWidth']) ?? 0,
+          maxWidth: _sizeOf(args['maxWidth']) ?? double.infinity,
+          minHeight: _sizeOf(args['minHeight']) ?? 0,
+          maxHeight: _sizeOf(args['maxHeight']) ?? double.infinity,
+        ),
+        child: out,
+      );
+    }
+    if (args['margin'] != null) {
+      out = Padding(padding: EdgeInsets.all(_spaceOf(args['margin'])), child: out);
     }
     if (args['opacity'] case final int o) out = Opacity(opacity: o / 100, child: out);
-    if (args['visible'] == false) return const SizedBox.shrink();
+    if (args['flex'] case final int flex) out = Expanded(flex: flex, child: out);
 
     // What a screen reader is told. The words are the application's; the
     // mapping to VoiceOver or TalkBack is the platform renderer's, and never
@@ -883,7 +1049,9 @@ class _NodeState extends State<_Node> {
       case 'column':
         final runs = _group(children);
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: _mainOf(args['justify'], MainAxisAlignment.start),
+          crossAxisAlignment: _crossOf(args['align'], CrossAxisAlignment.stretch),
           children: [
             for (var i = 0; i < runs.length; i++)
               Padding(
@@ -924,7 +1092,8 @@ class _NodeState extends State<_Node> {
         return Padding(
           padding: EdgeInsets.symmetric(vertical: Vaulet.gapOf(args['gap'])),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: _mainOf(args['justify'], MainAxisAlignment.start),
+            crossAxisAlignment: _crossOf(args['align'], CrossAxisAlignment.center),
             children: [
               // Not wrapped in `Expanded` here: a child says `flex: 1` for
               // itself and the common props do it once. Doing both put an

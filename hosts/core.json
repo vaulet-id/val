@@ -726,6 +726,7 @@
     "style": {
       "color": "ColorToken?",
       "background": "ColorToken?",
+      "gradient": "List<ColorToken>?",
       "border": "ColorToken?",
       "borderRadius": "Size?",
       "shadow": "ShadowToken?",

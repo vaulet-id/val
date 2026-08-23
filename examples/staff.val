@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version 4
+version 5
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -81,21 +81,34 @@ screen Rota {
     // `credential.check`, and naming a credential is not reading one.
     credentialCard(of: EmployeeBadge)
 
-    // And what this application can say for itself, out of the drawing
-    // vocabulary: a row, a mark, a chip, two lines of key and value. Every
-    // word here is the package's own — the company it opens for, and that it
-    // opened — because that is all a check tells it.
-    card {
-      row(gap: normal, align: center) {
-        avatar(of: phrase("companyInitial"), size: lg)
-        column(gap: tight) {
-          text(phrase("companyName"))
-          badge(text: phrase("admitted"))
+    // **And the same card, drawn by the application out of the design
+    // capability alone** — no card node, no help from the host. Every prop here
+    // is one `hosts/core.json` has declared on every drawing node since the
+    // catalogue was written: a gradient, an aspect ratio, a radius, a padding,
+    // a colour, a size, a weight. This is the answer to "is the vocabulary
+    // enough to design with": a publisher's own product can look like their
+    // own product.
+    column(
+      gradient: ["#0E7C66", "#0A5348"],
+      borderRadius: 20,
+      aspectRatio: 1586,
+      padding: loose,
+      justify: between
+    ) {
+      row(justify: between, align: start) {
+        column(gap: none) {
+          text(phrase("companyName"), color: "#FFFFFF", fontWeight: bold, fontSize: 17)
+          text(phrase("roleValue"), color: "#BFE3D8", fontSize: 12)
         }
+        avatar(of: phrase("companyInitial"), size: 40)
       }
-      divider
-      keyValue(text: phrase("roleLabel"), value: phrase("roleValue"))
-      keyValue(text: phrase("shiftLabel"), value: state.shift)
+      row(justify: between, align: end) {
+        column(gap: none) {
+          text(phrase("shiftLabel"), color: "#BFE3D8", fontSize: 11, letterSpacing: 80)
+          text(state.shift, color: "#FFFFFF", fontSize: 22, fontWeight: bold)
+        }
+        badge(text: phrase("admitted"))
+      }
     }
     card(text: phrase("onShift", shift: state.shift))
     field(text: phrase("pickShift"), icon: document, into: which)
