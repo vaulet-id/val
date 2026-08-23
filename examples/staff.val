@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version "1.9.1"
+version "1.10.0"
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -54,6 +54,12 @@ state {
   shift: string default ""
 }
 
+// The shifts there are. A list in the program rather than three sentences in a
+// screen: the same three are offered wherever they are offered.
+function shifts(): List<string> {
+  return ["Morning", "Afternoon", "Night"]
+}
+
 action ClaimShift {
   input {
     which: string
@@ -81,21 +87,21 @@ screen Rota {
     // `credential.check`, and naming a credential is not reading one.
     credentialCard(of: EmployeeBadge)
 
-    // **And the same card, drawn by the application out of the design
-    // capability alone** — no card node, no help from the host. Every prop here
-    // is one `hosts/core.json` has declared on every drawing node since the
-    // catalogue was written: a gradient, an aspect ratio, a radius, a padding,
-    // a colour, a size, a weight. This is the answer to "is the vocabulary
-    // enough to design with": a publisher's own product can look like their
-    // own product.
-    stack(clip: true, borderRadius: 24, aspectRatio: 1586) {
+    // And the application's own card, out of the design capability alone.
+    //
+    // **It is a badge, so it is shaped like one**: the company at the top, the
+    // shift at the bottom, and nothing in between that a person has to read
+    // twice. The corners are the wallet's own, the padding is the wallet's own
+    // gutter, and the shadow is the standard one — a card that floats higher
+    // than everything else on the screen reads as a different application.
+    stack(clip: true, borderRadius: 14, aspectRatio: 1586) {
       column(
         gradient: { colors: ["#0E7C66", "#0A5348", "#062E29"], angle: 160, stops: [0, 55, 100] },
-        borderRadius: 24,
+        borderRadius: 14,
         height: fill,
-        padding: loose,
+        padding: 16,
         justify: between,
-        shadow: { color: "#0A5348", blur: 28, y: 10 }
+        shadow: raised
       ) {
         row(justify: between, align: start) {
           column(gap: none, flex: 1) {
@@ -106,36 +112,18 @@ screen Rota {
         }
         row(justify: between, align: end) {
           column(gap: none, flex: 1) {
-            text(phrase("shiftLabel"), color: "#BFE3D8", fontSize: 11, letterSpacing: 80)
-            // The value alone: the label above already says what it is, and
-            // `onShift` is a whole sentence — one under the other read as the
-            // same words twice.
+            text(phrase("shiftLabel"), color: "#BFE3D8", fontSize: 11)
+            // The value, and what to say when nobody has picked one. The
+            // label above already names it; repeating the sentence under
+            // itself was the same words twice.
             text(state.shift ?: phrase("noShift"), color: "#FFFFFF", fontSize: 22, fontWeight: bold)
           }
           badge(text: phrase("admitted"))
         }
       }
-
-      // Out of the flow, and cut to the card's own corners: a ring drawn with
-      // nothing but a shape, a border and an opacity. This is the tier below the tokens —
-      // slower to write, and there is nothing between the publisher and what
-      // they meant. `position: absolute` is placed by whoever holds the flow,
-      // which here is the stack and at the top of a screen is the screen.
-      column(
-        position: absolute,
-        top: -18,
-        right: -18,
-        width: 96,
-        height: 96,
-        shape: circle,
-        border: "#3BAE93",
-        borderWidth: 6,
-        opacity: 35
-      ) { }
     }
 
-    card(text: phrase("onShift", shift: state.shift))
-    field(text: phrase("pickShift"), icon: document, into: which)
+    select(text: phrase("pickShift"), of: shifts, into: which)
     button(text: phrase("claim"), emphasis: primary, onTap: ClaimShift)
   }
 }
