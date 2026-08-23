@@ -27,13 +27,21 @@ screen Rows {
 
   column {
     section("Chats")
-    card {
+
+    // **Edge to edge.** A screen is drawn on the wallet's gutter, and a chat
+    // list is the one thing that ignores it: negative margin the width of the
+    // gutter, and no corners, so the rows run to both edges the way they do in
+    // every list of messages ever written.
+    card(margin: [0, -16], borderRadius: 0) {
       tile(text: "Somchai P.", detail: "See you at the counter", avatar: "Somchai", value: "09:12", count: 2, onTap: Open)
       tile(text: "Acme HR", detail: "Your badge is ready", avatar: "Acme", value: "Yesterday", onTap: Open)
       tile(text: "Codefin", detail: "Receipt for 180 THB", avatar: "Codefin", value: "Mon")
     }
 
     section("Settings")
+
+    // And the inset kind, which is what a settings screen is: the same rows,
+    // held in from both edges with the corners rounded.
     card {
       tile(text: "Language", icon: document, value: state.language, onTap: Open)
       tile(text: "Notifications", icon: warning, trailing: chevron, onTap: Open)

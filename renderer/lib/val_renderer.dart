@@ -982,6 +982,15 @@ TextStyle? _typeOf(Object? v) => switch (v) {
       _ => null,
     };
 
+/// Where a row's words begin: past the face or the icon when it has one, and
+/// at the gutter when it does not.
+double _startsAt(Map<String, dynamic> row) {
+  final a = _argsOf(row);
+  if (a['avatar'] != null) return 16 + 44 + 16;
+  if (a['icon'] != null) return 16 + 26 + 16;
+  return 16;
+}
+
 /// Marks the rows a card holds as a group, so a row draws flush instead of
 /// wearing a card of its own.
 class _Grouped extends InheritedWidget {
@@ -1234,7 +1243,25 @@ class _NodeState extends State<_Node> {
       );
     }
     if (args['margin'] != null) {
-      out = Padding(padding: _edgeOf(args['margin']), child: out);
+      final inset = _edgeOf(args['margin']);
+      out = inset.isNonNegative
+          ? Padding(padding: inset, child: out)
+          // **A negative inset is how a list reaches both edges.** A screen is
+          // drawn on the wallet's gutter and a chat list is the one thing that
+          // ignores it, so `margin: [0, -16]` gives the width back. `Padding`
+          // refuses a negative side — it asserts — so the room is taken by
+          // measuring what there is and asking for more of it.
+          : LayoutBuilder(
+              builder: (context, box) => Transform.translate(
+                offset: Offset(inset.left, inset.top),
+                child: SizedBox(
+                  width: box.maxWidth.isFinite
+                      ? box.maxWidth - inset.horizontal
+                      : null,
+                  child: out,
+                ),
+              ),
+            );
     }
     if (_transformOf(args['transform']) case final Matrix4 m) {
       out = Transform(transform: m, alignment: Alignment.center, child: out);
@@ -1436,8 +1463,10 @@ class _NodeState extends State<_Node> {
         final avatar = args['avatar'] == null ? null : _say(args['avatar']);
 
         final row = ListTile(
+          // The wallet's gutter inside the group, so the words line up with
+          // every other row on the phone rather than sitting on the edge.
           contentPadding: _grouped(context)
-              ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4)
               : null,
           // **Who the row is about, when it is about somebody.** A chat list is
           // a face and a name; an icon is a settings row. Both are rows, and
@@ -1995,9 +2024,21 @@ class _NodeState extends State<_Node> {
         final rows = children.where((c) => c['kind'] == 'tile').length;
         final grouped = rows > 0 && rows == children.length;
         if (grouped) {
+          final scheme = Theme.of(context).colorScheme;
+          // **A list of rows is not a grey panel.** A chat list and a settings
+          // screen are rows on the surface with a rule between them; the card
+          // colour underneath made the whole group read as one raised block and
+          // the rows inside it as text on a tint.
+          final corner = _radiusOf(args['borderRadius']) ??
+              BorderRadius.circular(Vaulet.radiusCard);
           return _Grouped(
-            child: Card(
+            child: Container(
               clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: _colorOf(args['background'], scheme) ?? scheme.surface,
+                borderRadius: corner,
+                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -2007,7 +2048,15 @@ class _NodeState extends State<_Node> {
                       child: _text(style: Vaulet.cardTitle),
                     ),
                   for (var i = 0; i < children.length; i++) ...[
-                    if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                    // The rule starts where the words start, so a list with
+                    // faces down the left does not have a line cutting through
+                    // them.
+                    if (i > 0)
+                      Divider(
+                        height: 1,
+                        indent: _startsAt(children[i]),
+                        endIndent: 16,
+                      ),
                     _Node(node: children[i], incoming: widget.incoming),
                   ],
                 ],
