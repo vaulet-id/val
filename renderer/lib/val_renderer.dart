@@ -982,15 +982,6 @@ TextStyle? _typeOf(Object? v) => switch (v) {
       _ => null,
     };
 
-/// Where a row's words begin: past the face or the icon when it has one, and
-/// at the gutter when it does not.
-double _startsAt(Map<String, dynamic> row) {
-  final a = _argsOf(row);
-  if (a['avatar'] != null) return 16 + 44 + 16;
-  if (a['icon'] != null) return 16 + 26 + 16;
-  return 16;
-}
-
 /// Marks the rows a card holds as a group, so a row draws flush instead of
 /// wearing a card of its own.
 class _Grouped extends InheritedWidget {
@@ -2048,14 +2039,17 @@ class _NodeState extends State<_Node> {
                       child: _text(style: Vaulet.cardTitle),
                     ),
                   for (var i = 0; i < children.length; i++) ...[
-                    // The rule starts where the words start, so a list with
-                    // faces down the left does not have a line cutting through
-                    // them.
+                    // **Edge to edge, and thick enough to be a line.** An
+                    // inset rule leaves a gap at both ends that reads as the
+                    // group coming apart, and a hairline on a bright surface
+                    // is a smudge rather than a separation.
                     if (i > 0)
                       Divider(
-                        height: 1,
-                        indent: _startsAt(children[i]),
-                        endIndent: 16,
+                        height: 1.5,
+                        thickness: 1.5,
+                        indent: 0,
+                        endIndent: 0,
+                        color: Theme.of(context).colorScheme.outlineVariant,
                       ),
                     _Node(node: children[i], incoming: widget.incoming),
                   ],
