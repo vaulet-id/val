@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version "1.9.0"
+version "1.9.1"
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -88,10 +88,10 @@ screen Rota {
     // a colour, a size, a weight. This is the answer to "is the vocabulary
     // enough to design with": a publisher's own product can look like their
     // own product.
-    stack(clip: true, borderRadius: [24, 24, 24, 4], aspectRatio: 1586) {
+    stack(clip: true, borderRadius: 24, aspectRatio: 1586) {
       column(
         gradient: { colors: ["#0E7C66", "#0A5348", "#062E29"], angle: 160, stops: [0, 55, 100] },
-        borderRadius: [24, 24, 24, 4],
+        borderRadius: 24,
         height: fill,
         padding: loose,
         justify: between,
