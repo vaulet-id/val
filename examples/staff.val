@@ -12,7 +12,7 @@
 // application learns is that it opened.
 
 app "th.co.acme.staff"
-version "1.10.0"
+version "1.11.0"
 
 capabilities {
   // A check and not a read. This application is told the door opened; it is
@@ -121,6 +121,22 @@ screen Rota {
           badge(text: phrase("admitted"))
         }
       }
+
+      // A ring in the corner, out of the flow and cut to the card's own edge.
+      // The stack places it — `top` and `right` are read by whoever holds the
+      // flow — and clips it, so a decoration hanging off the corner stops at
+      // the corner rather than over the screen behind it.
+      column(
+        position: absolute,
+        top: -34,
+        right: -34,
+        width: 132,
+        height: 132,
+        shape: circle,
+        border: "#3BAE93",
+        borderWidth: 8,
+        opacity: 25
+      ) { }
     }
 
     select(text: phrase("pickShift"), of: shifts(), into: which)
