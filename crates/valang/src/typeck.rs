@@ -919,6 +919,17 @@ impl<'a> Cx<'a> {
                 {
                     return Typed::plain(Ty::Unknown);
                 }
+                // **A credential's name, as the thing itself.** `capabilities`
+                // has always taken one — `credential.check(EmployeeBadge)` —
+                // and a screen that draws a card needs the same reference:
+                // `credentialCard(of: EmployeeBadge)` names which card the host
+                // is to draw. Nothing readable comes with it, which is the
+                // point: a held credential has no claims until a `verify` block
+                // produces a `Verified<…>`, so naming one here draws a card and
+                // reads nothing off it.
+                if self.p.credentials.iter().any(|c| c.name == *name) {
+                    return Typed::plain(Ty::Credential(name.clone()));
+                }
                 // A word from a closed vocabulary — `primary`, `replace`,
                 // `sheet`. Which words exist is the host's document, checked
                 // there; here it is enough that a lowercase bare name in an

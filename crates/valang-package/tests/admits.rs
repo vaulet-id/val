@@ -181,11 +181,12 @@ fn a_gate_the_module_does_not_back_is_refused() {
     // `about` section is what gets spliced in: both halves are the compiler's
     // own output, so what is being tested is the wallet noticing they disagree
     // rather than this test's idea of how metadata is encoded.
-    let other = STAFF
-        .replace("EmployeeBadge with EmployedByAcme", "Passport with EmployedByAcme")
-        .replace("credential.check(EmployeeBadge)", "credential.check(Passport)")
-        .replace("credential EmployeeBadge", "credential Passport")
-        .replace("EmployedByAcme(badge: EmployeeBadge)", "EmployedByAcme(badge: Passport)");
+    // **Every mention of it, not the four that existed when this was written.**
+    // The list of call sites went stale the day the example drew a card of its
+    // own: the second program still named `EmployeeBadge` somewhere, so it
+    // stopped building and this test failed for a reason that was not the one
+    // it is about.
+    let other = STAFF.replace("EmployeeBadge", "Passport");
     let key = keygen();
     let elsewhere = build(
         manifest(),

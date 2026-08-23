@@ -34,6 +34,7 @@ class ValApp extends StatefulWidget {
     required this.incoming,
     required this.onTap,
     this.onScreen,
+    this.cards,
   });
 
   /// The screens as the compiler resolved them, the signed text bundle, the
@@ -48,6 +49,20 @@ class ValApp extends StatefulWidget {
   /// its content depends on the row that opened it — so the host is asked for
   /// it with what the press handed over.
   final void Function(String screen, Map<String, Object?> args)? onScreen;
+
+  /// **How this host draws one of its own credentials** — `credentialCard(of:
+  /// EmployeeBadge)`, and `wallet.idCard` where a package has stopped being
+  /// portable.
+  ///
+  /// The application names which card and never draws it: it holds a check or
+  /// a read, and either way the face of a card — the issuer's colour, the
+  /// issuer's current word about it, whatever a withdrawal looks like this
+  /// month — belongs to the host that issued the design. One place to change
+  /// it, and every application changes with it.
+  ///
+  /// Null draws a plain stand-in, which is what a playground with no wallet
+  /// behind it has to show.
+  final Widget Function(BuildContext context, String credential)? cards;
 
   @override
   State<ValApp> createState() => _ValAppState();
@@ -103,7 +118,9 @@ class _ValAppState extends State<ValApp> {
   Widget build(BuildContext context) {
     final screen = _current;
     if (screen == null) return const SizedBox.shrink();
-    return _Screen(
+    return _Cards(
+      draw: widget.cards,
+      child: _Screen(
       screen: screen,
       incoming: _in,
       canGoBack: _stack.length > 1,
@@ -111,8 +128,22 @@ class _ValAppState extends State<ValApp> {
       onBack: _back,
       onTap: widget.onTap,
       form: _forms[screen['name'] as String] ??= {},
+      ),
     );
   }
+}
+
+/// The host's own card renderer, reachable from wherever a node asks for one.
+class _Cards extends InheritedWidget {
+  const _Cards({required this.draw, required super.child});
+
+  final Widget Function(BuildContext context, String credential)? draw;
+
+  static Widget Function(BuildContext, String)? of(BuildContext c) =>
+      c.dependOnInheritedWidgetOfExactType<_Cards>()?.draw;
+
+  @override
+  bool updateShouldNotify(_Cards old) => draw != old.draw;
 }
 
 /// Formatting, which is the half of "the host does it" that belongs to a
@@ -1392,6 +1423,35 @@ class _NodeState extends State<_Node> {
       // A screen's own sentence, drawn as the bar's title.
       case 'title':
         return _text(style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700));
+
+      // The host draws its own card, for the credential the application named.
+      // Nothing off the card passes through the application on the way — it
+      // named a type, and the host went and found the card.
+      case 'credentialCard':
+      case 'idCard': {
+        final of = (args['of'] as String?)?.trim() ?? '';
+        final draw = _Cards.of(context);
+        if (draw != null) return draw(context, of);
+        // No wallet behind this renderer — a playground, or a preview. A stand
+        // -in says which card would be here rather than pretending to be one.
+        final scheme = Theme.of(context).colorScheme;
+        return AspectRatio(
+          aspectRatio: 1.586,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: Vaulet.sm),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              of.isEmpty ? 'a card' : of,
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+            ),
+          ),
+        );
+      }
 
       case 'card':
         return Card(

@@ -132,7 +132,7 @@
     "credentialCard": {
       "draws": true,
       "props": {
-        "of": "Verified"
+        "of": "Credential"
       },
       "primary": "of"
     },
