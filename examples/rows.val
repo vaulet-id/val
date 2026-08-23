@@ -1,0 +1,43 @@
+// A chat list and a settings group.
+//
+// **The two shapes a list of rows takes on a phone**, written to find out
+// whether this vocabulary can say them: a face, a name, a preview, a time and
+// how many are waiting; and an icon, a name and what it is set to. Both are
+// `tile` under a `card`, which draws them flush with a rule between rather than
+// as one card each.
+app "org.vaulet.rows"
+version "1.0.0"
+
+capabilities {
+}
+
+state {
+  language: string default "ไทย"
+}
+
+action Open {
+  update {
+    language: "ไทย"
+  }
+}
+
+@main
+screen Rows {
+  title: "Rows"
+
+  column {
+    section("Chats")
+    card {
+      tile(text: "Somchai P.", detail: "See you at the counter", avatar: "Somchai", value: "09:12", count: 2, onTap: Open)
+      tile(text: "Acme HR", detail: "Your badge is ready", avatar: "Acme", value: "Yesterday", onTap: Open)
+      tile(text: "Codefin", detail: "Receipt for 180 THB", avatar: "Codefin", value: "Mon")
+    }
+
+    section("Settings")
+    card {
+      tile(text: "Language", icon: document, value: state.language, onTap: Open)
+      tile(text: "Notifications", icon: warning, trailing: chevron, onTap: Open)
+      tile(text: "Storage", icon: wallet, value: "1.2 GB")
+    }
+  }
+}

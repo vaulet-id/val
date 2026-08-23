@@ -982,6 +982,18 @@ TextStyle? _typeOf(Object? v) => switch (v) {
       _ => null,
     };
 
+/// Marks the rows a card holds as a group, so a row draws flush instead of
+/// wearing a card of its own.
+class _Grouped extends InheritedWidget {
+  const _Grouped({required super.child});
+
+  static bool of(BuildContext c) =>
+      c.dependOnInheritedWidgetOfExactType<_Grouped>() != null;
+
+  @override
+  bool updateShouldNotify(_Grouped old) => false;
+}
+
 class _Node extends StatefulWidget {
   const _Node({required this.node, required this.incoming});
 
@@ -998,6 +1010,9 @@ class _NodeState extends State<_Node> {
       ((n['children'] as List?) ?? const []).cast<Map<String, dynamic>>();
 
   Map<String, dynamic> get args => ((n['args'] as Map?) ?? const {}).cast<String, dynamic>();
+
+  /// Whether this row is one of a group under a single rounded edge.
+  bool _grouped(BuildContext context) => _Grouped.of(context);
 
   /// The template is signed and the slots are not. The host fills and formats;
   /// an application that formatted a number would get Thai digits, the
@@ -1408,7 +1423,7 @@ class _NodeState extends State<_Node> {
       // at two lines, and a chevron when a press goes somewhere. A bare row of
       // text would put the title in a different place from every other row on
       // the phone.
-      case 'tile':
+      case 'tile': {
         final action = (args['onTap'] as String?)?.trim();
         final scheme = Theme.of(context).colorScheme;
         // What the screen asked for, and a chevron where it asked for nothing
@@ -1416,42 +1431,95 @@ class _NodeState extends State<_Node> {
         // ignoring the prop and guessing was neither.
         final trailing = (args['trailing'] as String?)?.trim() ??
             (action == null ? 'none' : 'chevron');
-        return Card(
-          child: ListTile(
-            leading: Icon(_iconOf(args['icon']), size: 28, color: scheme.onSurfaceVariant),
-            title: _text(),
-            // The supporting line, capped at two — one long translation
-            // otherwise turns a row into five lines and the list stops being
-            // something anybody can scan. `TileSubtitle` in the wallet.
-            subtitle: args['detail'] == null
-                ? null
-                : Text(
-                    _detail(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-                  ),
-            trailing: switch (trailing) {
-              'chevron' => Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
-              'badge' => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: scheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+        final value = args['value'] == null ? null : _say(args['value']);
+        final count = args['count'] as int?;
+        final avatar = args['avatar'] == null ? null : _say(args['avatar']);
+
+        final row = ListTile(
+          contentPadding: _grouped(context)
+              ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
+              : null,
+          // **Who the row is about, when it is about somebody.** A chat list is
+          // a face and a name; an icon is a settings row. Both are rows, and
+          // the difference is which of these the screen filled in.
+          leading: avatar != null
+              ? CircleAvatar(
+                  radius: 22,
+                  backgroundColor: scheme.secondaryContainer,
                   child: Text(
-                    _detail(),
-                    style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer),
+                    avatar.isEmpty ? '?' : avatar.characters.first.toUpperCase(),
+                    style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
                   ),
+                )
+              : args['icon'] == null
+                  ? null
+                  : Icon(_iconOf(args['icon']), size: 26, color: scheme.onSurfaceVariant),
+          title: _text(style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          // The supporting line, capped at two — one long translation
+          // otherwise turns a row into five lines and the list stops being
+          // something anybody can scan. `TileSubtitle` in the wallet.
+          subtitle: args['detail'] == null
+              ? null
+              : Text(
+                  _detail(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
                 ),
-              _ => null,
-            },
-            onTap: action == null ? null : () => _tap(action),
-          ),
+          // **The right-hand side is more than one thing.** A settings row ends
+          // in what it is set to, a chat row in a time and how many are
+          // waiting, and either can end in a chevron. They stack in that order
+          // rather than replacing each other.
+          trailing: (value == null && count == null && trailing == 'none')
+              ? null
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (value != null)
+                      Text(value, style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+                    if (count != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '$count',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: scheme.onPrimary),
+                        ),
+                      ),
+                    ],
+                    if (trailing == 'badge' && count == null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: scheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _detail(),
+                          style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer),
+                        ),
+                      ),
+                    ],
+                    if (trailing == 'chevron')
+                      Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+          onTap: action == null ? null : () => _tap(action),
         );
 
-      // A paragraph. Not a card, not a row — prose, which the catalogue had no
-      // way to say until now and every About screen was faking with a card.
+        // **A row inside a card does not wear a card of its own.** A settings
+        // group and a chat list are rows with a rule between them under one
+        // rounded edge; a card each gave eight shadows down the screen.
+        return _grouped(context) ? row : Card(child: row);
+      }
+
       case 'text':
         return _text(style: TextStyle(fontSize: 15, height: 1.55));
 
@@ -1918,7 +1986,35 @@ class _NodeState extends State<_Node> {
         );
       }
 
-      case 'card':
+      case 'card': {
+        // **A card of rows is a group, not a stack of cards.** A settings
+        // section and a chat list are rows with a rule between them under one
+        // rounded edge — which is what the wallet draws everywhere else, and
+        // what a Micro App could not say: every `tile` wore a card of its own,
+        // so eight rows were eight shadows down the screen.
+        final rows = children.where((c) => c['kind'] == 'tile').length;
+        final grouped = rows > 0 && rows == children.length;
+        if (grouped) {
+          return _Grouped(
+            child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (args['text'] != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(Vaulet.lg, Vaulet.lg, Vaulet.lg, 0),
+                      child: _text(style: Vaulet.cardTitle),
+                    ),
+                  for (var i = 0; i < children.length; i++) ...[
+                    if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                    _Node(node: children[i], incoming: widget.incoming),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(Vaulet.lg),
@@ -1935,6 +2031,7 @@ class _NodeState extends State<_Node> {
             ),
           ),
         );
+      }
 
       // The wallet's own home screen leads with these, and a Micro App that
       // wanted one had to build it out of a card that held nothing.

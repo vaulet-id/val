@@ -391,7 +391,10 @@
         "detail": "Text?",
         "icon": "Icon?",
         "trailing": "Trailing?",
-        "onTap": "Action?"
+        "onTap": "Action?",
+        "avatar": "Text?",
+        "value": "Text?",
+        "count": "int?"
       },
       "primary": "text"
     },
