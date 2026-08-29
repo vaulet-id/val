@@ -22,6 +22,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'qr.dart';
+
 /// Draw a package's screens.
 ///
 /// **The host owns the stack and the forms.** An application declares where a
@@ -2359,6 +2361,46 @@ class _NodeState extends State<_Node> {
               : OutlinedButton(onPressed: press, child: child),
         );
 
+      // A code to be scanned: a presentation, a link, whatever the host
+      // resolved into `of`. Drawn from a matrix this renderer computes rather
+      // than from a library, so a code off a Vaulet screen is the same code
+      // wherever it is drawn. A value too large for the ten versions it carries
+      // draws a stand-in rather than a code nobody can scan.
+      case 'qr': {
+        final scheme = Theme.of(context).colorScheme;
+        final value = _say(args['of']);
+        QrCode? code;
+        if (value.isNotEmpty) {
+          try {
+            code = QrCode.encode(value);
+          } catch (_) {
+            code = null;
+          }
+        }
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.all(Vaulet.md),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+            ),
+            child: code == null
+                ? SizedBox(
+                    width: 160,
+                    height: 160,
+                    child: Center(
+                      child: Icon(Icons.qr_code_2, size: 48, color: scheme.onSurfaceVariant),
+                    ),
+                  )
+                : SizedBox(
+                    width: 200,
+                    height: 200,
+                    child: CustomPaint(painter: _QrPainter(code)),
+                  ),
+          ),
+        );
+      }
+
       // A message set apart from the flow — info, a warning, something that
       // cannot be undone. The tone is the wallet's palette rather than a colour
       // the application chose, so a danger notice looks like danger everywhere.
@@ -2579,6 +2621,34 @@ Uint8List? _bytesOfDataUri(String s) {
   } catch (_) {
     return null;
   }
+}
+
+/// Paints a QR matrix as black squares on white, with the quiet zone the
+/// standard requires — a code drawn edge to edge does not scan.
+class _QrPainter extends CustomPainter {
+  const _QrPainter(this.code);
+
+  final QrCode code;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const quiet = 4;
+    final n = code.size + quiet * 2;
+    final cell = size.width / n;
+    final paint = Paint()..color = const Color(0xFF000000);
+    for (var r = 0; r < code.size; r++) {
+      for (var c = 0; c < code.size; c++) {
+        if (!code.isDark(r, c)) continue;
+        canvas.drawRect(
+          Rect.fromLTWH((c + quiet) * cell, (r + quiet) * cell, cell + 0.5, cell + 0.5),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_QrPainter old) => old.code != code;
 }
 
 /// A framed date field, the frame the chooser wears, opening the wallet's own
