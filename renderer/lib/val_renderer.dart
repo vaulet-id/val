@@ -15,7 +15,9 @@
 // them by eye, and a screen that draws differently on a phone than it did where
 // it was written is a screen nobody can be shown before it ships.
 
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -2357,6 +2359,165 @@ class _NodeState extends State<_Node> {
               : OutlinedButton(onPressed: press, child: child),
         );
 
+      // A message set apart from the flow — info, a warning, something that
+      // cannot be undone. The tone is the wallet's palette rather than a colour
+      // the application chose, so a danger notice looks like danger everywhere.
+      case 'notice': {
+        final scheme = Theme.of(context).colorScheme;
+        final (bg, fg, icon) = switch (args['tone']) {
+          'warning' => (scheme.tertiaryContainer, scheme.onTertiaryContainer, Icons.warning_amber_outlined),
+          'danger' => (scheme.errorContainer, scheme.onErrorContainer, Icons.error_outline),
+          _ => (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.info_outline),
+        };
+        return Container(
+          padding: const EdgeInsets.all(Vaulet.md),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 20, color: fg),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DefaultTextStyle(
+                  style: TextStyle(fontSize: 14, height: 1.4, color: fg),
+                  child: _text(),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // How far through something is: a value out of a whole. A bar when there
+      // is a whole to be part of, a spinner when there is not — an application
+      // that knows the total should show it, and one that does not should not
+      // pretend to.
+      case 'progress': {
+        final scheme = Theme.of(context).colorScheme;
+        final value = args['value'] as int?;
+        final of = args['of'] as int?;
+        final fraction = (value != null && of != null && of > 0)
+            ? (value / of).clamp(0.0, 1.0)
+            : null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (args['text'] != null) ...[
+              _text(style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 6),
+            ],
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: fraction,
+                minHeight: 6,
+                backgroundColor: scheme.surfaceContainerHighest,
+              ),
+            ),
+          ],
+        );
+      }
+
+      // A value read off a credential the wallet verified: the label the
+      // application wrote, and the claim the host resolved. Never a claim the
+      // application read for itself — `credential.check` learns nothing, and
+      // what a screen shows here is what the host was asked to disclose.
+      case 'claim':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _text(style: TextStyle(
+                    fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ),
+              Text(_say(args['of']), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        );
+
+      // A picture the package carries with it. **Nothing is fetched.** A `data:`
+      // asset is bytes that travelled inside the signed package; anything else
+      // is a URL, and a URL loaded while a screen draws tells the publisher when
+      // somebody opened their application — a beacon that belongs on the consent
+      // sheet before it belongs on the screen. So an external asset draws a
+      // stand-in naming it rather than reaching for it.
+      case 'image': {
+        final scheme = Theme.of(context).colorScheme;
+        final asset = (args['asset'] as String?)?.trim() ?? '';
+        final bytes = _bytesOfDataUri(asset);
+        if (bytes != null) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+            child: Image.memory(bytes, fit: BoxFit.cover),
+          );
+        }
+        return Container(
+          height: 120,
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          alignment: Alignment.center,
+          child: Icon(Icons.image_outlined, color: scheme.onSurfaceVariant),
+        );
+      }
+
+      // One of a few things, or a date, asked in a drawer. The wallet's own —
+      // `pick` is the generic door `select` and `datePicker` are the two
+      // shapes of, and it opens the same drawer either way.
+      case 'pick': {
+        final into = (args['into'] as String?)?.trim();
+        final held = into == null ? null : _Form.of(context)[into] as String?;
+        if (args['kind'] == 'date') {
+          return _DateField(
+            label: _label(),
+            value: held,
+            onPicked: into == null ? null : (v) => _Form.set(context, into, v),
+          );
+        }
+        final options = ((args['of'] as List?) ?? const []).map((o) => '$o').toList();
+        return _Chooser(
+          label: _label(),
+          value: held,
+          options: options,
+          icon: _iconOf(args['icon']),
+          onPicked: into == null ? null : (v) => _Form.set(context, into, v),
+        );
+      }
+
+      // A container whose child is swiped away, where the screen said what that
+      // does. `tile` carries its own `onRemove`; this is the same for anything
+      // else a screen wants to make removable.
+      case 'swipeAway': {
+        final remove = (args['onRemove'] as String?)?.trim();
+        final body = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final c in children) _Node(node: c, incoming: widget.incoming),
+          ],
+        );
+        if (remove == null) return body;
+        return Dismissible(
+          key: ValueKey('swipe-${args['text']}-${children.length}'),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Icon(Icons.delete_outline,
+                color: Theme.of(context).colorScheme.onErrorContainer),
+          ),
+          onDismissed: (_) => _tap(remove),
+          child: body,
+        );
+      }
+
       // Not a component this host ships. Drawing something approximate would be
       // the preview inventing a catalogue — which is the whole mistake it exists
       // to stop, and the thing a version number is for.
@@ -2404,6 +2565,82 @@ class _NodeState extends State<_Node> {
   }
 
 
+}
+
+/// The bytes of a `data:` URI, or null for anything that would have to be
+/// fetched. Only base64 payloads are read — a screen is not the place to run a
+/// URL decoder over untrusted text, and a package's own asset is base64.
+Uint8List? _bytesOfDataUri(String s) {
+  if (!s.startsWith('data:')) return null;
+  final comma = s.indexOf(',');
+  if (comma < 0 || !s.substring(0, comma).contains(';base64')) return null;
+  try {
+    return base64Decode(s.substring(comma + 1));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// A framed date field, the frame the chooser wears, opening the wallet's own
+/// wheel. `pick(kind: date)` and `datePicker` are the same thing said two ways.
+class _DateField extends StatelessWidget {
+  const _DateField({required this.label, required this.value, required this.onPicked});
+
+  final String label;
+  final String? value;
+  final void Function(String)? onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chosen = value != null && value!.isNotEmpty;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPicked == null
+          ? null
+          : () async {
+              final picked = await showDatePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+                initialDate: DateTime(2026, 8, 20),
+              );
+              if (picked != null) {
+                onPicked!('${picked.year}-${picked.month.toString().padLeft(2, '0')}'
+                    '-${picked.day.toString().padLeft(2, '0')}');
+              }
+            },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(Vaulet.radiusCard),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 20, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  Text(chosen ? value! : '—',
+                      style: TextStyle(
+                          fontSize: 15,
+                          color: chosen ? scheme.onSurface : scheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            Icon(Icons.expand_more, size: 20, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// One of a few things, chosen in a drawer.
